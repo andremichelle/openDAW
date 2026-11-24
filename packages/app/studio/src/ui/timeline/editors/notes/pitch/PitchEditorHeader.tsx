@@ -1,22 +1,24 @@
 import css from "./PitchEditorHeader.sass?inline"
-import {Editing, int, Lifecycle, MutableObservableValue, Selection} from "@opendaw/lib-std"
-import {Checkbox} from "@/ui/components/Checkbox"
-import {ScaleSelector} from "@/ui/timeline/editors/notes/pitch/ScaleSelector.tsx"
-import {ScaleConfigurator} from "@/ui/timeline/editors/notes/pitch/ScaleConfigurator.tsx"
-import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {MenuItem} from "@opendaw/studio-core"
-import {MidiKeys} from "@opendaw/lib-dsp"
-import {Icon} from "@/ui/components/Icon.tsx"
+import {Editing, Lifecycle, MutableObservableValue, Selection} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
+import {Html} from "@opendaw/lib-dom"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {PropertyTable} from "@/ui/timeline/editors/notes/property/PropertyTable.tsx"
+import {Colors} from "@opendaw/studio-enums"
+import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
+import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
-import {Html} from "@opendaw/lib-dom"
+import {BasicTab} from "@/ui/timeline/editors/notes/tabs/BasicTab.tsx"
+import {RandomTab} from "@/ui/timeline/editors/notes/tabs/RandomTab.tsx"
+import {ScaleTab} from "@/ui/timeline/editors/notes/tabs/ScaleTab.tsx"
+import {SplitTab} from "@/ui/timeline/editors/notes/tabs/SplitTab.tsx"
 
 const className = Html.adoptStyleSheet(css, "PitchEditorHeader")
+
+export type NoteEditorTab = "basic" | "random" | "scale" | "split"
+
+const TabLabels: ReadonlyArray<[NoteEditorTab, string]> =
+    [["basic", "Basic"], ["random", "Random"], ["scale", "Scale"], ["split", "Split"]]
 
 type Construct = {
     lifecycle: Lifecycle
@@ -25,41 +27,28 @@ type Construct = {
     selection: Selection<NoteEventBoxAdapter>
     scale: ScaleConfig
     followKey: MutableObservableValue<boolean>
+    tab: MutableObservableValue<NoteEditorTab>
 }
 
-export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection, scale, followKey}: Construct) => {
+export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection, scale, followKey, tab}: Construct) => {
+    const panels: ReadonlyArray<[NoteEditorTab, HTMLElement]> = [
+        ["basic", <BasicTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}/>],
+        ["random", <RandomTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}/>],
+        ["scale", <ScaleTab lifecycle={lifecycle} selection={selection} scale={scale} followKey={followKey}/>],
+        ["split", <SplitTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}/>]
+    ]
+    lifecycle.own(tab.catchupAndSubscribe(owner => panels
+        .forEach(([value, panel]) => panel.classList.toggle("active", value === owner.getValue()))))
     return (
         <div className={className}>
-            <Icon symbol={IconSymbol.Note} className="label"/>
-            <div className="row">
-                <ScaleSelector lifecycle={lifecycle} scale={scale}/>
-                <ScaleConfigurator lifecycle={lifecycle} scale={scale}/>
-                <MenuButton root={MenuItem.root()
-                    .setRuntimeChildrenProcedure(parent => parent
-                        .addMenuItem(MenuItem.default({label: "No Scale", checked: scale.isEmpty()})
-                            .setTriggerProcedure(() => scale.reset()))
-                        .addMenuItem(MenuItem.default({label: "From Selection", selectable: !selection.isEmpty()})
-                            .setTriggerProcedure(() =>
-                                scale.setBits(selection.selected().reduce((bits, event) => bits | 1 << (event.pitch % 12), 0))))
-                        .addMenuItem(...MidiKeys.StockScales.map((predefinedScale: MidiKeys.PredefinedScale, index: int) =>
-                            MenuItem.default({
-                                label: predefinedScale.name,
-                                checked: predefinedScale.equals(scale),
-                                separatorBefore: index === 0
-                            }).setTriggerProcedure(() => scale.setScale(predefinedScale)))))}
-                            style={{minWidth: "0"}}
-                            appearance={{color: Colors.dark}}
-                            horizontal="right">
-                    <Icon symbol={IconSymbol.FileList}/>
-                </MenuButton>
-                <Checkbox lifecycle={lifecycle}
-                          model={followKey}
-                          appearance={{color: Colors.dark, activeColor: Colors.green, tooltip: "Follow project key"}}>
-                    <Icon symbol={IconSymbol.Magnet}/>
-                </Checkbox>
+            <div className="tab-bar">
+                <RadioGroup lifecycle={lifecycle}
+                            model={tab}
+                            className="tabs"
+                            elements={TabLabels.map(([value, label]) => ({value, element: <span>{label}</span>}))}
+                            appearance={{color: Colors.shadow, activeColor: Colors.dark}}/>
             </div>
-            <Icon symbol={IconSymbol.Table} className="label"/>
-            <PropertyTable lifecycle={lifecycle} selection={selection} editing={editing} modifyContext={modifyContext}/>
+            <div className="panels">{panels.map(([, panel]) => panel)}</div>
         </div>
     )
 }

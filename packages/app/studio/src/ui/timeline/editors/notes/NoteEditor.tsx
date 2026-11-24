@@ -20,7 +20,7 @@ import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {PianoRoll} from "@/ui/timeline/editors/notes/pitch/PianoRoll.tsx"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
-import {PitchEditorHeader} from "@/ui/timeline/editors/notes/pitch/PitchEditorHeader.tsx"
+import {NoteEditorTab, PitchEditorHeader} from "@/ui/timeline/editors/notes/pitch/PitchEditorHeader.tsx"
 import {FilteredSelection, NoteEventBoxAdapter, NoteSignal, NoteStreamReceiver, TrackType} from "@opendaw/studio-adapters"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {PropertyEditor} from "./property/PropertyEditor.tsx"
@@ -48,6 +48,7 @@ type Construct = {
 
 const scale = new ScaleConfig()
 const followKey = new DefaultObservableValue(false)
+const tab = new DefaultObservableValue<NoteEditorTab>("basic")
 const pitchPositioner = new PitchPositioner()
 
 export const NoteEditor =
@@ -135,7 +136,8 @@ export const NoteEditor =
                                    editing={editing}
                                    modifyContext={modifyContext}
                                    scale={scale}
-                                   followKey={followKey}/>
+                                   followKey={followKey}
+                                   tab={tab}/>
                 <PianoRoll lifecycle={lifecycle}
                            positioner={pitchPositioner}
                            scale={scale}

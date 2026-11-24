@@ -1,5 +1,5 @@
 import css from "./PropertyTable.sass?inline"
-import {Arrays, Editing, Lifecycle, Nullable, Option, Selection, Subscription, Terminable} from "@opendaw/lib-std"
+import {Arrays, Editing, isNotNull, Lifecycle, Nullable, Option, Selection, Subscription, Terminable} from "@opendaw/lib-std"
 import {Propagation} from "@opendaw/lib-box"
 import {deferNextFrame, Html} from "@opendaw/lib-dom"
 import {TimeCodeInput} from "@/ui/components/TimeCodeInput.tsx"
@@ -11,21 +11,33 @@ import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
-import {NoteModifyStrategies} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
+import {NoteModifyStrategies, NoteModifyStrategy} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {DigitDragging} from "@/ui/components/DigitDragging.ts"
 
 const className = Html.adoptStyleSheet(css, "PropertyTable")
+
+export type NotePropertyKey = keyof typeof PropertyParameters
+
+interface PropertyCell {
+    readonly key: NotePropertyKey
+    readonly icon: IconSymbol
+    readonly input: Element
+    readonly element: Element
+    readonly connect: boolean
+    raw(adapter: NoteEventBoxAdapter): number
+    read(strategy: NoteModifyStrategy, adapter: NoteEventBoxAdapter): number
+}
 
 type Construct = {
     lifecycle: Lifecycle
     selection: Selection<NoteEventBoxAdapter>
     modifyContext: ObservableModifyContext<NoteModifier>
     editing: Editing
+    rows: ReadonlyArray<ReadonlyArray<NotePropertyKey>>
 }
 
-export const PropertyTable = ({lifecycle, selection, modifyContext, editing}: Construct) => {
-    const {position, duration, pitch, velocity, cent, chance, playCount, playCurve} = PropertyParameters
+export const PropertyTable = ({lifecycle, selection, modifyContext, editing, rows}: Construct) => {
     let dragging = false
     const drag: DigitDragging.Hooks = {
         begin: () => {
@@ -37,132 +49,127 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing}: Co
             editing.mark()
         }
     }
-    const positionInput: Element = <TimeCodeInput lifecycle={lifecycle}
-                                                  model={position.parameter}
-                                                  negativeWarning
-                                                  oneBased
-                                                  drag={drag}/>
-    const durationInput: Element = <TimeCodeInput lifecycle={lifecycle}
-                                                  model={duration.parameter}
-                                                  negativeWarning
-                                                  drag={drag}/>
-    const pitchString = Inject.value(MidiKeys.toFullString(pitch.parameter.getValue()))
-    const pitchInput: Element = <NumberInput lifecycle={lifecycle}
-                                             model={pitch.parameter}
-                                             drag={drag}/>
-    const velocityInput: Element = <NumberInput lifecycle={lifecycle}
-                                                model={velocity.parameter}
-                                                mapper={velocity.parameter.stringMapping}
-                                                step={0.01}
-                                                drag={drag}/>
-    const centInput: Element = <NumberInput lifecycle={lifecycle}
-                                            model={cent.parameter}
-                                            drag={drag}/>
-    const chanceInput: Element = <NumberInput lifecycle={lifecycle}
-                                              model={chance.parameter}
-                                              drag={drag}/>
-    const playCountInput: Element = <NumberInput lifecycle={lifecycle}
-                                                 model={playCount.parameter}
-                                                 drag={drag}/>
-    const playCurveInput: Element = <NumberInput lifecycle={lifecycle}
-                                                 model={playCurve.parameter}
-                                                 mapper={playCurve.parameter.stringMapping}
-                                                 step={0.01}
-                                                 drag={drag}/>
+    const numberCell = (key: NotePropertyKey, icon: IconSymbol, unit: string | Inject.Value<string>,
+                        {raw, read}: Pick<PropertyCell, "raw" | "read">,
+                        stepped: boolean, connect: boolean): PropertyCell => {
+        const {parameter} = PropertyParameters[key]
+        const input: Element = stepped
+            ? <NumberInput lifecycle={lifecycle} model={parameter} mapper={parameter.stringMapping} step={0.01}
+                           drag={drag}/>
+            : <NumberInput lifecycle={lifecycle} model={parameter} drag={drag}/>
+        const element: Element = (
+            <div className={Html.buildClassList("group", connect && "connect")}>
+                {input}
+                <div className="unit">{unit}</div>
+                {connect && <hr/>}
+            </div>
+        )
+        return {key, icon, input, element, connect, raw, read}
+    }
+    const createCell = (key: NotePropertyKey): PropertyCell => {
+        switch (key) {
+            case "position": {
+                const input: Element = <TimeCodeInput lifecycle={lifecycle}
+                                                      model={PropertyParameters.position.parameter}
+                                                      negativeWarning
+                                                      oneBased
+                                                      drag={drag}/>
+                return {
+                    key, icon: IconSymbol.Start, input, element: input, connect: false,
+                    raw: adapter => adapter.position,
+                    read: (strategy, adapter) => strategy.readPosition(adapter)
+                }
+            }
+            case "duration": {
+                const input: Element = <TimeCodeInput lifecycle={lifecycle}
+                                                      model={PropertyParameters.duration.parameter}
+                                                      negativeWarning
+                                                      drag={drag}/>
+                return {
+                    key, icon: IconSymbol.Duration, input, element: input, connect: false,
+                    raw: adapter => adapter.duration,
+                    read: (strategy, adapter) => strategy.readComplete(adapter) - strategy.readPosition(adapter)
+                }
+            }
+            case "pitch": {
+                const {parameter} = PropertyParameters.pitch
+                const pitchString = Inject.value(MidiKeys.toFullString(parameter.getValue()))
+                lifecycle.own(parameter.subscribe(owner => pitchString.value = MidiKeys.toFullString(owner.getValue())))
+                return numberCell(key, IconSymbol.Piano, pitchString, {
+                    raw: adapter => adapter.pitch,
+                    read: (strategy, adapter) => strategy.readPitch(adapter)
+                }, false, false)
+            }
+            case "velocity":
+                return numberCell(key, IconSymbol.Velocity, "%", {
+                    raw: adapter => adapter.velocity,
+                    read: (strategy, adapter) => strategy.readVelocity(adapter)
+                }, true, false)
+            case "cent":
+                return numberCell(key, IconSymbol.Dial, "cents", {
+                    raw: adapter => adapter.cent,
+                    read: (strategy, adapter) => strategy.readCent(adapter)
+                }, false, false)
+            case "chance":
+                return numberCell(key, IconSymbol.Random, "%", {
+                    raw: adapter => adapter.chance,
+                    read: (strategy, adapter) => strategy.readChance(adapter)
+                }, false, false)
+            case "playCount":
+                return numberCell(key, IconSymbol.Divide, "#", {
+                    raw: adapter => adapter.playCount,
+                    read: (_strategy, adapter) => adapter.playCount
+                }, false, true)
+            case "playCurve":
+                return numberCell(key, IconSymbol.Curve, "%", {
+                    raw: adapter => adapter.playCurve,
+                    read: (_strategy, adapter) => adapter.playCurve
+                }, true, false)
+        }
+    }
+    const cellRows: ReadonlyArray<ReadonlyArray<PropertyCell>> = rows.map(row => row.map(createCell))
+    const cells: ReadonlyArray<PropertyCell> = cellRows.flat()
     const element: HTMLElement = (
         <div className={className}>
-            <Icon symbol={IconSymbol.Start}/>
-            {positionInput}
-            <div/>
-            <Icon symbol={IconSymbol.Duration}/>
-            {durationInput}
-            <Icon symbol={IconSymbol.Piano}/>
-            <div className="group">
-                {pitchInput}
-                <div className="unit">{pitchString}</div>
-            </div>
-            <div/>
-            <Icon symbol={IconSymbol.Velocity}/>
-            <div className="group">
-                {velocityInput}
-                <div className="unit">%</div>
-            </div>
-            <Icon symbol={IconSymbol.Dial}/>
-            <div className="group">
-                {centInput}
-                <div className="unit">cents</div>
-            </div>
-            <div/>
-            <Icon symbol={IconSymbol.Random}/>
-            <div className="group">
-                {chanceInput}
-                <div className="unit">%</div>
-            </div>
-            <Icon symbol={IconSymbol.Divide}/>
-            <div className="group connect">
-                {playCountInput}
-                <div className="unit">#</div>
-                <hr/>
-            </div>
-            <Icon symbol={IconSymbol.Curve}/>
-            <div className="group">
-                {playCurveInput}
-                <div className="unit">%</div>
-            </div>
+            {cellRows.map(row => row.map((cell, index) => [
+                <Icon symbol={cell.icon} className={index === 0 ? "row-start" : undefined}/>,
+                cell.element,
+                index < row.length - 1 && !cell.connect && <div/>
+            ]))}
         </div>
     )
-
     let focus: Nullable<NoteEventBoxAdapter> = null
-
     const updateState = lifecycle.own(deferNextFrame(() => {
         if (selection.isEmpty()) {
             element.classList.add("disabled")
-            positionInput.classList.remove("invalid")
-            durationInput.classList.remove("invalid")
-            pitchInput.classList.remove("invalid")
-            velocityInput.classList.remove("invalid")
-            centInput.classList.remove("invalid")
-            chanceInput.classList.remove("invalid")
-            playCountInput.classList.remove("invalid")
-            playCurveInput.classList.remove("invalid")
+            cells.forEach(cell => cell.input.classList.remove("invalid"))
         } else {
             element.classList.remove("disabled")
             const adapters = selection.selected()
-            positionInput.classList.toggle("invalid", !Arrays.satisfy(adapters, (a, b) => a.position === b.position))
-            durationInput.classList.toggle("invalid", !Arrays.satisfy(adapters, (a, b) => a.duration === b.duration))
-            pitchInput.classList.toggle("invalid", !Arrays.satisfy(adapters, (a, b) => a.pitch === b.pitch))
-            velocityInput.classList.toggle("invalid", !Arrays.satisfy(adapters, (a, b) => a.velocity === b.velocity))
-            centInput.classList.toggle("invalid", !Arrays.satisfy(adapters, (a, b) => a.cent === b.cent))
-            chanceInput.classList.toggle("invalid", !Arrays.satisfy(adapters, (a, b) => a.chance === b.chance))
-            playCountInput.classList.toggle("invalid", !Arrays.satisfy(adapters, (a, b) => a.playCount === b.playCount))
-            playCurveInput.classList.toggle("invalid", !Arrays.satisfy(adapters, (a, b) => a.playCurve === b.playCurve))
-
-            if (focus !== null) {
+            cells.forEach(cell => cell.input.classList
+                .toggle("invalid", !Arrays.satisfy(adapters, (first, other) => cell.raw(first) === cell.raw(other))))
+            if (isNotNull(focus)) {
                 const modifier: Option<NoteModifyStrategies> = modifyContext.modifier
                 const strategy = modifier.unwrapOrElse(NoteModifyStrategies.Identity).selectedModifyStrategy()
+                const adapter = focus
                 ignore = true
-                position.parameter.setValue(strategy.readPosition(focus))
-                duration.parameter.setValue(strategy.readComplete(focus) - strategy.readPosition(focus))
-                pitch.parameter.setValue(strategy.readPitch(focus))
-                velocity.parameter.setValue(strategy.readVelocity(focus))
-                cent.parameter.setValue(strategy.readCent(focus))
-                chance.parameter.setValue(strategy.readChance(focus))
-                playCount.parameter.setValue(focus.playCount)
-                playCurve.parameter.setValue(focus.playCurve)
+                cells.forEach(cell => PropertyParameters[cell.key].parameter.setValue(cell.read(strategy, adapter)))
                 ignore = false
             }
         }
     }))
-
     let ignore = false
     const noteSubscriptions = new Map<NoteEventBoxAdapter, Subscription>()
-    lifecycle.ownAll(...Object.values(PropertyParameters)
-            .map(({parameter, fieldName}) => parameter.subscribe(owner => {
-                if (ignore) {return}
-                editing.modify(() =>
-                    selection.selected()
-                        .forEach(adapter => adapter.box[fieldName].setValue(owner.getValue())), !dragging)
-            })),
+    lifecycle.ownAll(...cells
+            .map(({key}) => {
+                const {parameter, fieldName} = PropertyParameters[key]
+                return parameter.subscribe(owner => {
+                    if (ignore) {return}
+                    editing.modify(() =>
+                        selection.selected()
+                            .forEach(adapter => adapter.box[fieldName].setValue(owner.getValue())), !dragging)
+                })
+            }),
         selection.catchupAndSubscribe({
             onSelected: (adapter: NoteEventBoxAdapter) => {
                 noteSubscriptions.set(adapter, adapter.box.subscribe(Propagation.Children, updateState.request))
@@ -176,7 +183,6 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing}: Co
                 updateState.request()
             }
         }),
-        pitch.parameter.subscribe(owner => pitchString.value = MidiKeys.toFullString(owner.getValue())),
         modifyContext.subscribeUpdate(updateState.request),
         Terminable.create(() => {
             noteSubscriptions.forEach(subscription => subscription.terminate())
