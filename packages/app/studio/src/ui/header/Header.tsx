@@ -21,9 +21,8 @@ import {MetronomeControl} from "@/ui/header/MetronomeControl"
 import {PerformanceStats} from "@/ui/header/PerformanceStats"
 import {BaseFrequencyControl} from "@/ui/header/BaseFrequencyControl"
 import {CaptureMidiButton} from "@/ui/header/CaptureMidiButton"
-import {MidiAccessButton} from "@/ui/header/MidiAccessButton"
+import {MidiButton} from "@/ui/header/MidiButton"
 import {ScreenRecordButton} from "@/ui/header/ScreenRecordButton"
-import {MidiMapModeButton} from "@/ui/header/MidiMapModeButton"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {Checkbox} from "@/ui/components/Checkbox"
 
@@ -39,7 +38,7 @@ const ScreenShortcutKeys: Record<Workspace.ScreenKeys, keyof typeof GlobalShortc
     "default": "workspace-screen-default",
     "mixer": "workspace-screen-mixer",
     "modulation": "workspace-screen-modulation",
-    "midi-mapping": "workspace-screen-midi-mapping",
+    "midi-mapping": "workspace-screen-default",
     "piano": "workspace-screen-piano",
     "project": "workspace-screen-project",
     "shadertoy": "workspace-screen-shadertoy",
@@ -106,8 +105,7 @@ export const Header = ({lifecycle, service}: Construct) => {
             </Group>
             <div style={{display: "flex", columnGap: "4px"}}
                  onInit={element => TourAnchors.register(lifecycle, element, "midi")}>
-                <MidiAccessButton lifecycle={lifecycle}/>
-                <MidiMapModeButton lifecycle={lifecycle} service={service}/>
+                <MidiButton lifecycle={lifecycle} service={service}/>
                 <CaptureMidiButton lifecycle={lifecycle} service={service}/>
             </div>
             <hr/>

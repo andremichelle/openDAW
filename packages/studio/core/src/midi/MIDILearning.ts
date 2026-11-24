@@ -26,7 +26,8 @@ import {Project} from "../project"
 import {MidiDevices} from "./MidiDevices"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {MIDIControllerBox} from "@opendaw/studio-boxes"
-import {MIDIMappingState, MIDIMappingTransform} from "./MIDIMappingTransform"
+import {MIDIMappingTransform} from "./MIDIMappingTransform"
+import {MIDIMappingState} from "./MIDIMappingState"
 
 interface MIDIConnection {
     box: MIDIControllerBox
@@ -38,9 +39,13 @@ const AnyChannel = -1
 
 export type MIDIMappableField = PrimitiveField<PrimitiveValues, Pointers.MIDIControl | Pointers>
 
-// will be part of MIDI preferences. Should not filter for the device-id
-// because it is different for the same hardware in different browsers.
-const respectDeviceID = false
+const accepts = (box: MIDIControllerBox, deviceId: string, channel: int, controlId: int): boolean => {
+    if (box.controlId.getValue() !== controlId) {return false}
+    const boxChannel = box.deviceChannel.getValue()
+    if (boxChannel !== AnyChannel && boxChannel !== channel) {return false}
+    const filterDeviceId = box.filterDeviceId.getValue()
+    return filterDeviceId === "" || filterDeviceId === deviceId
+}
 
 export class MIDILearning implements Terminable {
     readonly #terminator = new Terminator()
@@ -65,7 +70,7 @@ export class MIDILearning implements Terminable {
             if (!owner.getValue()) {this.mapTarget.clear()}
         }))
         this.#terminator.own(MidiDevices.subscribeMessageEvents((event: MIDIMessageEvent) => {
-            if (event.data === null) {return}
+            if (!isDefined(event.data)) {return}
             this.receive(event.data, event.target instanceof MIDIInput ? event.target.id : "")
         }))
     }
@@ -102,19 +107,15 @@ export class MIDILearning implements Terminable {
         const value = MidiData.readParam2(data)
         if (this.mapMode.getValue()) {
             this.mapTarget.ifSome(field => {
-                const bound = this.#findConnectionByParameterAddress(field.address).mapOr(({box}) =>
-                    box.controlId.getValue() === controlId && box.deviceChannel.getValue() === channel, false)
+                const bound = this.#findConnectionByParameterAddress(field.address)
+                    .mapOr(({box}) => accepts(box, deviceId, channel, controlId), false)
                 if (!bound) {this.#bind(field, deviceId, channel, controlId)}
                 this.mapTarget.clear()
             })
         }
-        this.#connections.values().forEach(({box, deliver}) => {
-            if (box.controlId.getValue() !== controlId) {return}
-            const boxChannel = box.deviceChannel.getValue()
-            if (boxChannel !== AnyChannel && boxChannel !== channel) {return}
-            if (respectDeviceID && box.deviceId.getValue() !== deviceId) {return}
-            deliver(value)
-        })
+        this.#connections.values()
+            .filter(({box}) => accepts(box, deviceId, channel, controlId))
+            .forEach(({deliver}) => deliver(value))
     }
 
     hasMidiConnection(address: Address): boolean {
@@ -139,7 +140,7 @@ export class MIDILearning implements Terminable {
         const abortController = new AbortController()
         learnLifecycle.own(MidiDevices.subscribeMessageEvents((event: MIDIMessageEvent) => {
             const data = event.data
-            if (data === null) {return}
+            if (!isDefined(data)) {return}
             const deviceId = event.target instanceof MIDIInput ? event.target.id : ""
             if (MidiData.isController(data)) {
                 learnLifecycle.terminate()
@@ -163,20 +164,23 @@ export class MIDILearning implements Terminable {
 
     createMapping(field: MIDIMappableField, init: Procedure<MIDIControllerBox>): MIDIControllerBox {
         const midiControllersField = this.#optMIDIContollers.unwrap("No user accepting midi controls")
-        const existing = this.#findConnectionByParameterAddress(field.address)
-        return this.#project.editing.modify(() => {
-            existing.ifSome(({box}) => box.delete())
-            return MIDIControllerBox.create(this.#project.boxGraph, UUID.generate(), box => {
+        return this.#project.editing.modify(() => this.#findConnectionByParameterAddress(field.address).match({
+            none: () => MIDIControllerBox.create(this.#project.boxGraph, UUID.generate(), box => {
                 box.controllers.refer(midiControllersField)
                 box.parameter.refer(field)
                 init(box)
-            })
-        }).unwrap("Could not create MIDIControllerBox")
+            }),
+            some: ({box}) => {
+                init(box)
+                return box
+            }
+        })).unwrap("Could not create MIDIControllerBox")
     }
 
     #bind(field: MIDIMappableField, deviceId: string, channel: int, controlId: int): MIDIControllerBox {
         return this.createMapping(field, box => {
             box.deviceId.setValue(deviceId)
+            if (box.filterDeviceId.getValue() !== "") {box.filterDeviceId.setValue(deviceId)}
             box.deviceChannel.setValue(channel)
             box.controlId.setValue(controlId)
         })
@@ -191,7 +195,6 @@ export class MIDILearning implements Terminable {
         let pendingValue: Nullable<unitValue> = null
         const update = (value: unitValue) => {
             editing.modify(() => adapter.setUnitValue(value), false)
-            // the stored value may be quantised, pickup compares against what was actually written
             state.lastApplied = adapter.getUnitValue()
         }
         const deliver = (value: int) => {

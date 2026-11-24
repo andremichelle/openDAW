@@ -6,7 +6,8 @@ import {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "../project/ProjectEnv"
 import type {Project} from "../project/Project"
 import {MIDIMappingPreset} from "./MIDIMappingPreset"
-import {MIDIEncoding, MIDITakeover} from "./MIDIMappingTransform"
+import {MIDIEncoding} from "./MIDIEncoding"
+import {MIDITakeover} from "./MIDITakeover"
 
 // jsdom lacks AudioWorkletNode, which EngineWorklet extends at module-eval time.
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
@@ -157,10 +158,44 @@ describe("MIDIMappingPreset", () => {
         expect(MIDIMappingPreset.parse("null").isEmpty()).toBe(true)
         expect(MIDIMappingPreset.parse('{"version":2,"mappings":[]}').isEmpty()).toBe(true)
         expect(MIDIMappingPreset.parse('{"version":1}').isEmpty()).toBe(true)
-        const entry = {address: "a", unit: "u", owner: "o", parameter: "p", deviceId: "", channel: 0,
+        const entry = {address: "a", unit: "u", owner: "o", parameter: "p", deviceId: "", filterDeviceId: "", channel: 0,
             min: 0, max: 1, takeover: 0, encoding: 0}
         expect(MIDIMappingPreset.parse(JSON.stringify({version: 1, mappings: [entry]})).isEmpty()).toBe(true)
         expect(MIDIMappingPreset.parse(JSON.stringify({version: 1, mappings: [{...entry, controlId: 128}]})).isEmpty()).toBe(true)
         expect(MIDIMappingPreset.parse(JSON.stringify({version: 1, mappings: [{...entry, controlId: 7}]})).nonEmpty()).toBe(true)
+        expect(MIDIMappingPreset.parse(JSON.stringify({version: 1, mappings: [{...entry, controlId: 7.5}]})).isEmpty()).toBe(true)
+        expect(MIDIMappingPreset.parse(JSON.stringify({version: 1, mappings: [{...entry, controlId: 7, channel: 1.5}]})).isEmpty()).toBe(true)
+        expect(MIDIMappingPreset.parse(JSON.stringify({version: 1, mappings: [{...entry, controlId: 7, takeover: 3}]})).isEmpty()).toBe(true)
+        expect(MIDIMappingPreset.parse(JSON.stringify({version: 1, mappings: [{...entry, controlId: 7, encoding: 4}]})).isEmpty()).toBe(true)
+        const {filterDeviceId: _, ...withoutFilter} = entry
+        expect(MIDIMappingPreset.parse(JSON.stringify({version: 1, mappings: [{...withoutFilter, controlId: 7}]})).isEmpty()).toBe(true)
+    })
+
+    it("imports all mappings as one undo step", async () => {
+        const {project} = await createMappedProject()
+        const preset = MIDIMappingPreset.create(project)
+        const other = await createProject()
+        addTape(other)
+        addTape(other, "Second")
+        const second = MIDIMappingPreset.create(project).mappings[0]
+        const twoEntries: MIDIMappingPreset = {version: 1, mappings: [...preset.mappings, {...second, address: "", unit: "Second", owner: "Second"}]}
+        expect(MIDIMappingPreset.apply(other, twoEntries)).toEqual({imported: 2, replaced: 0, skipped: 0})
+        expect(other.midiLearning.numberOfConnections).toBe(2)
+        other.editing.undo()
+        expect(other.midiLearning.numberOfConnections).toBe(0)
+    })
+
+    it("keeps the device filter", async () => {
+        const {project} = await createMappedProject()
+        project.editing.modify(() => {
+            const box = project.midiLearning.controllerBoxes()[0]
+            box.filterDeviceId.setValue("device-a")
+        })
+        const preset = MIDIMappingPreset.parse(JSON.stringify(MIDIMappingPreset.create(project))).unwrap("parse")
+        const other = await createProject()
+        addTape(other)
+        MIDIMappingPreset.apply(other, preset)
+        const box = other.midiLearning.controllerBoxes()[0]
+        expect(box.filterDeviceId.getValue()).toBe("device-a")
     })
 })

@@ -5,6 +5,7 @@ import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
 import {AudioUnitTracks, AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {MIDILearning} from "@opendaw/studio-core"
+import {MapTarget} from "@/ui/midi-mapping/MapTarget"
 
 const className = Html.adoptStyleSheet(css, "AutomationControl")
 
@@ -47,6 +48,7 @@ const syncIndicator = (indicator: HTMLElement, target: Element, offset: number):
 /// The control-source ring every automatable control shows: it follows the control's own bounds and lights
 /// up per source (automation, midi, modulation, external).
 export const installControlSourceIndicator = (lifecycle: Lifecycle,
+                                              midiLearning: MIDILearning,
                                               parameter: AutomatableParameterFieldAdapter,
                                               host: HTMLElement,
                                               target: Element,
@@ -55,24 +57,28 @@ export const installControlSourceIndicator = (lifecycle: Lifecycle,
     host.appendChild(indicator)
     let syncSubscription: Terminable = Terminable.Empty
     let sourceCount = 0
+    const updateVisibility = () => {
+        const visible = sourceCount > 0 || midiLearning.mapMode.getValue()
+        if (visible === !indicator.classList.contains("hidden")) {return}
+        indicator.classList.toggle("hidden", !visible)
+        syncSubscription.terminate()
+        syncSubscription = visible ? AnimationFrame.add(() => syncIndicator(indicator, target, offset)) : Terminable.Empty
+    }
     lifecycle.ownAll(
         parameter.catchupAndSubscribeControlSources({
             onControlSourceAdd: (source: ControlSource) => {
                 indicator.classList.add(source)
-                if (sourceCount++ === 0) {
-                    indicator.classList.remove("hidden")
-                    syncSubscription = AnimationFrame.add(() => syncIndicator(indicator, target, offset))
-                }
+                sourceCount++
+                updateVisibility()
             },
             onControlSourceRemove: (source: ControlSource) => {
                 indicator.classList.remove(source)
-                if (--sourceCount === 0) {
-                    syncSubscription.terminate()
-                    syncSubscription = Terminable.Empty
-                    indicator.classList.add("hidden")
-                }
+                sourceCount--
+                updateVisibility()
             }
         }),
+        midiLearning.mapMode.catchupAndSubscribe(updateVisibility),
+        MapTarget.frame(midiLearning, parameter.field, indicator),
         Terminable.create(() => syncSubscription.terminate())
     )
 }
@@ -100,7 +106,7 @@ export const AutomationControl = (
     const indicatorOffset = offset ?? 0
     const element: HTMLElement = (<div className={className}>{children}</div>)
     const target = asDefined(element.firstElementChild, "firstElementChild not defined")
-    installControlSourceIndicator(lifecycle, parameter, element, target, indicatorOffset)
+    installControlSourceIndicator(lifecycle, midiLearning, parameter, element, target, indicatorOffset)
     lifecycle.own(attachParameterContextMenu(editing, midiLearning, tracks, parameter, target, disableAutomation))
     return element
 }

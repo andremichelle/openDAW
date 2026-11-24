@@ -11,6 +11,10 @@ hooks highlighting into the three `attach*ContextMenu` functions and adds a stan
 
 **Tech Stack:** TypeScript, `@opendaw/lib-box` schema forge, `@opendaw/lib-jsx`, Sass, Vitest (jsdom).
 
+**Revision 2026-11-24:** the maintainer changed the header button, the screen placement, the highlighting, the
+device handling and several details after this plan was carried out. See "Revision 2026-11-24" in
+`2026-11-22-midi-map-mode-design.md`, it takes precedence over the tasks below.
+
 **Spec:** `plans/2026-11-22-midi-map-mode-design.md`
 
 ## Global Constraints

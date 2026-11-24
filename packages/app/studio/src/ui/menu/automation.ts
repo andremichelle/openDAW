@@ -9,7 +9,7 @@ import {
 import {PrimitiveValues} from "@opendaw/lib-box"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
 import {Editing, isDefined, Terminable, UUID} from "@opendaw/lib-std"
-import {installMapTarget} from "@/ui/midi-mapping/MapTargetHighlight.ts"
+import {MapTarget} from "@/ui/midi-mapping/MapTarget.ts"
 
 export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: Editing,
                                                                       midiDevices: MIDILearning,
@@ -20,7 +20,7 @@ export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: E
     Terminable.many(
         ContextMenu.subscribe(element, collector =>
             collector.addItems(...parameterContextItems(editing, midiDevices, tracks, parameter, disableAutomation))),
-        installMapTarget(midiDevices, parameter.field, element))
+        MapTarget.select(midiDevices, parameter.field, element))
 
 export const parameterContextItems = <T extends PrimitiveValues>(editing: Editing,
                                                              midiDevices: MIDILearning,
@@ -93,7 +93,7 @@ export const attachModulatorParameterContextMenu = <T extends PrimitiveValues>(
     Terminable.many(
         ContextMenu.subscribe(element, collector =>
             collector.addItems(...modulatorParameterItems(editing, midiDevices, parameter))),
-        installMapTarget(midiDevices, parameter.field, element))
+        MapTarget.select(midiDevices, parameter.field, element))
 
 export const attachAssignmentDepthContextMenu = <T extends PrimitiveValues>(
     editing: Editing,
@@ -105,7 +105,7 @@ export const attachAssignmentDepthContextMenu = <T extends PrimitiveValues>(
             ...modulatorParameterItems(editing, midiDevices, parameter),
             modulationMenu(editing, parameter)
         )),
-        installMapTarget(midiDevices, parameter.field, element))
+        MapTarget.select(midiDevices, parameter.field, element))
 
 const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
                                                    parameter: AutomatableParameterFieldAdapter<T>,

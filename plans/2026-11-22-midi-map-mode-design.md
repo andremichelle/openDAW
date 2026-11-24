@@ -181,3 +181,55 @@ step * (max - min))`, clamped between `min` and `max`, step = 1/128. Takeover do
 
 Exact colors, icon, step size fine-tuning for relative encoders, Pickup tolerance, file names of new
 modules, row layout details.
+
+## Revision 2026-11-24 (maintainer)
+
+The open questions are decided. These changes were made on top of PR 571 and PR 572.
+
+### One MIDI button
+
+- The MAP button, the Esc handler and the Shift+9 shortcut are gone. The MIDI button in the header does it all.
+- MIDI off: pressing the button turns MIDI on. `MidiAccessOnLoad` still turns it on automatically when the
+  browser granted permission before.
+- MIDI on: the button shows a small triangle below the icon and opens or closes the MIDI Mapping screen.
+  Closing returns to the previous screen.
+- The screen opens in the same area as the code editor and the layers overview (`editorScreen`, hidden from
+  the screen menu, opened through `StudioService.openCodeEditor` with a `MIDIMappingScreenState`).
+- Map mode is on exactly while the MIDI Mapping panel exists. There is no separate toggle.
+
+### Highlighting
+
+- The frame goes onto the control source indicator ring that `AutomationControl` and the modulation
+  controls already draw, and onto the `AutomatableControl` element itself. No `getComputedStyle` walk and no
+  waiting for the element to be attached.
+- `MapTarget.select` (target selection on pointer down) and `MapTarget.frame` (classes) are separate.
+
+### Devices per mapping
+
+- New field `filter-device` (key 10, default off) on `MIDIControllerBox`. Off means all devices, so existing
+  projects behave as before.
+- The MIDI Device column is a menu like a track's note input: "All devices" or one device, each with
+  "All channels" or "Channel 1" to "Channel 16".
+- A device is identified by the browser's id, like the track note input. A mapping set to one device shows
+  "Unavailable device" when that device is not connected.
+
+### Mapping again
+
+- Mapping a parameter that already has a mapping updates its CC, channel and device in place. Min, Max,
+  Takeover, Encoding and the device filter stay.
+- A mapping on "All channels" is not changed to the channel the CC came from.
+
+### Values
+
+- Relative encoders move parameters with few steps: the transform keeps the unrounded value between ticks
+  as long as nothing else changed the parameter.
+- Reset Value stays as it is, it resets the parameter, not the mapping range.
+
+### List and presets
+
+- The list updates when a track or device is renamed and when a mapping's CC, channel or device changes.
+- Takeover is disabled while the encoding is relative.
+- Import is one undo step. Export and import report errors, only a cancelled file dialog is silent.
+- The preset entry gains `filterDevice`. Channel and CC must be whole numbers, takeover and encoding must be
+  known enum values.
+- `MIDITakeover`, `MIDIEncoding`, `MIDIMappingState` and `MIDIMappingTransform` each have their own file.

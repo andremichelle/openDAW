@@ -48,7 +48,7 @@ export const ValueRange = ({lifecycle, service, modulator}: Construct): HTMLElem
             </div>
         </Column>
     )
-    installControlSourceIndicator(lifecycle, amount, column, label)
+    installControlSourceIndicator(lifecycle, midiLearning, amount, column, label)
     lifecycle.own(attachModulatorParameterContextMenu(editing, midiLearning, amount, label))
     return column
 }

@@ -7,7 +7,8 @@ import type {Project} from "../project/Project"
 import {MidiData} from "@opendaw/lib-midi"
 import {PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {MIDIEncoding, MIDITakeover} from "./MIDIMappingTransform"
+import {MIDIEncoding} from "./MIDIEncoding"
+import {MIDITakeover} from "./MIDITakeover"
 
 // jsdom lacks AudioWorkletNode, which EngineWorklet extends at module-eval time.
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
@@ -158,6 +159,23 @@ describe("MIDILearning", () => {
         expect(volumeUnitValue(project)).toBeCloseTo(0.25, 6)
     })
 
+    it("accepts every device by default", async () => {
+        const project = await createLearnedProject()
+        project.editing.modify(() => controllerBox(project).deviceId.setValue("device-a"))
+        project.midiLearning.receive(MidiData.control(0, 7, 127), "device-b")
+        expect(volumeUnitValue(project)).toBeCloseTo(1.0, 6)
+    })
+
+    it("accepts only the device whose id is set", async () => {
+        const project = await createLearnedProject()
+        project.editing.modify(() => controllerBox(project).filterDeviceId.setValue("device-a"))
+        const before = volumeUnitValue(project)
+        project.midiLearning.receive(MidiData.control(0, 7, 127), "device-b")
+        expect(volumeUnitValue(project)).toBe(before)
+        project.midiLearning.receive(MidiData.control(0, 7, 127), "device-a")
+        expect(volumeUnitValue(project)).toBeCloseTo(1.0, 6)
+    })
+
     it("ignores another CC number", async () => {
         const project = await createLearnedProject()
         const before = volumeUnitValue(project)
@@ -256,6 +274,47 @@ describe("MIDILearning map mode", () => {
         const boxes = panningBoxes(project)
         expect(boxes.length).toBe(1)
         expect(boxes[0].controlId.getValue()).toBe(22)
+    })
+
+    it("keeps range, takeover and encoding when the target is bound to another CC", async () => {
+        const project = await enterMapMode()
+        project.midiLearning.receive(MidiData.control(0, 21, 64), "")
+        const [box] = panningBoxes(project)
+        project.editing.modify(() => {
+            box.min.setValue(0.25)
+            box.takeover.setValue(MIDITakeover.Pickup)
+            box.encoding.setValue(MIDIEncoding.BinaryOffset)
+        })
+        project.midiLearning.mapTarget.wrap(panningOf(project))
+        project.midiLearning.receive(MidiData.control(3, 22, 64), "device-b")
+        expect(panningBoxes(project)).toEqual([box])
+        expect(box.controlId.getValue()).toBe(22)
+        expect(box.deviceChannel.getValue()).toBe(3)
+        expect(box.deviceId.getValue()).toBe("device-b")
+        expect(box.min.getValue()).toBeCloseTo(0.25, 6)
+        expect(box.takeover.getValue()).toBe(MIDITakeover.Pickup)
+        expect(box.encoding.getValue()).toBe(MIDIEncoding.BinaryOffset)
+    })
+
+    it("moves a set device id to the device the mapping is learned from again", async () => {
+        const project = await enterMapMode()
+        project.midiLearning.receive(MidiData.control(0, 21, 64), "device-a")
+        const [box] = panningBoxes(project)
+        expect(box.filterDeviceId.getValue()).toBe("")
+        project.editing.modify(() => box.filterDeviceId.setValue("device-a"))
+        project.midiLearning.mapTarget.wrap(panningOf(project))
+        project.midiLearning.receive(MidiData.control(0, 22, 64), "device-b")
+        expect(box.filterDeviceId.getValue()).toBe("device-b")
+    })
+
+    it("does not re-bind a mapping on all channels to the channel the CC came from", async () => {
+        const project = await enterMapMode()
+        project.midiLearning.receive(MidiData.control(0, 21, 64), "")
+        const [box] = panningBoxes(project)
+        project.editing.modify(() => box.deviceChannel.setValue(-1))
+        project.midiLearning.mapTarget.wrap(panningOf(project))
+        project.midiLearning.receive(MidiData.control(5, 21, 64), "")
+        expect(box.deviceChannel.getValue()).toBe(-1)
     })
 
     it("does not bind outside map mode", async () => {

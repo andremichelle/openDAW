@@ -1,3 +1,5 @@
+@use "@/mixins"
+
 component
   display: contents
 
@@ -18,3 +20,5 @@ component
 
   &.external
     box-shadow: 0 0 1px 0 var(--color-purple)
+
+  @include mixins.midi-map-ring

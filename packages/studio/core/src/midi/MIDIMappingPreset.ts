@@ -1,39 +1,43 @@
-import {int, isDefined, Option, tryCatch} from "@opendaw/lib-std"
+import {int, isDefined, Option, tryCatch, unitValue} from "@opendaw/lib-std"
 import {Address} from "@opendaw/lib-box"
 import {AutomatableParameterFieldAdapter, ParameterOwner} from "@opendaw/studio-adapters"
 import type {Project} from "../project"
-import {MIDIMappableField} from "./MIDILearning"
-
-export type MIDIMappingPresetEntry = {
-    address: string
-    unit: string
-    owner: string
-    parameter: string
-    deviceId: string
-    channel: int
-    controlId: int
-    min: number
-    max: number
-    takeover: int
-    encoding: int
-}
+import {MIDITakeover} from "./MIDITakeover"
+import {MIDIEncoding} from "./MIDIEncoding"
 
 export type MIDIMappingPreset = {
     version: 1
-    mappings: ReadonlyArray<MIDIMappingPresetEntry>
-}
-
-export type MIDIMappingImportResult = {
-    imported: int
-    replaced: int
-    skipped: int
+    mappings: ReadonlyArray<MIDIMappingPreset.Entry>
 }
 
 export namespace MIDIMappingPreset {
-    const StringKeys = ["address", "unit", "owner", "parameter", "deviceId"] as const
-    const NumberRanges: ReadonlyArray<readonly [keyof MIDIMappingPresetEntry, number, number]> = [
-        ["channel", -1, 15], ["controlId", 0, 127], ["min", 0, 1], ["max", 0, 1], ["takeover", 0, 2], ["encoding", 0, 3]
-    ]
+    export type Entry = {
+        address: string
+        unit: string
+        owner: string
+        parameter: string
+        deviceId: string
+        filterDeviceId: string
+        channel: int
+        controlId: int
+        min: unitValue
+        max: unitValue
+        takeover: MIDITakeover
+        encoding: MIDIEncoding
+    }
+
+    export type ImportResult = {
+        imported: int
+        replaced: int
+        skipped: int
+    }
+
+    const StringKeys = ["address", "unit", "owner", "parameter", "deviceId", "filterDeviceId"] as const
+    const IntegerRanges: ReadonlyArray<readonly ["channel" | "controlId", int, int]> = [["channel", -1, 15], ["controlId", 0, 127]]
+    const UnitKeys = ["min", "max"] as const
+
+    const isEnumValue = (values: ReadonlyArray<unknown>, value: unknown): boolean =>
+        typeof value === "number" && values.includes(value)
 
     const unitName = (project: Project, adapter: AutomatableParameterFieldAdapter): string =>
         ParameterOwner.audioUnitOf(project, adapter.field).mapOr(unit => unit.label, "")
@@ -51,6 +55,7 @@ export namespace MIDIMappingPreset {
                 owner: ownerName(project, adapter),
                 parameter: adapter.name,
                 deviceId: box.deviceId.getValue(),
+                filterDeviceId: box.filterDeviceId.getValue(),
                 channel: box.deviceChannel.getValue(),
                 controlId: box.controlId.getValue(),
                 min: box.min.getValue(),
@@ -63,13 +68,19 @@ export namespace MIDIMappingPreset {
     const isRecord = (value: unknown): value is Record<string, unknown> =>
         typeof value === "object" && isDefined(value) && !Array.isArray(value)
 
-    const isEntry = (value: unknown): value is MIDIMappingPresetEntry => {
+    const isEntry = (value: unknown): value is Entry => {
         if (!isRecord(value)) {return false}
         return StringKeys.every(key => typeof value[key] === "string")
-            && NumberRanges.every(([key, min, max]) => {
+            && IntegerRanges.every(([key, min, max]) => {
                 const number = value[key]
-                return typeof number === "number" && Number.isFinite(number) && number >= min && number <= max
+                return typeof number === "number" && Number.isInteger(number) && number >= min && number <= max
             })
+            && UnitKeys.every(key => {
+                const number = value[key]
+                return typeof number === "number" && Number.isFinite(number) && number >= 0.0 && number <= 1.0
+            })
+            && isEnumValue(Object.values(MIDITakeover), value.takeover)
+            && isEnumValue(Object.values(MIDIEncoding), value.encoding)
     }
 
     export const parse = (text: string): Option<MIDIMappingPreset> => {
@@ -80,7 +91,7 @@ export namespace MIDIMappingPreset {
         return Option.wrap({version, mappings})
     }
 
-    const resolve = (project: Project, entry: MIDIMappingPresetEntry): Option<AutomatableParameterFieldAdapter> => {
+    const resolve = (project: Project, entry: Entry): Option<AutomatableParameterFieldAdapter> => {
         const byAddress = tryCatch(() => Address.decode(entry.address))
         if (byAddress.status === "success") {
             const adapter = project.parameterFieldAdapters.opt(byAddress.value)
@@ -93,14 +104,15 @@ export namespace MIDIMappingPreset {
         return candidates.length === 1 ? Option.wrap(candidates[0]) : Option.None
     }
 
-    export const apply = (project: Project, preset: MIDIMappingPreset): MIDIMappingImportResult => {
-        const {midiLearning} = project
-        return preset.mappings.reduce((result: MIDIMappingImportResult, entry) => resolve(project, entry).match({
+    export const apply = (project: Project, preset: MIDIMappingPreset): ImportResult => {
+        const {midiLearning, editing} = project
+        return editing.modify(() => preset.mappings.reduce((result: ImportResult, entry) => resolve(project, entry).match({
             none: () => ({...result, skipped: result.skipped + 1}),
             some: adapter => {
                 const replaced = midiLearning.hasMidiConnection(adapter.address)
-                midiLearning.createMapping(adapter.field as unknown as MIDIMappableField, box => {
+                midiLearning.createMapping(adapter.field, box => {
                     box.deviceId.setValue(entry.deviceId)
+                    box.filterDeviceId.setValue(entry.filterDeviceId)
                     box.deviceChannel.setValue(entry.channel)
                     box.controlId.setValue(entry.controlId)
                     box.min.setValue(entry.min)
@@ -110,6 +122,6 @@ export namespace MIDIMappingPreset {
                 })
                 return {...result, imported: result.imported + 1, replaced: result.replaced + (replaced ? 1 : 0)}
             }
-        }), {imported: 0, replaced: 0, skipped: 0})
+        }), {imported: 0, replaced: 0, skipped: 0})).unwrap("MIDI mapping import")
     }
 }

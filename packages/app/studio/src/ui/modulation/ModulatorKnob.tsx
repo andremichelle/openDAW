@@ -23,7 +23,7 @@ export const ModulatorKnob = ({lifecycle, service, parameter, anchor}: Construct
             <ParameterLabelKnob lifecycle={lifecycle} editing={editing} parameter={parameter} anchor={anchor}/>
         </Column>
     )
-    installControlSourceIndicator(lifecycle, parameter, column, column)
+    installControlSourceIndicator(lifecycle, midiLearning, parameter, column, column)
     lifecycle.own(attachModulatorParameterContextMenu(editing, midiLearning, parameter, column))
     return column
 }

@@ -208,7 +208,6 @@ export namespace StudioShortcutManager {
             gc.register(gs["workspace-screen-project"].shortcut, () => service.runIfProject(() => service.switchScreen("project"))),
             gc.register(gs["workspace-screen-shadertoy"].shortcut, () => service.runIfProject(() => service.switchScreen("shadertoy"))),
             gc.register(gs["workspace-screen-tap"].shortcut, () => service.runIfProject(() => service.switchScreen("tap"))),
-            gc.register(gs["workspace-screen-midi-mapping"].shortcut, () => service.runIfProject(() => service.switchScreen("midi-mapping"))),
             gc.register(gs["show-preferences"].shortcut, () => RouteLocation.get().navigateTo("/preferences")),
             gc.register(gs["open-spotlight"].shortcut, () => service.spotlight.toggle()),
             gc.register(gs["open-spotlight-alt"].shortcut, () => service.spotlight.toggle()),

@@ -1,0 +1,12 @@
+@use "@/mixins"
+
+component
+  > label
+    column-gap: 0
+
+    &:after
+      @include mixins.tiny-triangle
+      visibility: hidden
+
+  &.active > label:after
+    visibility: visible

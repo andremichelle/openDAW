@@ -1,15 +1,12 @@
 import {describe, expect, it} from "vitest"
 import {Option} from "@opendaw/lib-std"
-import {
-    MIDIEncoding,
-    MIDIMappingSettings,
-    MIDIMappingState,
-    MIDIMappingTransform,
-    MIDITakeover
-} from "./MIDIMappingTransform"
+import {MIDIMappingTransform} from "./MIDIMappingTransform"
+import {MIDIMappingState} from "./MIDIMappingState"
+import {MIDITakeover} from "./MIDITakeover"
+import {MIDIEncoding} from "./MIDIEncoding"
 
 const settings = (min: number, max: number, takeover: MIDITakeover,
-                  encoding: MIDIEncoding = MIDIEncoding.Absolute): MIDIMappingSettings =>
+                  encoding: MIDIEncoding = MIDIEncoding.Absolute): MIDIMappingTransform.Settings =>
     ({min, max, takeover, encoding})
 
 const controllerOf = (value: number): number => value > 64 ? 0.5 + (value - 63) / 128 : value < 64 ? value / 128 : 0.5
@@ -121,6 +118,32 @@ describe("MIDIMappingTransform relative", () => {
     it("decodes sign bit", () => {
         expect(MIDIMappingTransform.decodeRelative(MIDIEncoding.SignBit, 1)).toBe(1)
         expect(MIDIMappingTransform.decodeRelative(MIDIEncoding.SignBit, 65)).toBe(-1)
+    })
+
+    // a stepped parameter rounds every small step back, the encoder must still move it
+    it("moves a stepped parameter step by step", () => {
+        const state = new MIDIMappingState()
+        const relative = settings(0, 1, MIDITakeover.Jump, MIDIEncoding.TwosComplement)
+        const quantise = (value: number): number => Math.round(value * 7) / 7
+        const start = quantise(0.5)
+        let current = start
+        for (let tick = 0; tick < 32; tick++) {
+            current = quantise(unwrap(MIDIMappingTransform.apply(relative, state, 1, current)))
+            state.lastApplied = current
+        }
+        expect(current).toBeCloseTo(quantise(start + 32 / 128), 6)
+        for (let tick = 0; tick < 64; tick++) {
+            current = quantise(unwrap(MIDIMappingTransform.apply(relative, state, 127, current)))
+            state.lastApplied = current
+        }
+        expect(current).toBeCloseTo(quantise(start - 32 / 128), 6)
+    })
+
+    it("follows a value changed elsewhere between encoder steps", () => {
+        const state = new MIDIMappingState()
+        const relative = settings(0, 1, MIDITakeover.Jump, MIDIEncoding.TwosComplement)
+        state.lastApplied = unwrap(MIDIMappingTransform.apply(relative, state, 1, 0.5))
+        expect(unwrap(MIDIMappingTransform.apply(relative, state, 1, 0.25))).toBeCloseTo(0.25 + 1 / 128, 6)
     })
 
     it("steps the current value and clamps to the range", () => {

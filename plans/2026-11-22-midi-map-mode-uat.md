@@ -22,6 +22,9 @@ Manual acceptance test with a real MIDI controller. Covers the whole feature on 
 
 ### A. Map mode and highlighting
 
+Sections A and B test the MAP button of the original PR. After the revision of 2026-11-24 the MIDI button
+replaces it, see section H.
+
 | ID   | Steps                                                               | Expected                                                                                                                | Result |
 | ---- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------ |
 | A-01 | Click MAP in the header (right of the MIDI icon).                   | Button turns purple. Every assignable control (track header knobs, M/S, fader in Devices) gets a purple frame.          | Ok     |
@@ -91,10 +94,26 @@ range per tick feels right.
 | G-05 | New project with one audio track named "Audio Track". Import the same file.                  | Bindings whose track/parameter names exist are imported (by name); the others are counted as skipped.                 | Ok                                                                                                                 |
 | G-06 | Import a file that is not a preset (e.g. any other JSON).                                    | Message that the file is not a valid MIDI mapping preset; nothing changes.                                            | Ok                                                                                                                 |
 
+### H. Revision 2026-11-24
+
+| ID   | Steps                                                                                                | Expected                                                                                                                  | Result |
+| ---- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------ |
+| H-01 | Fresh page without MIDI permission. Press the MIDI button in the header.                            | The browser asks for MIDI access. After allowing, the button is orange and shows a small triangle. The header does not shift. |        |
+| H-02 | Press the MIDI button again.                                                                         | The MIDI Mapping screen opens: Browser on the left, the mapping list above Devices. Every mappable parameter is framed.     |        |
+| H-03 | Press the MIDI button again, then open the screen and use the red close button in the list header.  | Both return to the screen that was open before. All frames disappear.                                                     |        |
+| H-04 | Open the screen, click the volume fader in Devices, turn K1.                                         | The mapping is created, the frame turns orange, the fader follows K1.                                                    |        |
+| H-05 | Set Min, Max, Takeover and Encoding of that row. Click the fader again, turn K2.                    | The row shows K2's CC. Min, Max, Takeover and Encoding are unchanged.                                                     |        |
+| H-06 | In the MIDI Device column choose your device, "Channel 1". Send the CC from another device or channel. | Only the chosen device on channel 1 moves the fader. "All devices", "All channels" accepts every device and channel again. |        |
+| H-07 | Rename the track and change the CC of a mapping (map it again).                                      | The row shows the new track name and CC without reopening the screen.                                                    |        |
+| H-08 | Set Encoding to a relative mode.                                                                     | Takeover is greyed out and cannot be opened. Back to Absolute enables it again.                                          |        |
+| H-09 | Import a preset with several mappings, then undo once.                                               | All imported mappings disappear with one undo.                                                                            |        |
+| H-10 | Map an endless encoder to a parameter with few steps (a waveform or mode selector), relative encoding. | The selector steps through its values in both directions.                                                               |        |
+
 ## Known limitations (not failures)
 
 - Key Map Mode and note/key sources are out of scope.
-- The port is shown but not used as a filter: the same CC from any input triggers the binding.
+- A mapping set to one device identifies it by the browser's id. After switching browsers the device can
+  show as "Unavailable device" and has to be chosen again.
 - Script device views and WCLAP plugin parameters are not highlighted in map mode; right-click learn
   works there.
 - Locate selects the track/device, it does not scroll to or flash the single control.
@@ -112,6 +131,7 @@ range per tick feels right.
 | E       | 0    | 0    | 3          | No endless encoder available; relative encoders covered by unit tests only |
 | F       |      |      |            |                                                                            |
 | G       |      |      |            |                                                                            |
+| H       |      |      |            |                                                                            |
 
 ## Findings
 

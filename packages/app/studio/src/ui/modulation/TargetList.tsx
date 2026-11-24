@@ -38,7 +38,7 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
             const {depth} = assignment.namedParameter
             const depthLabel: HTMLElement = (<ParameterLabel lifecycle={rows} parameter={depth} framed={true}/>)
             rows.own(attachAssignmentDepthContextMenu(editing, midiLearning, depth, depthLabel))
-            installControlSourceIndicator(rows, depth, entries, depthLabel, 2)
+            installControlSourceIndicator(rows, midiLearning, depth, entries, depthLabel, 2)
             entries.append(<div className="entry"
                  onInit={element => rows.own(assignment.box.enabled
                      .catchupAndSubscribe((owner: ObservableValue<boolean>) =>

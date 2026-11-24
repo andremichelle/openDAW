@@ -218,34 +218,6 @@ export const DefaultWorkspace = Object.freeze({
             constrains: {type: "flex", minSize: 20, flex: 1}
         }
     },
-    "midi-mapping": {
-        name: "MIDI Mapping",
-        icon: IconSymbol.Midi,
-        content: {
-            type: "layout",
-            orientation: "horizontal",
-            contents: [
-                BrowserPanel,
-                {
-                    type: "layout",
-                    orientation: "vertical",
-                    contents: [
-                        PanelState.create({
-                            type: "panel",
-                            name: "MIDI Mapping",
-                            icon: IconSymbol.Midi,
-                            panelType: PanelType.MIDIMapping,
-                            notMinimizable: true,
-                            constrains: {type: "flex", minSize: 0, flex: 1}
-                        }),
-                        DevicesPanel
-                    ],
-                    constrains: {type: "flex", minSize: 0, flex: 1}
-                }
-            ],
-            constrains: {type: "flex", minSize: 20, flex: 1}
-        }
-    },
     "piano": {
         name: "Piano Tutorial Mode",
         icon: IconSymbol.Piano,
@@ -305,6 +277,7 @@ export const DefaultWorkspace = Object.freeze({
     },
     "code": editorScreen("Code", "Code Editor", IconSymbol.Code, PanelType.CodeEditor),
     "layers": editorScreen("Layers", "All Layers", IconSymbol.CompositeOverview, PanelType.CompositeOverview),
+    "midi-mapping": editorScreen("MIDI Mapping", "Mapping", IconSymbol.Midi, PanelType.MIDIMapping),
     "tap": {
         name: "Match Tempo",
         icon: IconSymbol.Time,
