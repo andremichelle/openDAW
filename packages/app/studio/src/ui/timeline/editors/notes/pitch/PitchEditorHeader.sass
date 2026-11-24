@@ -10,28 +10,17 @@ component
   color: var(--color-dark)
   @include colors.panel-background
 
-  > div.tab-bar
-    border-bottom: 0.5px solid var(--color-dark)
+  > .tabs
+    align-self: start
+    display: grid
+    grid-auto-flow: column
+    grid-auto-columns: 1fr
+    justify-items: stretch
+    font-size: 0.75em
 
-    > .tabs
-      display: inline-grid
-      grid-auto-flow: column
-      grid-auto-columns: 1fr
-      align-items: end
-      justify-items: stretch
-      font-size: 0.75em
-
-      > label
-        height: 2em
-        margin-bottom: -0.5px
-        padding: 0 0.75em
-        border: 0.5px solid transparent
-        border-bottom: none
-        border-radius: 0.5em 0.5em 0 0
-
-      > input:checked + label
-        border-color: var(--color-active)
-        @include colors.panel-background
+    > label
+      height: 2em
+      padding: 0 0.75em
 
   > div.panels
     display: grid

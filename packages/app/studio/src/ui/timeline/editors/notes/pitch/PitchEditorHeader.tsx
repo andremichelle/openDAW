@@ -41,13 +41,11 @@ export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection,
         .forEach(([value, panel]) => panel.classList.toggle("active", value === owner.getValue()))))
     return (
         <div className={className}>
-            <div className="tab-bar">
-                <RadioGroup lifecycle={lifecycle}
-                            model={tab}
-                            className="tabs"
-                            elements={TabLabels.map(([value, label]) => ({value, element: <span>{label}</span>}))}
-                            appearance={{color: Colors.shadow, activeColor: Colors.dark}}/>
-            </div>
+            <RadioGroup lifecycle={lifecycle}
+                        model={tab}
+                        className="tabs"
+                        elements={TabLabels.map(([value, label]) => ({value, element: <span>{label}</span>}))}
+                        appearance={{color: Colors.shadow, activeColor: Colors.green}}/>
             <div className="panels">{panels.map(([, panel]) => panel)}</div>
         </div>
     )
