@@ -36,7 +36,8 @@ fn note_box(uuid: Uuid, position: i32, pitch: i32, member: bool) -> GraphBox {
         (21, FieldValue::Float32(0.8)),
         (24, FieldValue::Float32(0.0)),
         (30, FieldValue::Hook),
-        (31, FieldValue::Hook)
+        (31, FieldValue::Hook),
+        (32, FieldValue::Pointer(None))
     ])
 }
 
@@ -106,16 +107,21 @@ const CHANCE_B: Uuid = [5u8; 16];
 const GROUP: Uuid = [6u8; 16];
 const REPEAT_A: Uuid = [7u8; 16];
 
-fn chance_box(uuid: Uuid, note: Uuid, chance: i32, group: Option<Uuid>) -> GraphBox {
+fn chance_box(uuid: Uuid, note: Uuid, chance: i32) -> GraphBox {
     graph_box(uuid, "NoteEventChanceBox", &[
         (1, FieldValue::Pointer(Some(Address::of(note, vec![30])))),
-        (2, FieldValue::Int32(chance)),
-        (3, FieldValue::Pointer(group.map(Address::box_of)))
+        (2, FieldValue::Int32(chance))
     ])
 }
 
 fn group_box(chance: i32, mode: i32) -> GraphBox {
-    graph_box(GROUP, "NoteEventChanceGroupBox", &[(1, FieldValue::Int32(chance)), (2, FieldValue::Int32(mode))])
+    graph_box(GROUP, "NoteEventGroupBox", &[(1, FieldValue::Int32(chance)), (2, FieldValue::Int32(mode))])
+}
+
+fn grouped_note(uuid: Uuid, pitch: i32) -> GraphBox {
+    let mut note = note_box(uuid, 0, pitch, true);
+    note.fields.insert(32, FieldValue::Pointer(Some(Address::box_of(GROUP))));
+    note
 }
 
 fn repeat_box(note: Uuid, count: i32) -> GraphBox {
@@ -131,11 +137,11 @@ fn repeat_box(note: Uuid, count: i32) -> GraphBox {
 fn grouped_graph() -> BoxGraph {
     BoxGraph::from_boxes(vec![
         collection_box(),
-        note_box(NOTE_A, 0, 60, true),
-        note_box(NOTE_B, 0, 64, true),
+        grouped_note(NOTE_A, 60),
+        grouped_note(NOTE_B, 64),
         group_box(40, 1),
-        chance_box(CHANCE_A, NOTE_A, 70, Some(GROUP)),
-        chance_box(CHANCE_B, NOTE_B, 80, Some(GROUP)),
+        chance_box(CHANCE_A, NOTE_A, 70),
+        chance_box(CHANCE_B, NOTE_B, 80),
         repeat_box(NOTE_A, 3)
     ])
 }
@@ -196,7 +202,7 @@ fn leaving_the_group_updates_both_notes() {
     let collection = NoteCollection::observe(&mut graph, COLLECTION);
     let registry = Registry::new();
     graph.transaction(&[Update::Pointer {
-        address: Address::of(CHANCE_B, vec![3]),
+        address: Address::of(NOTE_B, vec![32]),
         old: Some(Address::box_of(GROUP)),
         new: None
     }], &registry).unwrap();
@@ -206,7 +212,7 @@ fn leaving_the_group_updates_both_notes() {
 }
 
 #[test]
-fn detaching_the_chance_box_restores_chance_100() {
+fn detaching_the_chance_box_restores_chance_100_but_keeps_the_group() {
     let mut graph = grouped_graph();
     let collection = NoteCollection::observe(&mut graph, COLLECTION);
     let registry = Registry::new();
@@ -217,5 +223,5 @@ fn detaching_the_chance_box_restores_chance_100() {
     }], &registry).unwrap();
     let first = note(&collection, 60);
     assert_eq!(first.chance, 100.0);
-    assert!(first.group.is_none());
+    assert!(first.group.is_some(), "membership lives on the note");
 }

@@ -1,15 +1,15 @@
-import {asInstanceOf, bipolar, int, Option, SortedSet, unitValue, UUID} from "@opendaw/lib-std"
-import {NoteEventBox, NoteEventChanceBox, NoteEventChanceGroupBox, NoteEventRepeatBox} from "@opendaw/studio-boxes"
+import {asInstanceOf, bipolar, int, Option, Procedure, SortedSet, unitValue, UUID} from "@opendaw/lib-std"
+import {NoteEventBox, NoteEventChanceBox, NoteEventGroupBox, NoteEventRepeatBox} from "@opendaw/studio-boxes"
 
 export namespace NoteEventFeatures {
     export const GroupMode = {PlayAll: 0, PlayOne: 1} as const
     export type GroupMode = typeof GroupMode[keyof typeof GroupMode]
 
-    export type GroupMapping = SortedSet<UUID.Bytes, { source: UUID.Bytes, target: NoteEventChanceGroupBox }>
+    export type GroupMapping = SortedSet<UUID.Bytes, { source: UUID.Bytes, target: NoteEventGroupBox }>
 
     export type Values = {
         readonly chance: int
-        readonly group: Option<NoteEventChanceGroupBox>
+        readonly group: Option<NoteEventGroupBox>
         readonly playCount: int
         readonly playCurve: bipolar
         readonly repeatLength: unitValue
@@ -29,9 +29,8 @@ export namespace NoteEventFeatures {
     export const repeatBox = (note: NoteEventBox): Option<NoteEventRepeatBox> =>
         Option.wrap(note.split.pointerHub.incoming().at(0)?.box).map(box => asInstanceOf(box, NoteEventRepeatBox))
 
-    export const groupBox = (note: NoteEventBox): Option<NoteEventChanceGroupBox> =>
-        chanceBox(note).flatMap(box => box.group.targetVertex)
-            .map(vertex => asInstanceOf(vertex.box, NoteEventChanceGroupBox))
+    export const groupBox = (note: NoteEventBox): Option<NoteEventGroupBox> =>
+        note.group.targetVertex.map(vertex => asInstanceOf(vertex.box, NoteEventGroupBox))
 
     export const readChance = (note: NoteEventBox): int => groupBox(note).match({
         none: () => chanceBox(note).mapOr(box => box.chance.getValue(), 100),
@@ -69,47 +68,64 @@ export namespace NoteEventFeatures {
     })
 
     export const writeChance = (note: NoteEventBox, value: int): void => groupBox(note).match({
-        none: () => ensureChanceBox(note).chance.setValue(value),
+        none: () => {
+            if (value === 100) {
+                clearRandom(note)
+            } else {
+                ensureChanceBox(note).chance.setValue(value)
+            }
+        },
         some: group => group.chance.setValue(value)
     })
+
+    const isDefaultRepeat = (box: NoteEventRepeatBox): boolean => box.count.getValue() === 1
+        && box.curve.getValue() === 0.0 && box.length.getValue() === 1.0 && box.velocityFade.getValue() === 0.0
+
+    const writeRepeat = (note: NoteEventBox, write: Procedure<NoteEventRepeatBox>, isDefault: boolean): void => {
+        if (isDefault && repeatBox(note).isEmpty()) {return}
+        const box = ensureRepeatBox(note)
+        write(box)
+        if (isDefaultRepeat(box)) {box.delete()}
+    }
+
     export const writePlayCount = (note: NoteEventBox, value: int): void =>
-        ensureRepeatBox(note).count.setValue(value)
+        writeRepeat(note, box => box.count.setValue(value), value === 1)
     export const writePlayCurve = (note: NoteEventBox, value: bipolar): void =>
-        ensureRepeatBox(note).curve.setValue(value)
+        writeRepeat(note, box => box.curve.setValue(value), value === 0.0)
     export const writeRepeatLength = (note: NoteEventBox, value: unitValue): void =>
-        ensureRepeatBox(note).length.setValue(value)
+        writeRepeat(note, box => box.length.setValue(value), value === 1.0)
     export const writeVelocityFade = (note: NoteEventBox, value: bipolar): void =>
-        ensureRepeatBox(note).velocityFade.setValue(value)
+        writeRepeat(note, box => box.velocityFade.setValue(value), value === 0.0)
 
     export const clearRandom = (note: NoteEventBox): void => chanceBox(note).ifSome(box => box.delete())
     export const clearSplit = (note: NoteEventBox): void => repeatBox(note).ifSome(box => box.delete())
 
-    const collectGroups = (notes: ReadonlyArray<NoteEventBox>): ReadonlyArray<NoteEventChanceGroupBox> => {
-        const groups = UUID.newSet<NoteEventChanceGroupBox>(group => group.address.uuid)
+    const collectGroups = (notes: ReadonlyArray<NoteEventBox>): ReadonlyArray<NoteEventGroupBox> => {
+        const groups = UUID.newSet<NoteEventGroupBox>(group => group.address.uuid)
         notes.forEach(note => groupBox(note).ifSome(group => groups.add(group)))
         return groups.values()
     }
 
-    const deleteIfEmpty = (group: NoteEventChanceGroupBox): void => {
+    const deleteIfEmpty = (group: NoteEventGroupBox): void => {
         if (group.isAttached() && group.pointerHub.isEmpty()) {group.delete()}
     }
 
-    export const group = (notes: ReadonlyArray<NoteEventBox>, mode: GroupMode): Option<NoteEventChanceGroupBox> => {
+    export const group = (notes: ReadonlyArray<NoteEventBox>, mode: GroupMode): Option<NoteEventGroupBox> => {
         if (notes.length === 0) {return Option.None}
         const chance = readChance(notes[0])
         const previous = collectGroups(notes)
-        const target = NoteEventChanceGroupBox.create(notes[0].graph, UUID.generate(), box => {
+        const target = NoteEventGroupBox.create(notes[0].graph, UUID.generate(), box => {
             box.chance.setValue(chance)
             box.mode.setValue(mode)
         })
-        notes.forEach(note => ensureChanceBox(note).group.refer(target))
+        notes.forEach(note => note.group.refer(target))
         previous.forEach(deleteIfEmpty)
         return Option.wrap(target)
     }
 
     export const leaveGroup = (notes: ReadonlyArray<NoteEventBox>): void => {
         const previous = collectGroups(notes)
-        notes.forEach(note => chanceBox(note).ifSome(box => box.group.defer()))
+        notes.forEach(note => note.group.defer())
         previous.forEach(deleteIfEmpty)
     }
 
@@ -117,20 +133,17 @@ export namespace NoteEventFeatures {
         collectGroups(notes).forEach(group => group.delete())
 
     export const copy = (source: NoteEventBox, target: NoteEventBox, {split, groups}: CopyOptions): void => {
-        chanceBox(source).ifSome(sourceBox => {
-            const group = groupBox(source).map(sourceGroup => groups.getOrCreate(sourceGroup.address.uuid, uuid => ({
-                source: uuid,
-                target: NoteEventChanceGroupBox.create(target.graph, UUID.generate(), box => {
-                    box.chance.setValue(sourceGroup.chance.getValue())
-                    box.mode.setValue(sourceGroup.mode.getValue())
-                })
-            })).target)
-            NoteEventChanceBox.create(target.graph, UUID.generate(), box => {
-                box.event.refer(target.random)
-                box.chance.setValue(sourceBox.chance.getValue())
-                group.ifSome(targetGroup => box.group.refer(targetGroup))
+        groupBox(source).ifSome(sourceGroup => target.group.refer(groups.getOrCreate(sourceGroup.address.uuid, uuid => ({
+            source: uuid,
+            target: NoteEventGroupBox.create(target.graph, UUID.generate(), box => {
+                box.chance.setValue(sourceGroup.chance.getValue())
+                box.mode.setValue(sourceGroup.mode.getValue())
             })
-        })
+        })).target))
+        chanceBox(source).ifSome(sourceBox => NoteEventChanceBox.create(target.graph, UUID.generate(), box => {
+            box.event.refer(target.random)
+            box.chance.setValue(sourceBox.chance.getValue())
+        }))
         if (!split) {return}
         repeatBox(source).ifSome(sourceBox => NoteEventRepeatBox.create(target.graph, UUID.generate(), box => {
             box.event.refer(target.split)

@@ -1,4 +1,5 @@
-import {int, linear, Option, Procedure} from "@opendaw/lib-std"
+import {int, linear, ObservableOption, Option, Procedure} from "@opendaw/lib-std"
+import {NoteEventGroupBox} from "@opendaw/studio-boxes"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {MidiKeys, NoteEvent, ppqn} from "@opendaw/lib-dsp"
@@ -17,11 +18,12 @@ type Construct = {
     range: TimelineRange,
     snapping: Snapping,
     modifyContext: ObservableModifyContext<NoteModifier>,
-    reader: NoteEventOwnerReader
+    reader: NoteEventOwnerReader,
+    hoverGroup: ObservableOption<NoteEventGroupBox>
 }
 
 export const createNotePitchPainter =
-    ({canvas, positioner, scale, range, snapping, modifyContext, reader}: Construct): Procedure<CanvasPainter> =>
+    ({canvas, positioner, scale, range, snapping, modifyContext, reader, hoverGroup}: Construct): Procedure<CanvasPainter> =>
         painter => {
             const {context} = painter
             const {canvas: {width, height}} = context
@@ -73,7 +75,9 @@ export const createNotePitchPainter =
                     const x1 = unitToX(complete)
                     const y0 = pitchToY(pitch)
                     const xn = Math.max(x1 - x0, 3) // ensure that the note color is coming through the outline
-                    context.fillStyle = selected ? "white" : "black"
+                    const group = noteEvent.group
+                    const hovered = group.nonEmpty() && hoverGroup.contains(group.unwrap("group"))
+                    context.fillStyle = selected ? "white" : hovered ? "rgba(255, 255, 255, 0.5)" : "black"
                     context.fillRect(x0, y0 - devicePixelRatio, xn + devicePixelRatio, noteOutlineHeight)
                     const w = xn - devicePixelRatio
                     if (w > 0) {
@@ -81,6 +85,15 @@ export const createNotePitchPainter =
                         const opacity = linear(33, 100, strategy.readVelocity(noteEvent) ** 2.0)
                         context.fillStyle = `hsla(${reader.hue}, ${saturation}%, 50%, ${opacity}%)`
                         context.fillRect(x0 + devicePixelRatio, y0, w, noteHeight)
+                    }
+                    if (group.nonEmpty()) {
+                        const size = Math.min(noteHeight, 5 * devicePixelRatio)
+                        context.fillStyle = selected ? "white" : "rgba(255, 255, 255, 0.75)"
+                        context.beginPath()
+                        context.moveTo(x0 + devicePixelRatio, y0)
+                        context.lineTo(x0 + devicePixelRatio + size, y0)
+                        context.lineTo(x0 + devicePixelRatio, y0 + size)
+                        context.fill()
                     }
                     const ftRange = noteHeight >>> 1
                     const ft = strategy.readCent(noteEvent) / 50.0 * (ftRange - devicePixelRatio * 2)

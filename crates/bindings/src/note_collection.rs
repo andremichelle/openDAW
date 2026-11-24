@@ -14,7 +14,7 @@ use boxgraph::graph::BoxGraph;
 use boxgraph::subscription::{Deferred, HubEvent, Propagation, SubscriptionId};
 use value::event::EventCollection;
 use value::note::NoteEvent;
-use crate::note_events::{aux_box, group_box, read_note_event, COLLECTION_EVENTS, NOTE_RANDOM, NOTE_SPLIT};
+use crate::note_events::{aux_box, group_box, read_note_event, COLLECTION_EVENTS, NOTE_GROUP, NOTE_RANDOM, NOTE_SPLIT};
 
 // Clonable: `state` is shared by `Rc`, so a clone reads the same live collection. A binding keeps one
 // clone for teardown (`terminate` unsubscribes by id) while the sequencer reads from another.
@@ -25,11 +25,13 @@ pub struct NoteCollection {
 }
 
 /// The TARGETED subscriptions of one member note: its own field edits, the attach / detach of its chance
-/// and repeat boxes (the hubs), and `aux`, the monitors on the attached chance, group and repeat boxes.
+/// and repeat boxes (the hubs), its group pointer, and `aux`, the monitors on the attached chance, group
+/// and repeat boxes.
 struct NoteSubs {
     field: SubscriptionId,
     random: SubscriptionId,
     split: SubscriptionId,
+    group: SubscriptionId,
     aux: Vec<SubscriptionId>
 }
 
@@ -113,6 +115,7 @@ impl NoteCollection {
             graph.unsubscribe(subs.field);
             graph.unsubscribe(subs.random);
             graph.unsubscribe(subs.split);
+            graph.unsubscribe(subs.group);
             for id in subs.aux {
                 graph.unsubscribe(id);
             }
@@ -135,8 +138,12 @@ fn join_note(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, 
     };
     let random = hub(NOTE_RANDOM);
     let split = hub(NOTE_SPLIT);
+    let group_state = state.clone();
+    let group_deferred = deferred.clone();
+    let group = deferred.subscribe_vertex(Propagation::This, Address::of(note, vec![NOTE_GROUP]),
+        Box::new(move |graph, _update| rewire(&group_state, &group_deferred, graph, note)));
     let aux = watch_aux(state, deferred, graph, note);
-    state.borrow_mut().subs.insert(note, NoteSubs {field, random, split, aux});
+    state.borrow_mut().subs.insert(note, NoteSubs {field, random, split, group, aux});
 }
 
 /// A member note left: drop it and every subscription it holds.
@@ -147,6 +154,7 @@ fn leave_note(state: &Rc<RefCell<State>>, deferred: &Deferred, note: Uuid) {
         deferred.unsubscribe(subs.field);
         deferred.unsubscribe(subs.random);
         deferred.unsubscribe(subs.split);
+        deferred.unsubscribe(subs.group);
         for id in subs.aux {
             deferred.unsubscribe(id);
         }
@@ -170,15 +178,14 @@ fn rewire(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, not
     borrowed.upsert(graph, note);
 }
 
-/// Monitors on the attached boxes: the chance box (its group may change, so it rewires), the group (chance,
-/// mode and its members, which set rank and size) and the repeat box.
+/// Monitors on the attached boxes: the chance box, the group (chance, mode and its members, which set rank
+/// and size) and the repeat box.
 fn watch_aux(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, note: Uuid) -> Vec<SubscriptionId> {
     let mut ids = Vec::new();
     if let Some(chance) = aux_box(graph, note, NOTE_RANDOM) {
         let chance_state = state.clone();
-        let chance_deferred = deferred.clone();
         ids.push(deferred.subscribe_vertex(Propagation::Parent, Address::box_of(chance),
-            Box::new(move |graph, _update| rewire(&chance_state, &chance_deferred, graph, note))));
+            Box::new(move |graph, _update| chance_state.borrow_mut().upsert(graph, note))));
     }
     if let Some(group) = group_box(graph, note) {
         let group_state = state.clone();

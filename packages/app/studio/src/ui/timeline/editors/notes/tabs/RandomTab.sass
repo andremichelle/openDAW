@@ -1,3 +1,17 @@
 component
   display: flex
   flex-direction: column
+  row-gap: 0.5em
+
+  > div.row
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+    font-size: 0.75em
+
+    > span.label
+      color: var(--color-shadow)
+
+  > div.status
+    font-size: 0.75em
+    color: var(--color-shadow)

@@ -31,7 +31,7 @@ import {AudioClipBox} from "./timeline/AudioClipBox"
 import {NoteEventBox} from "./timeline/NoteEventBox"
 import {NoteEventRepeatBox} from "./timeline/NoteEventRepeatBox"
 import {NoteEventChanceBox} from "./timeline/NoteEventChanceBox"
-import {NoteEventChanceGroupBox} from "./timeline/NoteEventChanceGroupBox"
+import {NoteEventGroupBox} from "./timeline/NoteEventGroupBox"
 import {NoteEventCollectionBox} from "./timeline/NoteEventCollectionBox"
 import {NoteRegionBox} from "./timeline/NoteRegionBox"
 import {ValueEventBox} from "./timeline/ValueEventBox"
@@ -55,7 +55,7 @@ export const Definitions = [
     MetaDataBox, ProjectMetaBox,
     RootBox, SelectionBox, ViewStateBox, UserInterfaceBox, UploadFileBox, ShadertoyBox, MIDIControllerBox,
     TimelineBox, TrackBox,
-    NoteEventBox, NoteEventRepeatBox, NoteEventChanceBox, NoteEventChanceGroupBox, NoteEventCollectionBox, NoteRegionBox, NoteClipBox,
+    NoteEventBox, NoteEventRepeatBox, NoteEventChanceBox, NoteEventGroupBox, NoteEventCollectionBox, NoteRegionBox, NoteClipBox,
     ValueEventBox, ValueEventCollectionBox, ValueEventCurveBox, ValueRegionBox, ValueClipBox, SignatureEventBox,
     AudioRegionBox, AudioClipBox, AudioPitchStretchBox, AudioTimeStretchBox, AudioSignalsmithBox, TransientMarkerBox, WarpMarkerBox,
     MarkerBox, KeyEventBox, ChordEventBox,

@@ -8,6 +8,8 @@ import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteModifyStrategies, NoteModifyStrategy} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {CanvasPainter, TimelineRange} from "@opendaw/studio-core"
+import {NoteEventFeatures} from "@opendaw/studio-adapters"
+import {NoteGrouping} from "@/ui/timeline/editors/notes/NoteGrouping.ts"
 
 type Construct = {
     canvas: HTMLCanvasElement,
@@ -55,14 +57,36 @@ export const createPropertyPainter =
                     context.lineTo(x1, y1)
                     context.stroke()
                 })
+            const leads = NoteGrouping.leadsIn(propertyAccessor, events)
+            const size = PropertyNodeSize * devicePixelRatio
             const render = (strategy: NoteModifyStrategy, filterSelected: boolean) => {
                 for (const event of events.iterateRange(unitMin, unitMax)) {
                     if (event.isSelected === filterSelected) {continue}
+                    if (!NoteGrouping.showsMarker(leads, event)) {continue}
                     const position = strategy.readPosition(event)
                     const value = propertyAccessor.readValue(strategy, event)
                     const x = Math.floor(range.unitToX(position + offset) * devicePixelRatio)
                     const y = Math.floor(valueAxis.valueToAxis(valueMapping.x(value)) * devicePixelRatio)
-                    context.fillRect(x, y - devicePixelRatio * 2, PropertyNodeSize * devicePixelRatio, PropertyNodeSize * devicePixelRatio)
+                    const group = leads.nonEmpty() ? event.group : Option.None
+                    if (group.isEmpty()) {
+                        context.fillRect(x, y - devicePixelRatio * 2, size, size)
+                    } else {
+                        const playOne = group.unwrap("group").mode.getValue() === NoteEventFeatures.GroupMode.PlayOne
+                        const radius = size * 0.75
+                        const cx = x + devicePixelRatio * 0.5
+                        context.beginPath()
+                        if (playOne) {
+                            context.moveTo(cx, y - radius)
+                            context.lineTo(cx + radius, y + radius)
+                            context.lineTo(cx - radius, y + radius)
+                        } else {
+                            context.moveTo(cx, y - radius)
+                            context.lineTo(cx + radius, y)
+                            context.lineTo(cx, y + radius)
+                            context.lineTo(cx - radius, y)
+                        }
+                        context.fill()
+                    }
                     context.fillRect(x, Math.min(y, anchorY), devicePixelRatio, Math.abs(y - anchorY))
                 }
             }

@@ -33,6 +33,8 @@ import {NotePropertyVelocity, PropertyAccessor} from "@/ui/timeline/editors/note
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
+import {NoteGrouping} from "@/ui/timeline/editors/notes/NoteGrouping.ts"
+import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {NoteDrawDefaults} from "@/ui/timeline/editors/notes/NoteDrawDefaults.ts"
 
 const className = Html.adoptStyleSheet(css, "NoteEditor")
@@ -137,7 +139,8 @@ export const NoteEditor =
                                    modifyContext={modifyContext}
                                    scale={scale}
                                    followKey={followKey}
-                                   tab={tab}/>
+                                   tab={tab}
+                                   seed={EditWrapper.forValue(editing, project.timelineBox.seed)}/>
                 <PianoRoll lifecycle={lifecycle}
                            positioner={pitchPositioner}
                            scale={scale}
@@ -237,6 +240,10 @@ export const NoteEditor =
             shortcuts,
             shortcuts.register(NoteEditorShortcuts["toggle-step-recording"].shortcut,
                 () => stepRecording.setValue(!stepRecording.getValue())),
+            shortcuts.register(NoteEditorShortcuts["group-notes"].shortcut,
+                () => NoteGrouping.group(editing, selection, NoteGrouping.lastMode.getValue())),
+            shortcuts.register(NoteEditorShortcuts["ungroup-notes"].shortcut,
+                () => NoteGrouping.ungroup(editing, selection)),
             shortcuts.register(NoteEditorShortcuts["duplicate-notes"].shortcut, () => {
                 const selected = selection.selected()
                 if (selected.length === 0) {return false}

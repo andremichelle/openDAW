@@ -21,14 +21,14 @@ Chance gets groups: all members of a group play together or not at all (chords).
    2. Fields 22, 23 and 25 become `deprecated` in the step that also migrates and switches the engine (phase 3). Deprecated fields are left out of the Rust registry, so deprecating them earlier would silence ratchets and chance. Their keys are never reused.
    3. `30 random`: field hub, accepts `NoteEventChance`, exclusive.
    4. `31 split`: field hub, accepts `NoteEventRepeat`, exclusive.
+   5. `32 group`: pointer `NoteEventGroup`, optional. Membership lives on the note, so a later group feature (play conditions, round robin, strum, humanize together) does not need a chance box.
 2. `NoteEventChanceBox` (new)
    1. `1 event`: pointer `NoteEventChance` to the note's `random` hub, mandatory.
    2. `2 chance`: int32, 0 to 100 (the range of the old field, so nothing is clamped), default 100.
-   3. `3 group`: pointer `NoteEventChanceGroup`, optional.
-3. `NoteEventChanceGroupBox` (new)
+3. `NoteEventGroupBox` (new, renamed from `NoteEventChanceGroupBox` before any release, later group features become its fields)
    1. `1 chance`: int32, 0 to 100. While a note is in a group, the group's chance decides and the note's own chance is kept but not used.
    2. `2 mode`: int32, 0 = Play All (all members play or none), 1 = Play One (if the group plays, exactly one member plays).
-   3. Accepts `NoteEventChanceGroup` pointers, mandatory incoming. The box graph deletes the group with its last member, and a group without members fails the transaction (tested).
+   3. Accepts `NoteEventGroup` pointers, mandatory incoming. The box graph deletes the group with its last member, and a group without members fails the transaction (tested).
    4. No owner pointer. Copying notes copies their group as a dependency, so a pasted or duplicated chord becomes a new group of its own.
 4. `NoteEventRepeatBox` (existing, filled in, shown as "Split")
    1. `1 event` now points to the note's `split` hub (`NoteEventRepeat`). `2 count`, `3 curve`, `4 length` stay as they are.
@@ -111,7 +111,7 @@ Chance gets groups: all members of a group play together or not at all (chords).
    3. Aux boxes are created after their note, never inside its create callback (the box graph forbids nested construction).
    4. The note key hashes the note uuid with FNV-1a. The hash and two of its values are pinned in `engine-env/tests/note_sequencer.rs`.
    5. A composite layer with its own Zeitgeist now decides chance like its siblings (`plans/instrument-composite.md`, manual page updated).
-4. Random tab: Play All, Play One, Ungroup, group chance, seed. The same actions in the note context menu (Group Play All, Group Play One, Ungroup, Leave Group) and in the Edit menu, Cmd+G groups with the last used mode, Cmd+Shift+G ungroups (both in `GlobalShortcuts`). Group visualisation as in UI 7.
+4. ~~Random tab: Play All, Play One, Ungroup, group chance, seed. The same actions in the note context menu (Group Play All, Group Play One, Ungroup, Leave Group) and in the Edit menu, Cmd+G groups with the last used mode, Cmd+Shift+G ungroups (both in `GlobalShortcuts`). Group visualisation as in UI 7.~~ The shortcuts live in `NoteEditorShortcuts` (listed and rebindable), they win over the global track grouping while the note editor has focus.
 5. Split tab: length, velocity fade.
 6. Scripting API additions and declaration file.
 7. Later, separate plans: seed tracks (resolved inside `HostRandom`), devices on `HostRandom`.

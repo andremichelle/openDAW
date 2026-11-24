@@ -28,12 +28,14 @@ type Construct = {
     scale: ScaleConfig
     followKey: MutableObservableValue<boolean>
     tab: MutableObservableValue<NoteEditorTab>
+    seed: MutableObservableValue<number>
 }
 
-export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection, scale, followKey, tab}: Construct) => {
+export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection, scale, followKey, tab, seed}: Construct) => {
     const panels: ReadonlyArray<[NoteEditorTab, HTMLElement]> = [
         ["basic", <BasicTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}/>],
-        ["random", <RandomTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}/>],
+        ["random", <RandomTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}
+                              seed={seed}/>],
         ["scale", <ScaleTab lifecycle={lifecycle} selection={selection} scale={scale} followKey={followKey}/>],
         ["split", <SplitTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}/>]
     ]

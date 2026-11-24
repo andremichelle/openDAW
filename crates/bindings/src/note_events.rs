@@ -1,7 +1,7 @@
 //! Read a `NoteEventBox` into a `NoteEvent` (the per-box read `NoteCollection` drives incrementally),
 //! mirroring `value_events`. A note box carries position (key 10), duration (11), pitch (20),
-//! velocity (21) and cent (24), its chance box (hub 30, with an optional group) and its repeat box
-//! (hub 31). `position` and `pitch` are mandatory schema fields, so a member missing them is a corrupt mirror and panics (naming box type, field and uuid for the panic buffer);
+//! velocity (21) and cent (24), its chance box (hub 30), its repeat box (hub 31) and its
+//! group (pointer 32). `position` and `pitch` are mandatory schema fields, so a member missing them is a corrupt mirror and panics (naming box type, field and uuid for the panic buffer);
 //! duration / velocity / cent fall back to schema defaults. Rejecting the transaction instead is not
 //! reachable: this read fires from subscription dispatch (and the `observe` catch-up during rebind),
 //! which runs AFTER `BoxGraph::transaction` has applied every update — the graph is committed and
@@ -24,10 +24,9 @@ const NOTE_VELOCITY: u16 = 21; // Float32 (0..=1)
 const NOTE_CENT: u16 = 24; // Float32 cents
 pub const NOTE_RANDOM: u16 = 30; // hub, accepts one NoteEventChanceBox
 pub const NOTE_SPLIT: u16 = 31; // hub, accepts one NoteEventRepeatBox
-const CHANCE_EVENT: u16 = 1; // NoteEventChanceBox.event (pointer to NOTE_RANDOM)
-const CHANCE_CHANCE: u16 = 2; // Int32 (0..=100)
-pub const CHANCE_GROUP: u16 = 3; // pointer to a NoteEventChanceGroupBox
-const GROUP_CHANCE: u16 = 1; // NoteEventChanceGroupBox.chance, Int32 (0..=100)
+pub const NOTE_GROUP: u16 = 32; // pointer to a NoteEventGroupBox
+const CHANCE_CHANCE: u16 = 2; // NoteEventChanceBox.chance, Int32 (0..=100)
+const GROUP_CHANCE: u16 = 1; // NoteEventGroupBox.chance, Int32 (0..=100)
 const GROUP_MODE: u16 = 2; // Int32, 0 = play all, 1 = play one
 const REPEAT_COUNT: u16 = 2; // NoteEventRepeatBox.count, Int32 (>= 1)
 const REPEAT_CURVE: u16 = 3; // Float32, the time-warp (0 = linear)
@@ -55,17 +54,16 @@ pub fn aux_box(graph: &BoxGraph, note_uuid: Uuid, key: u16) -> Option<Uuid> {
         .filter(|uuid| graph.find_box(uuid).is_some())
 }
 
-/// The group box the note's chance box points to, when it exists.
+/// The group box the note points to, when it exists.
 pub fn group_box(graph: &BoxGraph, note_uuid: Uuid) -> Option<Uuid> {
-    aux_box(graph, note_uuid, NOTE_RANDOM)
-        .and_then(|chance| graph.target_of(&Address::of(chance, vec![CHANCE_GROUP])).map(|target| target.uuid))
+    graph.target_of(&Address::of(note_uuid, vec![NOTE_GROUP])).map(|target| target.uuid)
         .filter(|uuid| graph.find_box(uuid).is_some())
 }
 
 /// The member notes of a group, ordered by uuid (the order Play One picks from).
 pub fn group_members(graph: &BoxGraph, group_uuid: Uuid) -> Vec<Uuid> {
     let mut members: Vec<Uuid> = graph.incoming(&Address::box_of(group_uuid)).iter()
-        .filter_map(|source| graph.target_of(&Address::of(source.uuid, vec![CHANCE_EVENT])).map(|note| note.uuid))
+        .map(|source| source.uuid)
         .collect();
     members.sort();
     members.dedup();

@@ -79,6 +79,6 @@ export enum Pointers {
     SamplerModulation,
     EuclidLane,
     NoteEventChance,
-    NoteEventChanceGroup,
+    NoteEventGroup,
     NoteEventRepeat,
 }

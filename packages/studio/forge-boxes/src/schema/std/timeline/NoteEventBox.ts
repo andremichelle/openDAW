@@ -33,7 +33,8 @@ export const NoteEventBox: BoxSchema<Pointers> = {
             31: {
                 type: "field", name: "split",
                 pointerRules: {accepts: [Pointers.NoteEventRepeat], mandatory: false, exclusive: true}
-            }
+            },
+            32: {type: "pointer", name: "group", pointerType: Pointers.NoteEventGroup, mandatory: false}
         }
     }, pointerRules: {accepts: [Pointers.Selection, Pointers.NoteEventFeature], mandatory: false}
 }

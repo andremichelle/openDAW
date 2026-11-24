@@ -7,8 +7,7 @@ export const NoteEventChanceBox: BoxSchema<Pointers> = {
         name: "NoteEventChanceBox",
         fields: {
             1: {type: "pointer", name: "event", pointerType: Pointers.NoteEventChance, mandatory: true},
-            2: {type: "int32", name: "chance", value: 100, constraints: {min: 0, max: 100}, unit: "%"},
-            3: {type: "pointer", name: "group", pointerType: Pointers.NoteEventChanceGroup, mandatory: false}
+            2: {type: "int32", name: "chance", value: 100, constraints: {min: 0, max: 100}, unit: "%"}
         }
     }
 }

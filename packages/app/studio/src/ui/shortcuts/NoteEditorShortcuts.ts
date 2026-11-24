@@ -35,6 +35,14 @@ export const NoteEditorShortcutsFactory = ShortcutValidator.validate({
     "duplicate-notes": {
         shortcut: Shortcut.of(Key.KeyD, {ctrl}),
         description: "Duplicate notes"
+    },
+    "group-notes": {
+        shortcut: Shortcut.of(Key.KeyG, {ctrl}),
+        description: "Group the selected notes for chance (the last used Play All or Play One)"
+    },
+    "ungroup-notes": {
+        shortcut: Shortcut.of(Key.KeyG, {ctrl, shift}),
+        description: "Ungroup the chance groups of the selected notes"
     }
 })
 

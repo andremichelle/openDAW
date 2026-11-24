@@ -184,7 +184,7 @@ describe("copying a note keeps all of its settings", () => {
         const group = project.editing.modify(() =>
             NoteEventFeatures.group([note.box], NoteEventFeatures.GroupMode.PlayAll).unwrap("group")).unwrap("modify")
         const hits = project.editing.modify(() => note.consolidate()).unwrap("modify")
-        hits.forEach(hit => expect(hit.chanceGroup.unwrap("group")).toBe(group))
+        hits.forEach(hit => expect(hit.group.unwrap("group")).toBe(group))
         expect(group.pointerHub.incoming().length).toBe(Source.playCount)
         project.terminate()
     })

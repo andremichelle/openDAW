@@ -184,6 +184,7 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
             }
         }),
         modifyContext.subscribeUpdate(updateState.request),
+        editing.subscribe(updateState.request),
         Terminable.create(() => {
             noteSubscriptions.forEach(subscription => subscription.terminate())
             noteSubscriptions.clear()

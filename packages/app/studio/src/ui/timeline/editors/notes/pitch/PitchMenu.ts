@@ -1,6 +1,7 @@
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Editing, Func, MutableObservableValue, Procedure, Selection} from "@opendaw/lib-std"
-import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
+import {NoteEventBoxAdapter, NoteEventFeatures} from "@opendaw/studio-adapters"
+import {NoteGrouping} from "@/ui/timeline/editors/notes/NoteGrouping.ts"
 import {EventCollection, Harmony, ppqn} from "@opendaw/lib-dsp"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {MenuCollector, MenuItem, ProjectApi} from "@opendaw/studio-core"
@@ -51,6 +52,27 @@ export const createPitchMenu = ({editing, snapping, selection, events, stepRecor
             selection.deselectAll()
             adapters.forEach(adapter => selection.select(...adapter.consolidate()))
         })),
+        MenuItem.default({label: "Chance Group"})
+            .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                MenuItem.default({
+                    label: "Group (Play All)",
+                    selectable: NoteGrouping.canGroup(selection),
+                    shortcut: NoteGrouping.lastMode.getValue() === NoteEventFeatures.GroupMode.PlayAll
+                        ? NoteEditorShortcuts["group-notes"].shortcut.format() : undefined
+                }).setTriggerProcedure(() => NoteGrouping.group(editing, selection, NoteEventFeatures.GroupMode.PlayAll)),
+                MenuItem.default({
+                    label: "Group (Play One)",
+                    selectable: NoteGrouping.canGroup(selection),
+                    shortcut: NoteGrouping.lastMode.getValue() === NoteEventFeatures.GroupMode.PlayOne
+                        ? NoteEditorShortcuts["group-notes"].shortcut.format() : undefined
+                }).setTriggerProcedure(() => NoteGrouping.group(editing, selection, NoteEventFeatures.GroupMode.PlayOne)),
+                MenuItem.default({
+                    label: "Ungroup",
+                    selectable: NoteGrouping.canUngroup(selection),
+                    shortcut: NoteEditorShortcuts["ungroup-notes"].shortcut.format()
+                }).setTriggerProcedure(() => NoteGrouping.ungroup(editing, selection)),
+                MenuItem.default({label: "Leave Group", selectable: NoteGrouping.canUngroup(selection)})
+                    .setTriggerProcedure(() => NoteGrouping.leaveGroup(editing, selection)))),
         MenuItem.default({label: "Quantize Notes", separatorBefore: true})
             .setTriggerProcedure(() => modify(adapters => adapters.forEach(({box, position}) =>
                 box.position.setValue(snapping.round(position))))),

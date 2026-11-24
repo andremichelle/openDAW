@@ -12,7 +12,7 @@ import {
     unitValue,
     UUID
 } from "@opendaw/lib-std"
-import {NoteEventBox, NoteEventChanceGroupBox} from "@opendaw/studio-boxes"
+import {NoteEventBox, NoteEventGroupBox} from "@opendaw/studio-boxes"
 import {Address, Field, Propagation, Update} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {BoxAdapter} from "../../BoxAdapter"
@@ -54,6 +54,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
             this.#box.random.pointerHub.subscribe(watcher),
             this.#box.split.pointerHub.subscribe(watcher))
         this.#watchFeatures(false)
+        this.#terminator.own(this.#box.group.subscribe(() => this.#watchFeatures(true)))
         this.#terminator.own(this.#box.subscribe(Propagation.Children, (update: Update) => {
             if (this.collection.isEmpty()) {return}
             if (update.type === "primitive" || update.type === "pointer") {
@@ -88,7 +89,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
             this.collection.ifSome(collection => collection.onEventPropertyChanged())
         }
         NoteEventFeatures.chanceBox(this.#box).ifSome(chance => this.#featureWatch.own(
-            chance.subscribe(Propagation.Children, () => this.#watchFeatures(true))))
+            chance.subscribe(Propagation.Children, changed)))
         NoteEventFeatures.groupBox(this.#box).ifSome(group => this.#featureWatch.own(
             group.subscribe(Propagation.Children, changed)))
         NoteEventFeatures.repeatBox(this.#box).ifSome(repeat => this.#featureWatch.own(
@@ -106,7 +107,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     get pitch(): int {return this.#box.pitch.getValue()} // 0...127
     get cent(): number {return this.#box.cent.getValue()} // -50.0...+50.0
     get chance(): int {return this.#features.get().chance}
-    get chanceGroup(): Option<NoteEventChanceGroupBox> {return this.#features.get().group}
+    get group(): Option<NoteEventGroupBox> {return this.#features.get().group}
     get playCount(): int {return this.#features.get().playCount}
     get playCurve(): bipolar {return this.#features.get().playCurve}
     get repeatLength(): unitValue {return this.#features.get().repeatLength}
@@ -156,7 +157,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     consolidate(): ReadonlyArray<NoteEventBoxAdapter> {
         const {playCount, repeatLength, velocityFade} = this
         const groups = NoteEventFeatures.createGroupMapping()
-        this.chanceGroup.ifSome(group => groups.add({source: group.address.uuid, target: group}))
+        this.group.ifSome(group => groups.add({source: group.address.uuid, target: group}))
         const events = this.collection.unwrap("collection").box.events
         const adapters = Arrays.create((index) => {
             const a = Math.floor(this.computeCurveValue(index / playCount) * this.duration)

@@ -1,12 +1,13 @@
 import {describe, expect, it} from "vitest"
 import {asInstanceOf, Option, UUID} from "@opendaw/lib-std"
 import {BoxGraph} from "@opendaw/lib-box"
+import {migrateDefaultNoteFeature} from "./migration/MigrateDefaultNoteFeature"
 import {NoteEventFeatures, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {
     BoxIO,
     NoteEventBox,
     NoteEventChanceBox,
-    NoteEventChanceGroupBox,
+    NoteEventGroupBox,
     NoteEventCollectionBox,
     NoteEventRepeatBox,
     NoteRegionBox,
@@ -78,15 +79,15 @@ describe("NoteEvent feature boxes", () => {
         boxGraph.beginTransaction()
         const root = createNote(boxGraph, collection, 60)
         const third = createNote(boxGraph, collection, 64)
-        const group = NoteEventChanceGroupBox.create(boxGraph, UUID.generate(), box => {
+        const group = NoteEventGroupBox.create(boxGraph, UUID.generate(), box => {
             box.chance.setValue(60)
             box.mode.setValue(1)
         })
         const chances = [root, third].map(note => NoteEventChanceBox.create(boxGraph, UUID.generate(), box => {
             box.event.refer(note.random)
             box.chance.setValue(30)
-            box.group.refer(group)
         }))
+        ;[root, third].forEach(note => note.group.refer(group))
         const repeat = NoteEventRepeatBox.create(boxGraph, UUID.generate(), box => {
             box.event.refer(root.split)
             box.count.setValue(3)
@@ -96,7 +97,7 @@ describe("NoteEvent feature boxes", () => {
         })
         boxGraph.endTransaction()
         const loaded = reload(boxGraph)
-        const loadedGroup = asInstanceOf(loaded.findBox(group.address.uuid).unwrap("group"), NoteEventChanceGroupBox)
+        const loadedGroup = asInstanceOf(loaded.findBox(group.address.uuid).unwrap("group"), NoteEventGroupBox)
         expect(loadedGroup.chance.getValue()).toBe(60)
         expect(loadedGroup.mode.getValue()).toBe(1)
         expect(loadedGroup.pointerHub.incoming().length).toBe(2)
@@ -105,7 +106,8 @@ describe("NoteEvent feature boxes", () => {
             expect(loadedChance.chance.getValue()).toBe(30)
             expect(UUID.equals(loadedChance.event.targetAddress.unwrap("event").uuid,
                 [root, third][index].address.uuid)).toBe(true)
-            expect(UUID.equals(loadedChance.group.targetAddress.unwrap("group").uuid, group.address.uuid)).toBe(true)
+            const loadedNote = asInstanceOf(loaded.findBox([root, third][index].address.uuid).unwrap("note"), NoteEventBox)
+            expect(UUID.equals(loadedNote.group.targetAddress.unwrap("group").uuid, group.address.uuid)).toBe(true)
         })
         const loadedRepeat = asInstanceOf(loaded.findBox(repeat.address.uuid).unwrap("repeat"), NoteEventRepeatBox)
         expect(loadedRepeat.count.getValue()).toBe(3)
@@ -153,11 +155,8 @@ describe("NoteEvent feature boxes", () => {
         boxGraph.beginTransaction()
         const root = createNote(boxGraph, collection, 60)
         const third = createNote(boxGraph, collection, 64)
-        const group = NoteEventChanceGroupBox.create(boxGraph, UUID.generate())
-        ;[root, third].forEach(note => NoteEventChanceBox.create(boxGraph, UUID.generate(), box => {
-            box.event.refer(note.random)
-            box.group.refer(group)
-        }))
+        const group = NoteEventGroupBox.create(boxGraph, UUID.generate())
+        ;[root, third].forEach(note => note.group.refer(group))
         boxGraph.endTransaction()
         boxGraph.beginTransaction()
         root.delete()
@@ -177,6 +176,8 @@ describe("NoteEvent feature boxes", () => {
         boxGraph.endTransaction()
         expect(first.chance.getValue()).toBe(40)
         expect(NoteEventFeatures.readChance(third)).toBe(40)
+        expect(NoteEventFeatures.chanceBox(third).isEmpty(), "membership needs no chance box").toBe(true)
+        expect(NoteEventFeatures.groupBox(third).unwrap("group")).toBe(first)
         boxGraph.beginTransaction()
         const second = NoteEventFeatures.group([root, third, fifth], NoteEventFeatures.GroupMode.PlayOne).unwrap("group")
         boxGraph.endTransaction()
@@ -258,17 +259,74 @@ describe("NoteEvent feature boxes", () => {
         boxGraph.beginTransaction()
         const notes = [60, 64].map(pitch => createNote(boxGraph, collection, pitch))
         const group = NoteEventFeatures.group(notes, NoteEventFeatures.GroupMode.PlayAll).unwrap("group")
+        NoteEventFeatures.writePlayCount(notes[0], 2)
         boxGraph.endTransaction()
         const dependencies = Array.from(boxGraph.dependenciesOf(notes[0], {alwaysFollowMandatory: true}).boxes)
-        expect(dependencies).toContain(NoteEventFeatures.chanceBox(notes[0]).unwrap("chance"))
+        expect(dependencies).toContain(NoteEventFeatures.repeatBox(notes[0]).unwrap("repeat"))
         expect(dependencies).toContain(group)
         expect(dependencies).not.toContain(notes[1])
+    })
+    it("keeps a feature box only while it holds a non-default value", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const note = createNote(boxGraph, collection, 60)
+        NoteEventFeatures.writeChance(note, 100)
+        NoteEventFeatures.writePlayCount(note, 1)
+        NoteEventFeatures.writeVelocityFade(note, 0.0)
+        boxGraph.endTransaction()
+        expect(NoteEventFeatures.chanceBox(note).isEmpty(), "a default creates no box").toBe(true)
+        expect(NoteEventFeatures.repeatBox(note).isEmpty()).toBe(true)
+        boxGraph.beginTransaction()
+        NoteEventFeatures.writeChance(note, 40)
+        NoteEventFeatures.writePlayCount(note, 3)
+        NoteEventFeatures.writeVelocityFade(note, 0.5)
+        boxGraph.endTransaction()
+        expect(NoteEventFeatures.chanceBox(note).nonEmpty()).toBe(true)
+        expect(NoteEventFeatures.repeatBox(note).nonEmpty()).toBe(true)
+        boxGraph.beginTransaction()
+        NoteEventFeatures.writeChance(note, 100)
+        NoteEventFeatures.writePlayCount(note, 1)
+        boxGraph.endTransaction()
+        expect(NoteEventFeatures.chanceBox(note).isEmpty(), "back to 100 deletes the chance box").toBe(true)
+        expect(NoteEventFeatures.repeatBox(note).nonEmpty(), "the fade still holds a value").toBe(true)
+        boxGraph.beginTransaction()
+        NoteEventFeatures.writeVelocityFade(note, 0.0)
+        boxGraph.endTransaction()
+        expect(NoteEventFeatures.repeatBox(note).isEmpty(), "all defaults delete the repeat box").toBe(true)
+    })
+    it("writes 100 into the group of a grouped note and keeps the group", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const notes = [60, 64].map(pitch => createNote(boxGraph, collection, pitch))
+        NoteEventFeatures.writeChance(notes[0], 30)
+        const group = NoteEventFeatures.group(notes, NoteEventFeatures.GroupMode.PlayAll).unwrap("group")
+        NoteEventFeatures.writeChance(notes[1], 100)
+        boxGraph.endTransaction()
+        expect(group.chance.getValue()).toBe(100)
+        expect(group.isAttached()).toBe(true)
+    })
+    it("deletes feature boxes holding only defaults on load", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const note = createNote(boxGraph, collection, 60)
+        const chance = NoteEventChanceBox.create(boxGraph, UUID.generate(), box => box.event.refer(note.random))
+        const repeat = NoteEventRepeatBox.create(boxGraph, UUID.generate(), box => box.event.refer(note.split))
+        const other = createNote(boxGraph, collection, 64)
+        const kept = NoteEventRepeatBox.create(boxGraph, UUID.generate(), box => {
+            box.event.refer(other.split)
+            box.count.setValue(2)
+        })
+        boxGraph.endTransaction()
+        ;[chance, repeat, kept].forEach(box => migrateDefaultNoteFeature(boxGraph, box))
+        expect(chance.isAttached()).toBe(false)
+        expect(repeat.isAttached()).toBe(false)
+        expect(kept.isAttached()).toBe(true)
     })
     it("does not allow a group without members", () => {
         const {boxGraph} = buildSkeleton()
         expect(() => {
             boxGraph.beginTransaction()
-            NoteEventChanceGroupBox.create(boxGraph, UUID.generate())
+            NoteEventGroupBox.create(boxGraph, UUID.generate())
             boxGraph.endTransaction()
         }).toThrow()
     })
