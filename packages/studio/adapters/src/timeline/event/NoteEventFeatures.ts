@@ -112,7 +112,11 @@ export namespace NoteEventFeatures {
 
     export const group = (notes: ReadonlyArray<NoteEventBox>, mode: GroupMode): Option<NoteEventGroupBox> => {
         if (notes.length === 0) {return Option.None}
-        const chance = readChance(notes[0])
+        const earliest = notes.reduce((first, note) => {
+            const delta = note.position.getValue() - first.position.getValue()
+            return delta < 0 || (delta === 0 && note.pitch.getValue() < first.pitch.getValue()) ? note : first
+        })
+        const chance = readChance(earliest)
         const previous = collectGroups(notes)
         const target = NoteEventGroupBox.create(notes[0].graph, UUID.generate(), box => {
             box.chance.setValue(chance)

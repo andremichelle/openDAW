@@ -12,6 +12,9 @@ import {
     MIDIOutputDeviceBox,
     ModulationBox,
     NoteEventBox,
+    NoteEventChanceBox,
+    NoteEventGroupBox,
+    NoteEventRepeatBox,
     NoteEventCollectionBox,
     NoteRegionBox,
     PlayfieldDeviceBox,
@@ -31,7 +34,7 @@ import {
     WerkstattSampleBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
-import {DeviceBoxUtils, Devices, InstrumentFactories, isModulatorBox, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {DeviceBoxUtils, Devices, InstrumentFactories, isModulatorBox, NoteEventFeatures, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "../../../project/ProjectEnv"
 import {AudioEffectCompositeBox, AudioEffectCompositeCellBox, StereoToolDeviceBox, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {ClipboardUtils} from "../ClipboardUtils"
@@ -633,6 +636,40 @@ describe("DevicesClipboardHandler", () => {
             }).not.toThrow()
             expect(target.boxGraph.boxes().some(box => isInstanceOf(box, NoteEventBox))).toBe(false)
             expect(target.boxGraph.boxes().some(box => isInstanceOf(box, NoteEventCollectionBox))).toBe(false)
+        })
+        it("drops the chance, repeat and group boxes with their notes when not replacing", () => {
+            const sourceAU = createAudioUnit(source)
+            const vapo = addVaporisateur(source, sourceAU, "Source Vapo")
+            const noteTrack = addTrack(source, sourceAU, TrackType.Notes, 0)
+            const region = addNoteRegion(source, noteTrack, 0, 1920)
+            source.boxGraph.beginTransaction()
+            const collection = asInstanceOf(region.events.targetVertex.unwrap("events").box, NoteEventCollectionBox)
+            const notes = [60, 64, 67].map(pitch => NoteEventBox.create(source.boxGraph, UUID.generate(), box => {
+                box.duration.setValue(480)
+                box.pitch.setValue(pitch)
+                box.events.refer(collection.events)
+            }))
+            NoteEventFeatures.writeChance(notes[0], 50)
+            NoteEventFeatures.writePlayCount(notes[0], 2)
+            NoteEventFeatures.group(notes.slice(1), NoteEventFeatures.GroupMode.PlayOne)
+            source.boxGraph.endTransaction()
+            const deps = collectDeviceDependencies(vapo, source.boxGraph, sourceAU)
+            expect(deps.some(box => isInstanceOf(box, NoteEventChanceBox))).toBe(true)
+            expect(deps.some(box => isInstanceOf(box, NoteEventGroupBox))).toBe(true)
+            expect(deps.some(box => isInstanceOf(box, NoteEventRepeatBox))).toBe(true)
+            const data = ClipboardUtils.serializeBoxes([vapo, ...deps])
+            const targetAU = createAudioUnit(target)
+            const editing = new BoxEditing(target.boxGraph)
+            expect(() => {
+                editing.modify(() => {
+                    ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                        makePasteMapper(targetAU, false, true))
+                })
+            }).not.toThrow()
+            expect(target.boxGraph.boxes().some(box => isInstanceOf(box, NoteEventBox))).toBe(false)
+            expect(target.boxGraph.boxes().some(box => isInstanceOf(box, NoteEventChanceBox))).toBe(false)
+            expect(target.boxGraph.boxes().some(box => isInstanceOf(box, NoteEventRepeatBox))).toBe(false)
+            expect(target.boxGraph.boxes().some(box => isInstanceOf(box, NoteEventGroupBox))).toBe(false)
         })
     })
 

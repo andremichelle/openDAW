@@ -39,7 +39,7 @@ export const ScaleTab = ({lifecycle, selection, scale, followKey}: Construct) =>
                         checked: predefinedScale.equals(scale),
                         separatorBefore: index === 0
                     }).setTriggerProcedure(() => scale.setScale(predefinedScale)))))}
-                    style={{minWidth: "0"}}
+                    className="scale-menu"
                     appearance={{color: Colors.dark}}
                     horizontal="right">
             <Icon symbol={IconSymbol.FileList}/>

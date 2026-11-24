@@ -7,7 +7,6 @@ import {NotePropertyChance, PropertyAccessor} from "@/ui/timeline/editors/notes/
 export namespace NoteGrouping {
     export const lastMode = new DefaultObservableValue<NoteEventFeatures.GroupMode>(NoteEventFeatures.GroupMode.PlayAll)
 
-    // The one group every selected note belongs to, the target of a mode switch
     export const sharedGroup = (selection: Selection<NoteEventBoxAdapter>): Option<NoteEventGroupBox> => {
         const adapters = selection.selected()
         if (adapters.length === 0) {return Option.None}
@@ -56,7 +55,7 @@ export namespace NoteGrouping {
         return `${mode}, ${group.pointerHub.incoming().length} notes`
     }
 
-    // Only the chance lane draws one marker per group, on the group's earliest member
+    // the chance lane draws one marker per group, on its earliest member
     export const leadsIn = (accessor: PropertyAccessor,
                              events: EventCollection<NoteEventBoxAdapter>): Option<ReadonlySet<NoteEventBoxAdapter>> =>
         accessor === NotePropertyChance ? Option.wrap(leadsOf(events)) : Option.None

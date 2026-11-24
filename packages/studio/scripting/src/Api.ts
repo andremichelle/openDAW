@@ -3276,7 +3276,7 @@ export interface NoteEvent {
     chance: int
     /** The chance group of the note, or null */
     readonly group: Nullable<NoteGroup>
-    /** Take the note out of its group, it plays with its own chance again */
+    /** Take the note out of its group, it plays with chance 100 again */
     leaveGroup(): void
     /** Remove the note */
     remove(): void
@@ -3301,7 +3301,7 @@ export interface NoteGroup {
     mode: NoteGroupMode
     /** The notes of the group */
     readonly events: ReadonlyArray<NoteEvent>
-    /** Dissolve the group, its notes play with their own chance again */
+    /** Dissolve the group, its notes play with chance 100 again */
     ungroup(): void
 }
 

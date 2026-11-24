@@ -186,6 +186,17 @@ describe("NoteEvent feature boxes", () => {
         expect(second.mode.getValue()).toBe(NoteEventFeatures.GroupMode.PlayOne)
         expect(second.pointerHub.incoming().length).toBe(3)
     })
+    it("gives a new group the chance of its earliest note, whatever the selection order", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const [root, third] = [60, 64].map(pitch => createNote(boxGraph, collection, pitch))
+        third.position.setValue(480)
+        NoteEventFeatures.writeChance(root, 30)
+        NoteEventFeatures.writeChance(third, 80)
+        const group = NoteEventFeatures.group([third, root], NoteEventFeatures.GroupMode.PlayAll).unwrap("group")
+        boxGraph.endTransaction()
+        expect(group.chance.getValue()).toBe(30)
+    })
     it("writes the chance of a grouped note into its group", () => {
         const {boxGraph, collection} = buildSkeleton()
         boxGraph.beginTransaction()

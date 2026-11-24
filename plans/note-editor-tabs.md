@@ -54,7 +54,7 @@ Chance gets groups: all members of a group play together or not at all (chords).
 3. No stream anymore. The decision is a pure function, computed when a note start is reached:
    1. Ungrouped note: `plays = hash(seed, noteKey, start) < chance`. `start` is the global position (ppqn) of this occurrence of the note. `noteKey` is derived from the note box uuid.
    2. Grouped note: `plays = hash(seed, groupKey, passStart) < groupChance`. `passStart` is the global position where the current pass of the region begins (the region start, or the start of the loop cycle). `groupKey` is derived from the group box uuid. Every member in the same pass computes the same value, so all play or none, even if the members start at different positions.
-   3. Play One: the group plays by the rule above, then `pick = hash(seed, groupKey, passStart, 1)` chooses one member, the members ordered by note uuid. Only the picked note plays in that pass.
+   3. Play One: the group plays by the rule above, then `pick = hash(seed, groupKey, passStart, 1)` chooses one member, the members ordered by position, pitch and note key. The sequencer finds the winner once per group, pass and block. Only the picked note plays in that pass.
 4. The same project, seed and position always give the same result, independent of block size and playback start. Changing the seed gives a new variation.
 5. This changes which notes of existing projects play (the old outcome was not reproducible anyway). Approved.
 

@@ -165,6 +165,19 @@ describe("copying a note keeps all of its settings", () => {
         hits.forEach(hit => expect(settingsOf(hit)).toEqual({...Source, playCount: 1, playCurve: 0}))
         project.terminate()
     })
+    it("The adapter reads a feature written in the same edit", async () => {
+        const {project, note} = await buildProject()
+        const read = project.editing.modify(() => {
+            NoteEventFeatures.writePlayCount(note.box, 1)
+            NoteEventFeatures.writeChance(note.box, 100)
+            const cleared = {playCount: note.playCount, chance: note.chance}
+            NoteEventFeatures.writePlayCount(note.box, 6)
+            NoteEventFeatures.writeChance(note.box, 20)
+            return {cleared, written: {playCount: note.playCount, chance: note.chance}}
+        }).unwrap("modify")
+        expect(read).toEqual({cleared: {playCount: 1, chance: 100}, written: {playCount: 6, chance: 20}})
+        project.terminate()
+    })
     it("Duplicating notes and selecting the copies is one undo step", async () => {
         const {project, note, region} = await buildProject()
         project.selection.select(note.box)
@@ -197,7 +210,8 @@ describe("copying a note keeps all of its settings", () => {
         })
         const hits = project.editing.modify(() => note.consolidate()).unwrap("modify")
         expect(hits.map(({duration}) => duration)).toEqual([120, 120, 120, 120])
-        ;[0, 1 / 3, 2 / 3, 1].forEach((gain, index) => expect(hits[index].velocity).toBeCloseTo(Source.velocity * gain, 6))
+        ;[0, Source.velocity / 3, Source.velocity * 2 / 3, Source.velocity]
+            .forEach((velocity, index) => expect(hits[index].velocity).toBeCloseTo(velocity, 6))
         project.terminate()
     })
 })

@@ -76,7 +76,7 @@ export class NoteGroupImpl extends Facade<NoteEventGroupBox> implements NoteGrou
     get events(): ReadonlyArray<NoteEventImpl> {
         return this.box.pointerHub.incoming()
             .map(({box}) => NoteEventImpl.wrap(this.context, asInstanceOf(box, NoteEventBox)))
-            .sort((a, b) => a.position - b.position || a.pitch - b.pitch)
+            .sort((first, second) => first.position - second.position || first.pitch - second.pitch)
     }
     ungroup(): void {this.context.edit(() => this.box.delete())}
 }

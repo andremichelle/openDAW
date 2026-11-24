@@ -241,9 +241,9 @@ export const NoteEditor =
             shortcuts.register(NoteEditorShortcuts["toggle-step-recording"].shortcut,
                 () => stepRecording.setValue(!stepRecording.getValue())),
             shortcuts.register(NoteEditorShortcuts["group-notes"].shortcut,
-                () => NoteGrouping.group(editing, selection, NoteGrouping.lastMode.getValue())),
+                () => {NoteGrouping.group(editing, selection, NoteGrouping.lastMode.getValue())}),
             shortcuts.register(NoteEditorShortcuts["ungroup-notes"].shortcut,
-                () => NoteGrouping.ungroup(editing, selection)),
+                () => {NoteGrouping.ungroup(editing, selection)}),
             shortcuts.register(NoteEditorShortcuts["duplicate-notes"].shortcut, () => {
                 const selected = selection.selected()
                 if (selected.length === 0) {return false}

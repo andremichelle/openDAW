@@ -2,7 +2,6 @@ import {NoteEvent, ppqn} from "@opendaw/lib-dsp"
 import {
     Arrays,
     bipolar,
-    Cache,
     float,
     int,
     isDefined,
@@ -39,7 +38,6 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     readonly #box: NoteEventBox
     readonly #terminator: Terminator
     readonly #featureWatch: Terminator
-    readonly #features: Cache<NoteEventFeatures.Values>
 
     #isSelected: boolean = false
 
@@ -48,7 +46,6 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
         this.#box = box
         this.#terminator = new Terminator()
         this.#featureWatch = this.#terminator.own(new Terminator())
-        this.#features = this.#terminator.own(new Cache(() => NoteEventFeatures.read(this.#box)))
         const watcher = {onAdded: () => this.#watchFeatures(true), onRemoved: () => this.#watchFeatures(true)}
         this.#terminator.ownAll(
             this.#box.random.pointerHub.subscribe(watcher),
@@ -84,17 +81,14 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
 
     #watchFeatures(notify: boolean): void {
         this.#featureWatch.terminate()
-        const changed = () => {
-            this.#features.invalidate()
-            this.collection.ifSome(collection => collection.onEventPropertyChanged())
-        }
+        const changed = () => this.collection.ifSome(collection => collection.onEventPropertyChanged())
         NoteEventFeatures.chanceBox(this.#box).ifSome(chance => this.#featureWatch.own(
             chance.subscribe(Propagation.Children, changed)))
         NoteEventFeatures.groupBox(this.#box).ifSome(group => this.#featureWatch.own(
             group.subscribe(Propagation.Children, changed)))
         NoteEventFeatures.repeatBox(this.#box).ifSome(repeat => this.#featureWatch.own(
             repeat.subscribe(Propagation.Children, changed)))
-        if (notify) {changed()} else {this.#features.invalidate()}
+        if (notify) {changed()}
     }
 
     get box(): NoteEventBox {return this.#box}
@@ -106,12 +100,12 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     get velocity(): float {return this.#box.velocity.getValue()} // 0.0...1.0
     get pitch(): int {return this.#box.pitch.getValue()} // 0...127
     get cent(): number {return this.#box.cent.getValue()} // -50.0...+50.0
-    get chance(): int {return this.#features.get().chance}
-    get group(): Option<NoteEventGroupBox> {return this.#features.get().group}
-    get playCount(): int {return this.#features.get().playCount}
-    get playCurve(): bipolar {return this.#features.get().playCurve}
-    get repeatLength(): unitValue {return this.#features.get().repeatLength}
-    get velocityFade(): bipolar {return this.#features.get().velocityFade}
+    get chance(): int {return NoteEventFeatures.readChance(this.#box)}
+    get group(): Option<NoteEventGroupBox> {return NoteEventFeatures.groupBox(this.#box)}
+    get playCount(): int {return NoteEventFeatures.readPlayCount(this.#box)}
+    get playCurve(): bipolar {return NoteEventFeatures.readPlayCurve(this.#box)}
+    get repeatLength(): unitValue {return NoteEventFeatures.readRepeatLength(this.#box)}
+    get velocityFade(): bipolar {return NoteEventFeatures.readVelocityFade(this.#box)}
     get isSelected(): boolean {return this.#isSelected}
     get collection(): Option<NoteEventCollectionBoxAdapter> {
         return this.#box.events.targetVertex

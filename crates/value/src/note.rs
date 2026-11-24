@@ -21,14 +21,11 @@ pub struct NoteEvent {
     pub velocity_fade: f32    // -1..=1, the velocity ramp over the repeats (0 = none)
 }
 
-/// The chance group a note belongs to: one decision per pass for all members.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NoteGroup {
     pub key: u64,     // the group box uuid folded
     pub chance: f32,  // 0..=100
-    pub play_one: bool,
-    pub rank: u32,    // this note's index among the members (ordered by note uuid)
-    pub size: u32     // the number of members
+    pub play_one: bool
 }
 
 impl NoteEvent {
@@ -41,7 +38,7 @@ impl NoteEvent {
     }
 }
 
-/// The velocity gain of repeat `index` of `count` for a fade, mirroring TS `NoteEventFeatures.velocityGain`.
+// mirrors TS `NoteEventFeatures.velocityGain`
 pub fn velocity_gain(fade: f32, index: i32, count: i32) -> f32 {
     let ratio = if count > 1 { index as f32 / (count - 1) as f32 } else { 0.0 };
     if fade < 0.0 { 1.0 + fade * ratio } else { 1.0 - fade * (1.0 - ratio) }

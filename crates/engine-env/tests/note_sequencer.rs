@@ -181,8 +181,8 @@ fn starts_of(events: &[Event], key: u8) -> Vec<f64> {
     }).collect()
 }
 
-fn group(chance: f32, play_one: bool, rank: u32, size: u32) -> NoteGroup {
-    NoteGroup {key: 99, chance, play_one, rank, size}
+fn group(chance: f32, play_one: bool) -> NoteGroup {
+    NoteGroup {key: 99, chance, play_one}
 }
 
 fn grouped_notes(play_one: bool, chance: f32) -> Vec<NoteEvent> {
@@ -190,7 +190,7 @@ fn grouped_notes(play_one: bool, chance: f32) -> Vec<NoteEvent> {
     [(0.0, 60), (0.0, 64), (50.0, 67)].iter().enumerate().map(|(rank, (position, pitch))| {
         let mut note = NoteEvent::new(*position, 10.0, *pitch, 0.0, 1.0);
         note.key = rank as u64 + 10;
-        note.group = Some(group(chance, play_one, rank as u32, 3));
+        note.group = Some(group(chance, play_one));
         note
     }).collect()
 }
@@ -226,6 +226,25 @@ fn play_one_plays_exactly_one_member_in_each_pass() {
         picked[members[0]] += 1;
     }
     assert!(picked.iter().all(|count| *count > 30), "every member gets picked: {picked:?}");
+}
+
+#[test]
+fn play_one_only_picks_members_the_pass_plays() {
+    let region = NoteRegion {position: 0.0, duration: 20000.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
+    let notes: Vec<NoteEvent> = [(0.0, 60), (50.0, 64), (150.0, 67)].iter().enumerate().map(|(index, (position, pitch))| {
+        let mut note = NoteEvent::new(*position, 10.0, *pitch, 0.0, 1.0);
+        note.key = index as u64 + 10;
+        note.group = Some(group(100.0, true));
+        note
+    }).collect();
+    let events = pull(&mut sequencer(region, &notes), 0.0, 20000.0);
+    for pass in 0..200 {
+        let from = pass as f64 * 100.0;
+        let count = [60, 64].iter()
+            .filter(|pitch| starts_of(&events, **pitch).iter().any(|position| *position >= from && *position < from + 100.0))
+            .count();
+        assert_eq!(count, 1, "pass {pass}: the member beyond the loop never wins");
+    }
 }
 
 #[test]

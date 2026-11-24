@@ -1,14 +1,13 @@
 //! Read a `NoteEventBox` into a `NoteEvent` (the per-box read `NoteCollection` drives incrementally),
 //! mirroring `value_events`. A note box carries position (key 10), duration (11), pitch (20),
-//! velocity (21) and cent (24), its chance box (hub 30), its repeat box (hub 31) and its
-//! group (pointer 32). `position` and `pitch` are mandatory schema fields, so a member missing them is a corrupt mirror and panics (naming box type, field and uuid for the panic buffer);
+//! velocity (21) and cent (24). `position` and `pitch` are mandatory schema fields, so a member
+//! missing them is a corrupt mirror and panics (naming box type, field and uuid for the panic buffer);
 //! duration / velocity / cent fall back to schema defaults. Rejecting the transaction instead is not
 //! reachable: this read fires from subscription dispatch (and the `observe` catch-up during rebind),
 //! which runs AFTER `BoxGraph::transaction` has applied every update — the graph is committed and
 //! observers return no `Result`, so there is no error path back to `Engine::apply_updates` from here.
 
 use alloc::vec;
-use alloc::vec::Vec;
 use boxgraph::address::{uuid_to_string, Address, Uuid};
 use boxgraph::field::FieldValue;
 use boxgraph::graph::BoxGraph;
@@ -35,7 +34,7 @@ const REPEAT_FADE: u16 = 5; // Float32 (-1..=1)
 const DEFAULT_DURATION: i32 = 240;
 const DEFAULT_VELOCITY: f32 = 0.787_401_57; // 100/127, the schema default
 
-/// A uuid folded into the 64-bit key the random decisions hash (FNV-1a).
+// FNV-1a over the uuid, the identity a random decision hashes
 pub fn fold_uuid(uuid: &Uuid) -> u64 {
     uuid.iter().fold(0xCBF2_9CE4_8422_2325u64, |hash, byte| (hash ^ *byte as u64).wrapping_mul(0x0100_0000_01B3))
 }
@@ -48,26 +47,14 @@ fn float32(graph: &BoxGraph, uuid: Uuid, key: u16) -> Option<f32> {
     graph.field_value(&Address::of(uuid, vec![key])).and_then(FieldValue::as_float32)
 }
 
-/// The box pointing to the note hub `key` (the chance or repeat box), when it exists.
 pub fn aux_box(graph: &BoxGraph, note_uuid: Uuid, key: u16) -> Option<Uuid> {
     graph.incoming(&Address::of(note_uuid, vec![key])).first().map(|source| source.uuid)
         .filter(|uuid| graph.find_box(uuid).is_some())
 }
 
-/// The group box the note points to, when it exists.
 pub fn group_box(graph: &BoxGraph, note_uuid: Uuid) -> Option<Uuid> {
     graph.target_of(&Address::of(note_uuid, vec![NOTE_GROUP])).map(|target| target.uuid)
         .filter(|uuid| graph.find_box(uuid).is_some())
-}
-
-/// The member notes of a group, ordered by uuid (the order Play One picks from).
-pub fn group_members(graph: &BoxGraph, group_uuid: Uuid) -> Vec<Uuid> {
-    let mut members: Vec<Uuid> = graph.incoming(&Address::box_of(group_uuid)).iter()
-        .map(|source| source.uuid)
-        .collect();
-    members.sort();
-    members.dedup();
-    members
 }
 
 pub fn read_note_event(graph: &BoxGraph, note_uuid: Uuid) -> NoteEvent {
@@ -85,13 +72,10 @@ pub fn read_note_event(graph: &BoxGraph, note_uuid: Uuid) -> NoteEvent {
         event.chance = int32(graph, chance, CHANCE_CHANCE).unwrap_or(100) as f32;
     }
     if let Some(group) = group_box(graph, note_uuid) {
-        let members = group_members(graph, group);
         event.group = Some(NoteGroup {
             key: fold_uuid(&group),
             chance: int32(graph, group, GROUP_CHANCE).unwrap_or(100) as f32,
-            play_one: int32(graph, group, GROUP_MODE).unwrap_or(0) == 1,
-            rank: members.iter().position(|member| *member == note_uuid).unwrap_or(0) as u32,
-            size: members.len().max(1) as u32
+            play_one: int32(graph, group, GROUP_MODE).unwrap_or(0) == 1
         });
     }
     if let Some(repeat) = aux_box(graph, note_uuid, NOTE_SPLIT) {

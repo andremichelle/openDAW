@@ -52,9 +52,10 @@ const snapshot = (notes: ReadonlyArray<NoteEventBox>): ReadonlyArray<Snapshot> =
         playCount: NoteEventFeatures.readPlayCount(note),
         playCurve: NoteEventFeatures.readPlayCurve(note)
     }))
-    .sort((a, b) => a.uuid.localeCompare(b.uuid))
+    .sort((first, second) => first.uuid.localeCompare(second.uuid))
 
-describe("migrateNoteEventBox", () => {
+// loading a real project twice is slow when every suite runs in parallel
+describe("migrateNoteEventBox", {timeout: 30000}, () => {
     it("moves every old chance and repeat value into aux boxes", async () => {
         const project = await loadOpenUp()
         const notes = project.boxGraph.boxes().filter((box): box is NoteEventBox => box instanceof NoteEventBox)

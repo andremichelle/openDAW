@@ -161,8 +161,6 @@ fn reads_chance_group_and_repeat_boxes() {
     let group = first.group.expect("group");
     assert_eq!(group.chance, 40.0);
     assert!(group.play_one);
-    assert_eq!((group.rank, group.size), (0, 2));
-    assert_eq!(second.group.expect("group").rank, 1);
     assert_eq!(group.key, second.group.expect("group").key);
     assert_ne!(first.key, second.key);
     assert_eq!((first.play_count, first.play_curve, first.repeat_length, first.velocity_fade), (3, 0.25, 0.5, -1.0));
@@ -208,7 +206,7 @@ fn leaving_the_group_updates_both_notes() {
     }], &registry).unwrap();
     assert!(note(&collection, 64).group.is_none(), "the note left");
     assert_eq!(note(&collection, 64).chance, 80.0, "its own chance applies again");
-    assert_eq!(note(&collection, 60).group.expect("group").size, 1, "the remaining member sees one member");
+    assert!(note(&collection, 60).group.is_some(), "the other note stays in the group");
 }
 
 #[test]
@@ -224,4 +222,36 @@ fn detaching_the_chance_box_restores_chance_100_but_keeps_the_group() {
     let first = note(&collection, 60);
     assert_eq!(first.chance, 100.0);
     assert!(first.group.is_some(), "membership lives on the note");
+}
+
+#[test]
+fn a_note_moved_to_another_collection_is_not_re_added_by_a_late_edit() {
+    const OTHER_COLLECTION: Uuid = [8u8; 16];
+    let mut graph = BoxGraph::from_boxes(vec![
+        collection_box(),
+        graph_box(OTHER_COLLECTION, "NoteEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        note_box(NOTE_A, 0, 60, true)
+    ]);
+    let source = NoteCollection::observe(&mut graph, COLLECTION);
+    let target = NoteCollection::observe(&mut graph, OTHER_COLLECTION);
+    let registry = Registry::new();
+    let moved = Update::Pointer {
+        address: Address::of(NOTE_A, vec![1]),
+        old: Some(Address::of(COLLECTION, vec![1])),
+        new: Some(Address::of(OTHER_COLLECTION, vec![1]))
+    };
+    let pitched = |old: i32, new: i32| Update::Primitive {
+        address: Address::of(NOTE_A, vec![20]), old: FieldValue::Int32(old), new: FieldValue::Int32(new)
+    };
+    graph.transaction(&[moved, pitched(60, 72)], &registry).unwrap();
+    assert!(source.is_empty(), "the old collection lost the note");
+    assert_eq!(pitches(&target), vec![72]);
+    let back = Update::Pointer {
+        address: Address::of(NOTE_A, vec![1]),
+        old: Some(Address::of(OTHER_COLLECTION, vec![1])),
+        new: Some(Address::of(COLLECTION, vec![1]))
+    };
+    graph.transaction(&[pitched(72, 64), back], &registry).unwrap();
+    assert!(target.is_empty(), "an edit before the move does not keep the note either");
+    assert_eq!(pitches(&source), vec![64]);
 }

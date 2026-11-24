@@ -1,8 +1,4 @@
-//! Deterministic random values for the timeline: the same seed, position and key always give the same
-//! value, independent of block size and playback start. The seed comes from `TimelineBox.seed`; a later
-//! seed track resolves the seed per position here.
-//!
-//! The hash is part of every project's sound: changing it changes which notes play. Tests pin values.
+//! Random values from seed, position and key. Changing the hash changes every project's sound (pinned in tests).
 
 use alloc::rc::Rc;
 use core::cell::Cell;
@@ -23,7 +19,6 @@ impl HostRandom {
         Self {seed: Rc::new(Cell::new(0))}
     }
 
-    /// Share the engine's seed cell, so an edit of `TimelineBox.seed` reaches every user.
     pub fn bind_seed(&mut self, cell: Rc<Cell<u32>>) {
         self.seed = cell;
     }
@@ -32,8 +27,7 @@ impl HostRandom {
         self.seed.get()
     }
 
-    /// A value in [0, 1) for `key` at the global `position` (pulses, floored). `salt` separates several
-    /// decisions of the same key and position.
+    // [0, 1) for `key` at the floored pulse `position`, `salt` separates decisions of one key and position
     pub fn value(&self, position: f64, key: u64, salt: u32) -> f64 {
         hash_unit(self.seed.get(), position, key, salt)
     }

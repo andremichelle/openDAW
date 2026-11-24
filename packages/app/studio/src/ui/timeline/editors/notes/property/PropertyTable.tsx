@@ -126,7 +126,7 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
                     read: (_strategy, adapter) => adapter.playCurve
                 }, true, false)
             case "repeatLength":
-                return numberCell(key, IconSymbol.Gate, "%", {
+                return numberCell(key, IconSymbol.Duration, "%", {
                     raw: adapter => adapter.repeatLength,
                     read: (_strategy, adapter) => adapter.repeatLength
                 }, true, false)

@@ -1,7 +1,6 @@
 //! Observe a `NoteEventCollectionBox`: keep an owned `EventCollection<NoteEvent>` in sync, built
 //! incrementally from membership and edit events. The note counterpart of `ValueCollection` (and the
-//! TS `NoteEventCollectionBoxAdapter`). A note also reads its chance box (with its group) and its repeat
-//! box, so each member watches those boxes too and is re-read when they change.
+//! TS `NoteEventCollectionBoxAdapter`). Each member also watches its chance, group and repeat boxes.
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -24,9 +23,7 @@ pub struct NoteCollection {
     subscriptions: Vec<SubscriptionId>
 }
 
-/// The TARGETED subscriptions of one member note: its own field edits, the attach / detach of its chance
-/// and repeat boxes (the hubs), its group pointer, and `aux`, the monitors on the attached chance, group
-/// and repeat boxes.
+/// One member's subscriptions: fields, the chance and repeat hubs, the group pointer, `aux` the attached boxes.
 struct NoteSubs {
     field: SubscriptionId,
     random: SubscriptionId,
@@ -123,8 +120,6 @@ impl NoteCollection {
     }
 }
 
-/// A member note joined: read it, watch its fields, the attach / detach of its chance and repeat boxes,
-/// and the boxes attached right now. Deferred, so they register after the current dispatch.
 fn join_note(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, note: Uuid) {
     state.borrow_mut().upsert(graph, note);
     let field_state = state.clone();
@@ -146,7 +141,6 @@ fn join_note(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, 
     state.borrow_mut().subs.insert(note, NoteSubs {field, random, split, group, aux});
 }
 
-/// A member note left: drop it and every subscription it holds.
 fn leave_note(state: &Rc<RefCell<State>>, deferred: &Deferred, note: Uuid) {
     let mut state = state.borrow_mut();
     state.remove(note);
@@ -161,7 +155,6 @@ fn leave_note(state: &Rc<RefCell<State>>, deferred: &Deferred, note: Uuid) {
     }
 }
 
-/// The chance, group or repeat box of a note changed: watch the boxes attached now and re-read the note.
 fn rewire(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, note: Uuid) {
     let previous = match state.borrow_mut().subs.get_mut(&note) {
         Some(subs) => core::mem::take(&mut subs.aux),
@@ -178,8 +171,6 @@ fn rewire(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, not
     borrowed.upsert(graph, note);
 }
 
-/// Monitors on the attached boxes: the chance box, the group (chance, mode and its members, which set rank
-/// and size) and the repeat box.
 fn watch_aux(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, note: Uuid) -> Vec<SubscriptionId> {
     let mut ids = Vec::new();
     if let Some(chance) = aux_box(graph, note, NOTE_RANDOM) {
@@ -191,9 +182,6 @@ fn watch_aux(state: &Rc<RefCell<State>>, deferred: &Deferred, graph: &BoxGraph, 
         let group_state = state.clone();
         ids.push(deferred.subscribe_vertex(Propagation::Parent, Address::box_of(group),
             Box::new(move |graph, _update| group_state.borrow_mut().upsert(graph, note))));
-        let members_state = state.clone();
-        ids.push(deferred.subscribe_pointer_hub(Address::box_of(group),
-            Box::new(move |graph, _event| members_state.borrow_mut().upsert(graph, note))));
     }
     if let Some(repeat) = aux_box(graph, note, NOTE_SPLIT) {
         let repeat_state = state.clone();
