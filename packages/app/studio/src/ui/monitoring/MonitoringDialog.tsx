@@ -72,7 +72,7 @@ const ParamKnob = ({lifecycle, editing, parameter, anchor, color, label, options
 
 export namespace MonitoringDialog {
     export const open = async (service: StudioService, capture: CaptureAudio): Promise<void> => {
-        const switchable = "setSinkId" in AudioContext.prototype
+        const switchable = typeof HTMLMediaElement.prototype.setSinkId === "function"
         let outputDevices: ReadonlyArray<OutputDevice> = [DefaultDevice]
         if (switchable) {
             try {

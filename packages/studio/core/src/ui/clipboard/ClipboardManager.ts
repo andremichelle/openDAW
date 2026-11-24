@@ -28,11 +28,17 @@ export namespace ClipboardManager {
 
     let fallbackEntry: Option<AnyEntry> = Option.None
 
+    const checksum = (bytes: Uint8Array): string => {
+        let hash = 0x811c9dc5
+        for (let i = 0; i < bytes.length; i++) {hash = Math.imul(hash ^ bytes[i], 0x01000193)}
+        return (hash >>> 0).toString(16)
+    }
+
     export const encode = (entry: AnyEntry): string => {
         const bytes = new Uint8Array(entry.data)
         let binary = ""
         for (let i = 0; i < bytes.length; i++) {binary += String.fromCharCode(bytes[i])}
-        return `${CLIPBOARD_HEADER}:${CLIPBOARD_VERSION}:${entry.type}:${btoa(binary)}`
+        return `${CLIPBOARD_HEADER}:${CLIPBOARD_VERSION}:${entry.type}:${btoa(binary)}:${bytes.length}:${checksum(bytes)}`
     }
 
     const labelForType = (type: string): { one: string, many: string } => {
@@ -74,14 +80,31 @@ export namespace ClipboardManager {
         if (parts.length < 4 || parts[0] !== CLIPBOARD_HEADER) {return Option.None}
         const version = parseInt(parts[1], 10)
         if (version !== CLIPBOARD_VERSION) {return Option.None}
-        return Option.tryCatch(() => {
-            const type = parts[2]
-            const base64 = parts.slice(3).join(":")
-            const binary = atob(base64)
+        if (parts.length !== 4 && parts.length !== 6) {return Option.None}
+        const decoded = Option.tryCatch(() => {
+            const binary = atob(parts[3])
             const bytes = new Uint8Array(binary.length)
             for (let i = 0; i < binary.length; i++) {bytes[i] = binary.charCodeAt(i)}
-            return {type, data: bytes.buffer} as AnyEntry
+            return bytes
         })
+        if (decoded.isEmpty()) {
+            console.warn(`[Clipboard] unreadable '${parts[2]}' data, text length: ${text.length}`)
+            return Option.None
+        }
+        const bytes = decoded.unwrap()
+        if (parts.length === 6) {
+            const expectedLength = parseInt(parts[4], 10)
+            const expectedChecksum = parts[5]
+            const actualChecksum = checksum(bytes)
+            if (bytes.length !== expectedLength || actualChecksum !== expectedChecksum) {
+                const head = Array.from(bytes.subarray(0, 16), byte => byte.toString(16).padStart(2, "0")).join(" ")
+                console.warn(`[Clipboard] corrupted '${parts[2]}' data, text length: ${text.length}, ` +
+                    `bytes: ${bytes.length} (expected ${expectedLength}), checksum: ${actualChecksum} ` +
+                    `(expected ${expectedChecksum}), head: ${head}`)
+                return Option.None
+            }
+        }
+        return Option.wrap({type: parts[2], data: bytes.buffer})
     }
 
     export const install = <E extends AnyEntry>(element: HTMLElement, handler: ClipboardHandler<E>): Subscription => {
