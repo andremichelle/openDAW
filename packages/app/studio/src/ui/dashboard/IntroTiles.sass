@@ -4,6 +4,7 @@ component
   display: flex
   flex-direction: column
   margin-top: 1em
+  row-gap: 1.5em
 
   > .tiles
     display: grid
@@ -19,10 +20,6 @@ component
 
     &:hover .tile-title
       color: white
-
-    &:hover .tile-link
-      opacity: 1
-      color: var(--color-blue)
 
     > .tile-head
       display: flex
@@ -45,8 +42,3 @@ component
       font-size: $fs-s
       line-height: 1.5
       color: var(--color-shadow)
-
-    > .tile-link
-      font-size: $fs-s
-      color: var(--color-shadow)
-      opacity: 0.75

@@ -7,66 +7,73 @@ component
   min-height: 0
   display: flex
   flex-direction: column
-  row-gap: 1em
-  padding: 1.75em 2em 0 2em
   color: var(--color-dark)
-  overflow-y: auto
   @include colors.panel-background
 
   a
     color: var(--color-blue)
 
-  // WebKit drops a scroll container's padding-bottom at the scroll end, so the bottom breathing
-  // room is a real flex item (3em + the 1em row-gap)
-  &::after
-    content: ""
-    flex: 0 0 3em
-
-  > .intro
+  > .scroll
+    flex: 1
+    min-height: 0
     display: flex
     flex-direction: column
-    align-items: center
     row-gap: 1em
-    font-size: clamp(0.625rem, min(2.25vw, calc(1rem + (100dvh - 850px) * 0.05)), 1rem)
+    padding: 1.75em 2em 0 2em
+    overflow-y: auto
+    mask-image: linear-gradient(to bottom, transparent, black calc(1.5em * var(--fade-top, 0)), black calc(100% - 1.5em * var(--fade-bottom, 0)), transparent)
 
-    > .hero
+    // WebKit drops a scroll container's padding-bottom at the scroll end, so the bottom breathing
+    // room is a real flex item (3em + the 1em row-gap)
+    &::after
+      content: ""
+      flex: 0 0 3em
+
+    > .intro
       display: flex
       flex-direction: column
       align-items: center
+      row-gap: 1em
+      font-size: clamp(0.625rem, min(2.25vw, calc(1rem + (100dvh - 850px) * 0.05)), 1rem)
 
-      > h1
-        color: white
-        font-size: 2.5em
-        margin: 0
+      > .hero
+        display: flex
+        flex-direction: column
+        align-items: center
 
-      > .tagline
-        font-size: 0.9375em
-        color: var(--color-shadow)
+        > h1
+          color: white
+          font-size: 2.5em
+          margin: 0
 
-  > .main
-    flex: 1
-    margin-top: 1.5em
-    display: grid
-    grid-template-columns: repeat(5, minmax($col-min, 1fr))
-    column-gap: $col-gap
+        > .tagline
+          font-size: 0.9375em
+          color: var(--color-shadow)
 
-    // zero height keeps the project list out of the row measurement, so the rail alone defines the
-    // minimum and never gets clipped; min-height stretches the panel back over the whole row
-    > .panel
-      grid-column: span 3
-      height: 0
-      min-height: 100%
-      display: flex
-      flex-direction: column
-      padding: 1em 1.25em
-      border-radius: 8px
-      border: 1px solid rgba(white, 0.08)
-      background: rgba(white, 0.01)
-
-    > .rail
-      grid-column: span 2
+    > .main
+      flex: 1
+      margin-top: 1.5em
       display: grid
-      grid-template-columns: subgrid
-      row-gap: 0.5em
-      min-width: 0
-      align-content: start
+      grid-template-columns: repeat(5, minmax($col-min, 1fr))
+      column-gap: $col-gap
+
+      // zero height keeps the project list out of the row measurement, so the rail alone defines the
+      // minimum and never gets clipped; min-height stretches the panel back over the whole row
+      > .panel
+        grid-column: span 3
+        height: 0
+        min-height: 100%
+        display: flex
+        flex-direction: column
+        padding: 1em 1.25em
+        border-radius: 8px
+        border: 1px solid rgba(white, 0.08)
+        background: rgba(white, 0.01)
+
+      > .rail
+        grid-column: span 2
+        display: grid
+        grid-template-columns: subgrid
+        row-gap: 0.5em
+        min-width: 0
+        align-content: start

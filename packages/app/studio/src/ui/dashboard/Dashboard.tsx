@@ -12,6 +12,7 @@ import {Contributors} from "@/ui/dashboard/Contributors"
 import {SampleProviders} from "@/ui/dashboard/SampleProviders"
 import {HelpFeedback} from "@/ui/dashboard/HelpFeedback"
 import {Links} from "@/ui/dashboard/Links"
+import {ScrollFade} from "@/ui/components/ScrollFade"
 
 const className = Html.adoptStyleSheet(css, "Dashboard")
 
@@ -22,26 +23,28 @@ type Construct = {
 
 export const Dashboard = ({lifecycle, service}: Construct) => (
     <div className={className}>
-        <div className="intro">
-            <header className="hero">
-                <h1>openDAW</h1>
-                <div className="tagline">Create Music Online</div>
-            </header>
-            <ActionButtons lifecycle={lifecycle} service={service}/>
-        </div>
-        <div className="main">
-            <div className="panel">
-                <Resources lifecycle={lifecycle} service={service}/>
+        <div className="scroll" onInit={scroll => ScrollFade.install(lifecycle, scroll)}>
+            <div className="intro">
+                <header className="hero">
+                    <h1>openDAW</h1>
+                    <div className="tagline">Create Music Online</div>
+                </header>
+                <ActionButtons lifecycle={lifecycle} service={service}/>
             </div>
-            <div className="rail">
-                <HelpFeedback/>
-                <Backup service={service}/>
-                <Links/>
-                <Sponsors/>
-                <SampleProviders/>
-                <Contributors/>
+            <div className="main">
+                <div className="panel">
+                    <Resources lifecycle={lifecycle} service={service}/>
+                </div>
+                <div className="rail">
+                    <HelpFeedback/>
+                    <Backup service={service}/>
+                    <Links/>
+                    <Sponsors/>
+                    <SampleProviders/>
+                    <Contributors/>
+                </div>
             </div>
+            <IntroTiles/>
         </div>
-        <IntroTiles/>
     </div>
 )
