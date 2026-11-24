@@ -2,6 +2,7 @@ import {StringMapping, unitValue, ValueMapping} from "@opendaw/lib-std"
 import {PropertyParameters} from "@/ui/timeline/editors/notes/property/PropertyParameters.ts"
 import {NoteModifyStrategy} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
 import {NoteEventBox} from "@opendaw/studio-boxes"
+import {NoteEventFeatures} from "@opendaw/studio-adapters"
 import {UINoteEvent} from "../UINoteEvent"
 
 export interface PropertyAccessor {
@@ -48,7 +49,7 @@ export const NotePropertyChance = new class implements PropertyAccessor {
 
     readRawValue(note: UINoteEvent): number {return note.chance}
     readValue(strategy: NoteModifyStrategy, note: UINoteEvent): number {return strategy.readChance(note)}
-    writeValue(box: NoteEventBox, value: number): void {box.chance.setValue(value)}
+    writeValue(box: NoteEventBox, value: number): void {NoteEventFeatures.writeChance(box, value)}
 }
 
 export const NotePropertyAccessors = [NotePropertyVelocity, NotePropertyCent, NotePropertyChance]

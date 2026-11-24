@@ -6,7 +6,8 @@ import {
     ProjectSkeleton,
     RegionEditing,
     TrackBoxAdapter,
-    TrackType
+    TrackType,
+    NoteEventFeatures
 } from "@opendaw/studio-adapters"
 import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import type {Project} from "./Project"
@@ -59,13 +60,15 @@ const buildProject = async (layouts: ReadonlyArray<Layout>) => {
     })
     layouts.forEach(({position, duration, loopDuration, notes}) => {
         const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
-        notes.forEach(note => NoteEventBox.create(boxGraph, UUID.generate(), box => {
-            box.position.setValue(note.position)
-            box.duration.setValue(note.duration)
-            box.pitch.setValue(note.pitch)
-            box.playCount.setValue(note.playCount ?? 1)
-            box.events.refer(collection.events)
-        }))
+        notes.forEach(note => {
+            const box = NoteEventBox.create(boxGraph, UUID.generate(), box => {
+                box.position.setValue(note.position)
+                box.duration.setValue(note.duration)
+                box.pitch.setValue(note.pitch)
+                box.events.refer(collection.events)
+            })
+            if ((note.playCount ?? 1) !== 1) {NoteEventFeatures.writePlayCount(box, note.playCount ?? 1)}
+        })
         NoteRegionBox.create(boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
             box.duration.setValue(duration)

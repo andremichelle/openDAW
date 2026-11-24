@@ -7,7 +7,8 @@ import {
     ProjectSkeleton,
     TrackBoxAdapter,
     TrackType,
-    ValueRegionBoxAdapter
+    ValueRegionBoxAdapter,
+    NoteEventFeatures
 } from "@opendaw/studio-adapters"
 import {
     NoteEventBox,
@@ -160,8 +161,8 @@ const setRatchets = (region: NoteRegionBoxAdapter) =>
     region.optCollection.unwrap("notes").events.asArray().forEach(({box}) => {
         box.velocity.setValue(Ratchet.velocity)
         box.cent.setValue(Ratchet.cent)
-        box.chance.setValue(Ratchet.chance)
-        box.playCount.setValue(Ratchet.playCount)
+        NoteEventFeatures.writeChance(box, Ratchet.chance)
+        NoteEventFeatures.writePlayCount(box, Ratchet.playCount)
     })
 const ratchetsOf = (region: NoteRegionBoxAdapter) => region.optCollection.unwrap("notes").events.asArray()
     .map(({velocity, cent, chance, playCount}) => ({velocity, cent, chance, playCount}))

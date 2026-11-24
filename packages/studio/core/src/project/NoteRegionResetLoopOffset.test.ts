@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
 import {int, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {LoopableRegion, ppqn, PPQN} from "@opendaw/lib-dsp"
-import {NoteRegionBoxAdapter, ProjectSkeleton, RegionEditing, TrackType} from "@opendaw/studio-adapters"
+import {NoteEventFeatures, NoteRegionBoxAdapter, ProjectSkeleton, RegionEditing, TrackType} from "@opendaw/studio-adapters"
 import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "./ProjectEnv"
 
@@ -59,13 +59,15 @@ const buildProject = async (spans: ReadonlyArray<Span>, notes: ReadonlyArray<Not
         box.target.refer(primaryAudioUnitBox)
     })
     const collectionBox = NoteEventCollectionBox.create(boxGraph, UUID.generate())
-    notes.forEach(({position, duration, pitch, playCount}) => NoteEventBox.create(boxGraph, UUID.generate(), box => {
-        box.position.setValue(position)
-        box.duration.setValue(duration)
-        box.pitch.setValue(pitch)
-        box.playCount.setValue(playCount)
-        box.events.refer(collectionBox.events)
-    }))
+    notes.forEach(({position, duration, pitch, playCount}) => {
+        const box = NoteEventBox.create(boxGraph, UUID.generate(), box => {
+            box.position.setValue(position)
+            box.duration.setValue(duration)
+            box.pitch.setValue(pitch)
+            box.events.refer(collectionBox.events)
+        })
+        if (playCount !== 1) {NoteEventFeatures.writePlayCount(box, playCount)}
+    })
     const regionBoxes = spans.map(({position, duration, loopOffset, loopDuration}) =>
         NoteRegionBox.create(boxGraph, UUID.generate(), box => {
             box.position.setValue(position)

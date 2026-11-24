@@ -1,6 +1,6 @@
 import {NoteEventBox, NoteEventCollectionBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {Interpolation, ppqn} from "@opendaw/lib-dsp"
-import {InterpolationFieldAdapter} from "@opendaw/studio-adapters"
+import {InterpolationFieldAdapter, NoteEventFeatures} from "@opendaw/studio-adapters"
 import {asInstanceOf, bipolar, float, int, isDefined, panic, unitValue, UUID} from "@opendaw/lib-std"
 import {NoteEvent, NoteEventProps, ValueEvent, ValueEventProps} from "../../Api"
 import {Context} from "../Context"
@@ -17,16 +17,26 @@ export class NoteEventImpl extends Facade<NoteEventBox> implements NoteEvent {
     declare pitch: int
     declare velocity: unitValue
     declare cents: float
-    declare playCount: int
-    declare playCurve: bipolar
-    declare chance: int
 
     private constructor(context: Context, box: NoteEventBox) {
         super(context, box)
-        this.bind({
-            position: box.position, duration: box.duration, pitch: box.pitch, velocity: box.velocity,
-            cents: box.cent, playCount: box.playCount, playCurve: box.playCurve, chance: box.chance
-        })
+        this.bind({position: box.position, duration: box.duration, pitch: box.pitch, velocity: box.velocity, cents: box.cent})
+    }
+
+    get playCount(): int {return NoteEventFeatures.readPlayCount(this.box)}
+    set playCount(value: int) {
+        const validated = Guard.int32({min: 1, max: 128}, value, "playCount")
+        this.context.edit(() => NoteEventFeatures.writePlayCount(this.box, validated))
+    }
+    get playCurve(): bipolar {return NoteEventFeatures.readPlayCurve(this.box)}
+    set playCurve(value: bipolar) {
+        const validated = Guard.float32("bipolar", value, "playCurve")
+        this.context.edit(() => NoteEventFeatures.writePlayCurve(this.box, validated))
+    }
+    get chance(): int {return NoteEventFeatures.readChance(this.box)}
+    set chance(value: int) {
+        const validated = Guard.int32({min: 0, max: 100}, value, "chance")
+        this.context.edit(() => NoteEventFeatures.writeChance(this.box, validated))
     }
 }
 

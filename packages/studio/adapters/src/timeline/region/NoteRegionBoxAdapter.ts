@@ -19,6 +19,7 @@ import {NoteEventCollectionBox, NoteRegionBox} from "@opendaw/studio-boxes"
 import {TrackBoxAdapter} from "../TrackBoxAdapter"
 import {LoopableRegionBoxAdapter, RegionBoxAdapter, RegionBoxAdapterVisitor} from "../RegionBoxAdapter"
 import {NoteEventCollectionBoxAdapter} from "../collection/NoteEventCollectionBoxAdapter"
+import {NoteEventFeatures} from "../event/NoteEventFeatures"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {MutableRegion} from "./MutableRegion"
 import {ValueRegionBoxAdapter} from "./ValueRegionBoxAdapter"
@@ -193,7 +194,8 @@ export class NoteRegionBoxAdapter
         this.optCollection.ifSome(source => {
             const graph = this.#context.boxGraph
             const target = NoteEventCollectionBox.create(graph, UUID.generate())
-            source.events.asArray().forEach(adapter => adapter.copyTo({events: target.events}))
+            const groups = NoteEventFeatures.createGroupMapping()
+            source.events.asArray().forEach(adapter => adapter.copyTo({events: target.events, groups}))
             this.#box.events.refer(target.owners)
         })
     }
@@ -251,6 +253,7 @@ export class NoteRegionBoxAdapter
                         const searchStart = Math.floor(resultStart - rawStart)
                         const searchEnd = Math.floor(resultEnd - rawStart)
                         const end = truncateNotesAtRegionEnd ? regionEnd - rawStart : Number.POSITIVE_INFINITY
+                        const groups = NoteEventFeatures.createGroupMapping()
                         for (const event of region.optCollection.unwrap("optCollection").events.iterateRange(searchStart, searchEnd)) {
                             const duration = event.playCount > 1
                                 ? event.duration : Math.min(event.duration, end - event.position)
@@ -258,6 +261,7 @@ export class NoteRegionBoxAdapter
                                 event.copyTo({
                                     position: event.position + rawStart - first.position,
                                     duration,
+                                    groups,
                                     events: collectionBox.events
                                 })
                                 continue
@@ -268,7 +272,7 @@ export class NoteRegionBoxAdapter
                             const start = Math.round(play(straight) - rangeMin)
                             if (start < 0 || start >= rangeMax - rangeMin) {continue}
                             const stop = Math.round(play(straight + duration) - rangeMin)
-                            event.copyTo({position: start, duration: Math.max(1, stop - start), events: collectionBox.events})
+                            event.copyTo({position: start, duration: Math.max(1, stop - start), groups, events: collectionBox.events})
                         }
                     }
                 }

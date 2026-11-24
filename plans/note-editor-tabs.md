@@ -105,7 +105,12 @@ Chance gets groups: all members of a group play together or not at all (chords).
 
 1. ~~UI tabs on the current fields: Basic, Random (chance), Scale, Split (count, curve). Nothing else changes, so this ships on its own.~~ Consolidate stays in the Edit menu.
 2. ~~Schema: new boxes, `random` and `split` hubs, `seed` on `TimelineBox`, `npm run build`, `all-boxes.od` regenerated. Tests: old fields, new boxes and seed survive save and load, aux boxes go with their note, one box per hub, group lifetime.~~
-3. One step, so nothing is ever half switched: deprecate the old fields, migration, adapters, `NoteEventFeatures`, copy paths, tabs on the aux boxes, engine (`HostRandom` with the base seed, bindings read aux boxes only, play decision, groups, length, fade). Tests in studio-adapters, studio-core and Rust.
+3. ~~One step, so nothing is ever half switched: deprecate the old fields, migration, adapters, `NoteEventFeatures`, copy paths, tabs on the aux boxes, engine (`HostRandom` with the base seed, bindings read aux boxes only, play decision, groups, length, fade). Tests in studio-adapters, studio-core and Rust.~~
+   1. Deprecated fields are still read on load but never saved, so the migration runs once without touching them. Tested on `test-files/openup.od` (chance 60 vocal), through save and load.
+   2. Copies: one group mapping per operation (duplicate, alt-drag copy, collection copy, mirrored consolidate), so a copied chord becomes one new group. Flatten maps per loop pass, every pass rolls on its own. Consolidating a ratchet keeps its hits in the note's group.
+   3. Aux boxes are created after their note, never inside its create callback (the box graph forbids nested construction).
+   4. The note key hashes the note uuid with FNV-1a. The hash and two of its values are pinned in `engine-env/tests/note_sequencer.rs`.
+   5. A composite layer with its own Zeitgeist now decides chance like its siblings (`plans/instrument-composite.md`, manual page updated).
 4. Random tab: Play All, Play One, Ungroup, group chance, seed. The same actions in the note context menu (Group Play All, Group Play One, Ungroup, Leave Group) and in the Edit menu, Cmd+G groups with the last used mode, Cmd+Shift+G ungroups (both in `GlobalShortcuts`). Group visualisation as in UI 7.
 5. Split tab: length, velocity fade.
 6. Scripting API additions and declaration file.

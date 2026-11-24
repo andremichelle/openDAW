@@ -1713,6 +1713,8 @@ struct Engine {
     // The `playback.truncateNotesAtRegionEnd` preference (TS reads it live per block), shared with
     // every note sequencer via `bind_truncate_preference`.
     pub(crate) truncate_pref: Rc<Cell<bool>>,
+    // `TimelineBox.seed`, shared with every note sequencer via `bind_seed` (the chance decisions).
+    pub(crate) note_seed: Rc<Cell<u32>>,
     // Armed by a unit's SOLO field edit (and by any reconcile that changed routing): the next
     // reconcile pass re-resolves solo into per-strip forced_silent flags (TS Mixer.updateSolo).
     solo_dirty: Rc<Cell<bool>>,
@@ -1807,6 +1809,7 @@ impl Engine {
             clip_sequencer: Rc::new(RefCell::new(engine_env::clip_sequencer::ClipSequencer::new())),
             clip_read: engine_env::note_sequencer::ClipRead::Advance,
             truncate_pref: Rc::new(Cell::new(false)),
+            note_seed: Rc::new(Cell::new(0)),
             solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
             dirty_units: Rc::new(RefCell::new(Vec::new())),
@@ -2491,6 +2494,13 @@ impl Engine {
         self.graph.catchup_and_subscribe(Address::of(uuid, vec![31]), move |value| {
             if let Some(value) = value.as_float32() {
                 bpm.bpm.set(value)
+            }
+        });
+        // WASM CONTRACT: TimelineBox.seed = field key 32 (Int32, default 0), the seed of the chance decisions.
+        let seed = self.note_seed.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![32]), move |value| {
+            if let Some(value) = value.as_int32() {
+                seed.set(value as u32)
             }
         });
         // tempo automation on/off: TimelineBox.tempoTrack (22).enabled (20).

@@ -162,12 +162,12 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
     const noteSubscriptions = new Map<NoteEventBoxAdapter, Subscription>()
     lifecycle.ownAll(...cells
             .map(({key}) => {
-                const {parameter, fieldName} = PropertyParameters[key]
+                const {parameter, write} = PropertyParameters[key]
                 return parameter.subscribe(owner => {
                     if (ignore) {return}
                     editing.modify(() =>
                         selection.selected()
-                            .forEach(adapter => adapter.box[fieldName].setValue(owner.getValue())), !dragging)
+                            .forEach(adapter => write(adapter.box, owner.getValue())), !dragging)
                 })
             }),
         selection.catchupAndSubscribe({

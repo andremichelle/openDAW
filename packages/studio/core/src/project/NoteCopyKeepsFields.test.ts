@@ -6,7 +6,8 @@ import {
     NoteRegionBoxAdapter,
     ProjectSkeleton,
     RegionEditing,
-    TrackType
+    TrackType,
+    NoteEventFeatures
 } from "@opendaw/studio-adapters"
 import {NoteClipBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "./ProjectEnv"
@@ -62,11 +63,11 @@ const buildProject = async () => {
         box.pitch.setValue(Source.pitch)
         box.velocity.setValue(Source.velocity)
         box.cent.setValue(Source.cent)
-        box.chance.setValue(Source.chance)
-        box.playCount.setValue(Source.playCount)
-        box.playCurve.setValue(Source.playCurve)
         box.events.refer(events.events)
     })
+    NoteEventFeatures.writeChance(noteBox, Source.chance)
+    NoteEventFeatures.writePlayCount(noteBox, Source.playCount)
+    NoteEventFeatures.writePlayCurve(noteBox, Source.playCurve)
     boxGraph.endTransaction()
     const project = Project.fromSkeleton(createEnv(), skeleton)
     const region = project.boxAdapters.adapterFor(regionBox, NoteRegionBoxAdapter)
@@ -162,6 +163,27 @@ describe("copying a note keeps all of its settings", () => {
         const hits = project.editing.modify(() => note.consolidate()).unwrap("modify")
         expect(hits.length).toBe(Source.playCount)
         hits.forEach(hit => expect(settingsOf(hit)).toEqual({...Source, playCount: 1, playCurve: 0}))
+        project.terminate()
+    })
+    it("Consolidating a grouped play-count note keeps its hits in the same group", async () => {
+        const {project, note} = await buildProject()
+        const group = project.editing.modify(() =>
+            NoteEventFeatures.group([note.box], NoteEventFeatures.GroupMode.PlayAll).unwrap("group")).unwrap("modify")
+        const hits = project.editing.modify(() => note.consolidate()).unwrap("modify")
+        hits.forEach(hit => expect(hit.chanceGroup.unwrap("group")).toBe(group))
+        expect(group.pointerHub.incoming().length).toBe(Source.playCount)
+        project.terminate()
+    })
+    it("Length and velocity fade shape the consolidated hits", async () => {
+        const {project, note} = await buildProject()
+        project.editing.modify(() => {
+            NoteEventFeatures.writePlayCurve(note.box, 0.0)
+            NoteEventFeatures.writeRepeatLength(note.box, 0.5)
+            NoteEventFeatures.writeVelocityFade(note.box, 1.0)
+        })
+        const hits = project.editing.modify(() => note.consolidate()).unwrap("modify")
+        expect(hits.map(({duration}) => duration)).toEqual([120, 120, 120, 120])
+        ;[0, 1 / 3, 2 / 3, 1].forEach((gain, index) => expect(hits[index].velocity).toBeCloseTo(Source.velocity * gain, 6))
         project.terminate()
     })
 })

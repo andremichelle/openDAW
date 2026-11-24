@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
 import {asInstanceOf, Option, UUID} from "@opendaw/lib-std"
 import {BoxGraph} from "@opendaw/lib-box"
-import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {NoteEventFeatures, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {
     BoxIO,
     NoteEventBox,
@@ -53,23 +53,25 @@ const reload = (boxGraph: BoxGraph<BoxIO.TypeMap>): BoxGraph<BoxIO.TypeMap> => {
 }
 
 describe("NoteEvent feature boxes", () => {
-    it("keeps the current note fields through save and load", () => {
+    it("keeps every value written through NoteEventFeatures through save and load", () => {
         const {boxGraph, collection} = buildSkeleton()
         boxGraph.beginTransaction()
         const note = createNote(boxGraph, collection, 42)
         note.velocity.setValue(0.5)
         note.cent.setValue(25)
-        note.chance.setValue(50)
-        note.playCount.setValue(4)
-        note.playCurve.setValue(0.5)
+        NoteEventFeatures.writeChance(note, 50)
+        NoteEventFeatures.writePlayCount(note, 4)
+        NoteEventFeatures.writePlayCurve(note, 0.5)
+        NoteEventFeatures.writeRepeatLength(note, 0.25)
+        NoteEventFeatures.writeVelocityFade(note, -0.5)
         boxGraph.endTransaction()
         const loaded = asInstanceOf(reload(boxGraph).findBox(note.address.uuid).unwrap("note"), NoteEventBox)
         expect(loaded.pitch.getValue()).toBe(42)
         expect(loaded.velocity.getValue()).toBe(0.5)
         expect(loaded.cent.getValue()).toBe(25)
-        expect(loaded.chance.getValue()).toBe(50)
-        expect(loaded.playCount.getValue()).toBe(4)
-        expect(loaded.playCurve.getValue()).toBe(0.5)
+        expect(NoteEventFeatures.read(loaded)).toEqual({
+            chance: 50, group: Option.None, playCount: 4, playCurve: 0.5, repeatLength: 0.25, velocityFade: -0.5
+        })
     })
     it("keeps chance, group and repeat boxes through save and load", () => {
         const {boxGraph, collection} = buildSkeleton()
@@ -165,6 +167,102 @@ describe("NoteEvent feature boxes", () => {
         third.delete()
         boxGraph.endTransaction()
         expect(boxGraph.findBox(group.address.uuid).isEmpty()).toBe(true)
+    })
+    it("groups notes with the chance of the first one and deletes groups left empty", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const [root, third, fifth] = [60, 64, 67].map(pitch => createNote(boxGraph, collection, pitch))
+        NoteEventFeatures.writeChance(root, 40)
+        const first = NoteEventFeatures.group([root, third], NoteEventFeatures.GroupMode.PlayAll).unwrap("group")
+        boxGraph.endTransaction()
+        expect(first.chance.getValue()).toBe(40)
+        expect(NoteEventFeatures.readChance(third)).toBe(40)
+        boxGraph.beginTransaction()
+        const second = NoteEventFeatures.group([root, third, fifth], NoteEventFeatures.GroupMode.PlayOne).unwrap("group")
+        boxGraph.endTransaction()
+        expect(first.isAttached()).toBe(false)
+        expect(second.mode.getValue()).toBe(NoteEventFeatures.GroupMode.PlayOne)
+        expect(second.pointerHub.incoming().length).toBe(3)
+    })
+    it("writes the chance of a grouped note into its group", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const [root, third] = [60, 64].map(pitch => createNote(boxGraph, collection, pitch))
+        const group = NoteEventFeatures.group([root, third], NoteEventFeatures.GroupMode.PlayAll).unwrap("group")
+        NoteEventFeatures.writeChance(third, 25)
+        boxGraph.endTransaction()
+        expect(group.chance.getValue()).toBe(25)
+        expect(NoteEventFeatures.readChance(root)).toBe(25)
+    })
+    it("lets a note leave its group and keeps its own chance", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const [root, third] = [60, 64].map(pitch => createNote(boxGraph, collection, pitch))
+        NoteEventFeatures.writeChance(third, 70)
+        const group = NoteEventFeatures.group([root, third], NoteEventFeatures.GroupMode.PlayAll).unwrap("group")
+        group.chance.setValue(20)
+        boxGraph.endTransaction()
+        boxGraph.beginTransaction()
+        NoteEventFeatures.leaveGroup([third])
+        boxGraph.endTransaction()
+        expect(NoteEventFeatures.groupBox(third).isEmpty()).toBe(true)
+        expect(NoteEventFeatures.readChance(third)).toBe(70)
+        expect(NoteEventFeatures.readChance(root)).toBe(20)
+        boxGraph.beginTransaction()
+        NoteEventFeatures.leaveGroup([root])
+        boxGraph.endTransaction()
+        expect(group.isAttached()).toBe(false)
+    })
+    it("ungroups the whole group of a selected note", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const notes = [60, 64, 67].map(pitch => createNote(boxGraph, collection, pitch))
+        const group = NoteEventFeatures.group(notes, NoteEventFeatures.GroupMode.PlayAll).unwrap("group")
+        boxGraph.endTransaction()
+        boxGraph.beginTransaction()
+        NoteEventFeatures.ungroup([notes[1]])
+        boxGraph.endTransaction()
+        expect(group.isAttached()).toBe(false)
+        notes.forEach(note => expect(NoteEventFeatures.groupBox(note).isEmpty()).toBe(true))
+    })
+    it("copies a group once per mapping", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const notes = [60, 64].map(pitch => createNote(boxGraph, collection, pitch))
+        NoteEventFeatures.writePlayCount(notes[0], 3)
+        const group = NoteEventFeatures.group(notes, NoteEventFeatures.GroupMode.PlayOne).unwrap("group")
+        group.chance.setValue(35)
+        const shared = NoteEventFeatures.createGroupMapping()
+        const together = notes.map(note => {
+            const copy = createNote(boxGraph, collection, note.pitch.getValue())
+            NoteEventFeatures.copy(note, copy, {split: true, groups: shared})
+            return copy
+        })
+        const apart = notes.map(note => {
+            const copy = createNote(boxGraph, collection, note.pitch.getValue())
+            NoteEventFeatures.copy(note, copy, {split: false, groups: NoteEventFeatures.createGroupMapping()})
+            return copy
+        })
+        boxGraph.endTransaction()
+        const groupOf = (note: NoteEventBox) => NoteEventFeatures.groupBox(note).unwrap("group")
+        expect(groupOf(together[0])).toBe(groupOf(together[1]))
+        expect(groupOf(together[0])).not.toBe(group)
+        expect(groupOf(together[0]).chance.getValue()).toBe(35)
+        expect(groupOf(together[0]).mode.getValue()).toBe(NoteEventFeatures.GroupMode.PlayOne)
+        expect(NoteEventFeatures.readPlayCount(together[0])).toBe(3)
+        expect(groupOf(apart[0])).not.toBe(groupOf(apart[1]))
+        expect(NoteEventFeatures.readPlayCount(apart[0]), "split: false leaves the repeat behind").toBe(1)
+    })
+    it("takes the group along when the clipboard collects a note", () => {
+        const {boxGraph, collection} = buildSkeleton()
+        boxGraph.beginTransaction()
+        const notes = [60, 64].map(pitch => createNote(boxGraph, collection, pitch))
+        const group = NoteEventFeatures.group(notes, NoteEventFeatures.GroupMode.PlayAll).unwrap("group")
+        boxGraph.endTransaction()
+        const dependencies = Array.from(boxGraph.dependenciesOf(notes[0], {alwaysFollowMandatory: true}).boxes)
+        expect(dependencies).toContain(NoteEventFeatures.chanceBox(notes[0]).unwrap("chance"))
+        expect(dependencies).toContain(group)
+        expect(dependencies).not.toContain(notes[1])
     })
     it("does not allow a group without members", () => {
         const {boxGraph} = buildSkeleton()

@@ -68,6 +68,7 @@ import {
     InterpolationFieldAdapter,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
+    NoteEventFeatures,
     PresetDecoder,
     ProjectQueries,
     RegionAdapters,
@@ -774,17 +775,18 @@ export class ProjectApi {
 
     createNoteEvent({owner, position, duration, velocity, pitch, chance, cent}: NoteEventParams): NoteEventBox {
         const {boxGraph} = this.#project
-        return NoteEventBox.create(boxGraph, UUID.generate(), box => {
+        const note = NoteEventBox.create(boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
             box.duration.setValue(duration)
             box.velocity.setValue(velocity ?? 1.0)
             box.pitch.setValue(pitch)
-            box.chance.setValue(chance ?? 100.0)
             box.cent.setValue(cent ?? 0.0)
             box.events.refer(owner.events.targetVertex
                 .unwrap("Owner has no event-collection").box
                 .asBox(NoteEventCollectionBox).events)
         })
+        if (isDefined(chance) && chance !== 100) {NoteEventFeatures.writeChance(note, chance)}
+        return note
     }
 
     deleteAudioUnit(audioUnitBox: AudioUnitBox): void {
@@ -811,7 +813,8 @@ export class ProjectApi {
         const blockEnd = notes.reduce((max, {position, duration}) => Math.max(max, position + duration), -Infinity)
         const shift = blockEnd - blockStart
         if (shift <= 0) {return []}
-        return notes.map(adapter => adapter.copyTo({position: adapter.position + shift}))
+        const groups = NoteEventFeatures.createGroupMapping()
+        return notes.map(adapter => adapter.copyTo({position: adapter.position + shift, groups}))
     }
 
     #createTrack({field, target, trackType, insertIndex}: {
