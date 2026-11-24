@@ -1,0 +1,80 @@
+component
+  display: flex
+  flex-direction: column
+  min-height: 0
+  height: 100%
+  font-size: 0.75rem
+
+  > .toolbar
+    display: flex
+    align-items: center
+    column-gap: 0.75em
+    padding: 0.5em
+
+    > .target-label
+      flex: 1 1 0
+      min-width: 8em
+      color: var(--color-yellow)
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+
+    > [class^="SearchInput"]
+      flex: 0 1 16em
+
+    > .disabled
+      opacity: 0.3
+      pointer-events: none
+
+  > .table
+    flex: 1
+    min-height: 0
+    overflow: auto
+    display: grid
+    grid-template-columns: auto minmax(6em, 1fr) 3em minmax(6em, 1fr) minmax(6em, 1fr) minmax(6em, 1fr) auto auto auto auto auto
+    grid-auto-rows: min-content
+    align-items: center
+    column-gap: 0.75em
+    row-gap: 2px
+    padding: 0 0.5em 0.5em
+
+    > .header, > .rows, > .rows > .row
+      display: contents
+
+    > .header > span
+      position: sticky
+      top: 0
+      padding: 0.25em 0
+      color: var(--color-shadow)
+      background-color: var(--color-panel-background)
+
+      &.sortable
+        cursor: pointer
+
+        &.sorted
+          color: var(--color-bright)
+
+          &::after
+            content: " ▲"
+
+          &.descending::after
+            content: " ▼"
+
+    > .rows
+      > .placeholder
+        grid-column: 1 / -1
+        padding: 2em
+        text-align: center
+        color: var(--color-shadow)
+
+      > .row > span
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
+
+        &.link
+          cursor: pointer
+          text-decoration: underline dotted
+
+          &:hover
+            color: var(--color-bright)
