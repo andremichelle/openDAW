@@ -19,6 +19,6 @@ type Construct = {
 export const SplitTab = ({lifecycle, editing, modifyContext, selection}: Construct) => (
     <div className={className}>
         <PropertyTable lifecycle={lifecycle} selection={selection} editing={editing} modifyContext={modifyContext}
-                       rows={[["playCount", "playCurve"]]}/>
+                       rows={[["playCount", "playCurve"], ["repeatLength", "velocityFade"]]}/>
     </div>
 )

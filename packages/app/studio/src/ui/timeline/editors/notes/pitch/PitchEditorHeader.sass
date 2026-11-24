@@ -22,6 +22,20 @@ component
       height: 2em
       padding: 0 0.75em
 
+      &::after
+        content: ""
+        position: absolute
+        left: 0
+        right: 0
+        bottom: 0
+        height: 1px
+        background-color: var(--color)
+
+    > input:checked + label::after
+      left: 1px
+      right: 1px
+      background-color: var(--color-active)
+
   > div.panels
     display: grid
 

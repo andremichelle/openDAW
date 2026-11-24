@@ -8,5 +8,7 @@ export type UINoteEvent = NoteEvent & {
     chance: number
     playCount: int
     playCurve: number
+    repeatLength: number
+    velocityFade: number
     group: Option<NoteEventGroupBox>
 }

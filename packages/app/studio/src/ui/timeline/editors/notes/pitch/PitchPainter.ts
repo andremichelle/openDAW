@@ -1,5 +1,6 @@
 import {int, linear, ObservableOption, Option, Procedure} from "@opendaw/lib-std"
 import {NoteEventGroupBox} from "@opendaw/studio-boxes"
+import {NoteEventFeatures} from "@opendaw/studio-adapters"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {MidiKeys, NoteEvent, ppqn} from "@opendaw/lib-dsp"
@@ -97,17 +98,20 @@ export const createNotePitchPainter =
                     }
                     const ftRange = noteHeight >>> 1
                     const ft = strategy.readCent(noteEvent) / 50.0 * (ftRange - devicePixelRatio * 2)
-                    context.fillStyle = selected ? "rgba(255, 255, 255, 0.75)" : "rgba(0, 0, 0, 0.5)"
                     const y = y0 + ftRange - ft - 1
-                    const playCount = noteEvent.playCount
-                    const playCurve = noteEvent.playCurve
+                    const {playCount, playCurve} = noteEvent
+                    const repeatLength = playCount > 1 ? noteEvent.repeatLength : 1.0
+                    const velocityFade = playCount > 1 ? noteEvent.velocityFade : 0.0
                     const duration = complete - position
                     for (let cycle = 0; cycle < playCount; cycle++) {
                         const b0 = NoteEvent.curveFunc(cycle / playCount, playCurve)
                         const b1 = NoteEvent.curveFunc((cycle + 1) / playCount, playCurve)
+                        const end = b0 + (b1 - b0) * repeatLength
                         const cx0 = Math.max(unitToX(position + duration * b0), x0 + devicePixelRatio)
-                        const cx1 = Math.min(unitToX(position + duration * b1), x1 - devicePixelRatio)
-                        context.fillRect(cx0 + devicePixelRatio, y, cx1 - cx0 - devicePixelRatio, devicePixelRatio)
+                        const cx1 = Math.min(unitToX(position + duration * end), x1 - devicePixelRatio)
+                        const gain = Math.max(NoteEventFeatures.velocityGain(velocityFade, cycle, playCount), 0.2)
+                        context.fillStyle = selected ? `rgba(255, 255, 255, ${0.75 * gain})` : `rgba(0, 0, 0, ${0.5 * gain})`
+                        context.fillRect(cx0 + devicePixelRatio, y, Math.max(cx1 - cx0 - devicePixelRatio, devicePixelRatio), devicePixelRatio)
                     }
                 }
             }

@@ -77,5 +77,19 @@ export const PropertyParameters = {
             StringMapping.percent({fractionDigits: 0, bipolar: false}),
             "Play Curve", 0.0),
         write: (box: NoteEventBox, value: number) => NoteEventFeatures.writePlayCurve(box, value)
+    },
+    repeatLength: {
+        parameter: new DefaultParameter<number>(
+            ValueMapping.unipolar(),
+            StringMapping.percent({fractionDigits: 0}),
+            "Length", 1.0),
+        write: (box: NoteEventBox, value: number) => NoteEventFeatures.writeRepeatLength(box, value)
+    },
+    velocityFade: {
+        parameter: new DefaultParameter<number>(
+            ValueMapping.bipolar(),
+            StringMapping.percent({fractionDigits: 0, bipolar: false}),
+            "Velocity Fade", 0.0),
+        write: (box: NoteEventBox, value: number) => NoteEventFeatures.writeVelocityFade(box, value)
     }
 } as const satisfies Record<string, NotePropertyParameter>

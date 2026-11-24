@@ -94,7 +94,7 @@ Chance gets groups: all members of a group play together or not at all (chords).
 
 1. The tabs go into the panel left of the piano roll (component `PitchEditorHeader`), which today holds the scale row and the property table. Not into the editor header with snapping and menus. A tab row (Basic, Random, Scale, Split) built from `RadioGroup`. The selected tab is remembered per session.
 2. Basic: position, duration, pitch, velocity, cent. This is today's grid minus the moved fields.
-3. Random: chance, group (Group, Ungroup, member count), Clear. Room for later random features.
+3. Random: the group status of the selection, then chance and the project seed on one line. Grouping lives in the note context menu, the Edit menu and the shortcuts, no action buttons.
 4. Scale: root key selector, scale configurator, scale menu, follow project key. Moved out of the always visible row.
 5. Split: count, curve, length, velocity fade, Consolidate, Clear.
 6. Mixed values across the selection show `invalid` like today. All inputs of one edit run in one `editing.modify`.
@@ -112,7 +112,7 @@ Chance gets groups: all members of a group play together or not at all (chords).
    4. The note key hashes the note uuid with FNV-1a. The hash and two of its values are pinned in `engine-env/tests/note_sequencer.rs`.
    5. A composite layer with its own Zeitgeist now decides chance like its siblings (`plans/instrument-composite.md`, manual page updated).
 4. ~~Random tab: Play All, Play One, Ungroup, group chance, seed. The same actions in the note context menu (Group Play All, Group Play One, Ungroup, Leave Group) and in the Edit menu, Cmd+G groups with the last used mode, Cmd+Shift+G ungroups (both in `GlobalShortcuts`). Group visualisation as in UI 7.~~ The shortcuts live in `NoteEditorShortcuts` (listed and rebindable), they win over the global track grouping while the note editor has focus.
-5. Split tab: length, velocity fade.
+5. ~~Split tab: length, velocity fade.~~ Both apply only when a note repeats more than once, in the engine, Consolidate and the piano roll (parts shortened, their line fades).
 6. Scripting API additions and declaration file.
 7. Later, separate plans: seed tracks (resolved inside `HostRandom`), devices on `HostRandom`.
 

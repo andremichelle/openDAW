@@ -125,6 +125,16 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
                     raw: adapter => adapter.playCurve,
                     read: (_strategy, adapter) => adapter.playCurve
                 }, true, false)
+            case "repeatLength":
+                return numberCell(key, IconSymbol.Gate, "%", {
+                    raw: adapter => adapter.repeatLength,
+                    read: (_strategy, adapter) => adapter.repeatLength
+                }, true, false)
+            case "velocityFade":
+                return numberCell(key, IconSymbol.Velocity, "%", {
+                    raw: adapter => adapter.velocityFade,
+                    read: (_strategy, adapter) => adapter.velocityFade
+                }, true, false)
         }
     }
     const cellRows: ReadonlyArray<ReadonlyArray<PropertyCell>> = rows.map(row => row.map(createCell))
