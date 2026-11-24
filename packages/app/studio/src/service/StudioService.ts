@@ -450,7 +450,8 @@ export class StudioService implements ProjectEnv {
         this.layout.screen.setValue(null)
         if (state.type === "script") {
             const returnTo: Option<CompositeOverviewState> = !isDefined(existing) ? state.returnTo
-                : existing.type === "composite" ? Option.wrap(existing) : existing.returnTo
+                : existing.type === "composite" ? Option.wrap(existing)
+                    : existing.type === "script" ? existing.returnTo : Option.None
             this.#activeCodeEditor.wrap({...state, previousScreen, returnTo})
         } else {
             this.#activeCodeEditor.wrap({...state, previousScreen})
@@ -479,7 +480,16 @@ export class StudioService implements ProjectEnv {
         }
     }
 
-    #screenOf(state: CodeEditorState): Workspace.ScreenKeys {return state.type === "script" ? "code" : "layers"}
+    #screenOf(state: CodeEditorState): Workspace.ScreenKeys {
+        switch (state.type) {
+            case "script":
+                return "code"
+            case "composite":
+                return "layers"
+            case "midi-mapping":
+                return "midi-mapping"
+        }
+    }
 
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}
 

@@ -1,3 +1,5 @@
+@use "@/mixins"
+
 component
   --color-active: var(--color)
 
@@ -31,11 +33,7 @@ component
     cursor: pointer
 
   &.tiny-triangle:after
-    content: "▾"
-    font-size: 0.625em
-    position: relative
-    top: 0.75em
-    left: 0
+    @include mixins.tiny-triangle
 
   > label
     display: flex

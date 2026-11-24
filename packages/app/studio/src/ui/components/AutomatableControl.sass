@@ -1,4 +1,5 @@
 @use "@/colors"
+@use "@/mixins"
 
 component
   display: flex
@@ -12,3 +13,5 @@ component
 
   &.automated, .automated &
     box-shadow: 0 0 1px 0 var(--color-blue)
+
+  @include mixins.midi-map-ring

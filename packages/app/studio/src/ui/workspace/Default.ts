@@ -277,6 +277,7 @@ export const DefaultWorkspace = Object.freeze({
     },
     "code": editorScreen("Code", "Code Editor", IconSymbol.Code, PanelType.CodeEditor),
     "layers": editorScreen("Layers", "All Layers", IconSymbol.CompositeOverview, PanelType.CompositeOverview),
+    "midi-mapping": editorScreen("MIDI Mapping", "Mapping", IconSymbol.Midi, PanelType.MIDIMapping),
     "tap": {
         name: "Match Tempo",
         icon: IconSymbol.Time,

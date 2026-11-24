@@ -16,5 +16,6 @@ export enum PanelType {
     EmptyFlexSpace,
     TapTempo,
     Analysis,
-    CompositeOverview
+    CompositeOverview,
+    MIDIMapping
 }

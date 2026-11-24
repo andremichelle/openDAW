@@ -5,6 +5,7 @@ import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
 import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Html} from "@opendaw/lib-dom"
 import {MIDILearning} from "@opendaw/studio-core"
+import {MapTarget} from "@/ui/midi-mapping/MapTarget"
 
 const className = Html.adoptStyleSheet(css, "AutomatableControl")
 
@@ -26,6 +27,7 @@ export const AutomatableControl = (
                  parameter.catchupAndSubscribeControlSources({
                      onControlSourceAdd: (source: ControlSource) => element.classList.add(source),
                      onControlSourceRemove: (source: ControlSource) => element.classList.remove(source)
-                 })
+                 }),
+                 MapTarget.frame(midiLearning, parameter.field, element)
              )
          }}/>)

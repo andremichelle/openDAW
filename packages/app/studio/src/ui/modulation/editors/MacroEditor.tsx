@@ -58,7 +58,7 @@ export const MacroEditor = ({lifecycle, service, modulator}: Construct) => {
             </RelativeUnitValueDragging>
         </div>
     )
-    installControlSourceIndicator(lifecycle, value, macro, slider)
+    installControlSourceIndicator(lifecycle, midiLearning, value, macro, slider)
     return (
         <ModulatorEditor lifecycle={lifecycle} service={service} modulator={modulator}>
             <div className={className}>

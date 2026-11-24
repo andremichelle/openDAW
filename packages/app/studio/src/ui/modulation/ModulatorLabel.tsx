@@ -30,7 +30,7 @@ export const ModulatorLabel = ({lifecycle, service, parameter}: Construct): HTML
             </RelativeUnitValueDragging>
         </div>
     )
-    installControlSourceIndicator(lifecycle, parameter, element, label)
+    installControlSourceIndicator(lifecycle, midiLearning, parameter, element, label)
     lifecycle.own(attachModulatorParameterContextMenu(editing, midiLearning, parameter, label))
     return element
 }

@@ -1,0 +1,111 @@
+@use "@/colors"
+
+component
+  display: flex
+  flex-direction: column
+  flex: 1
+  min-height: 0
+  @include colors.panel-background
+
+  > header > .target-label
+    flex: 1 1 0
+    width: auto
+    min-width: 8em
+    color: var(--color-yellow)
+    overflow: hidden
+    text-overflow: ellipsis
+
+  > .table
+    flex: 1 1 0
+    min-height: 0
+    display: grid
+    grid-template-columns: auto minmax(6em, 17em) 2.5em repeat(3, minmax(3em, max-content)) 4.5em 4.5em 6em minmax(6em, 13em) auto 1fr
+    grid-template-rows: auto 1fr
+    column-gap: 1em
+    padding: 0 0.5em
+    font-size: 11px
+    color: var(--color-dark)
+
+    > .header, > .rows
+      grid-column: 1 / -1
+      display: grid
+      grid-template-columns: subgrid
+      align-items: center
+
+    > .rows > .row
+      display: contents
+
+      > :first-child
+        grid-column: 1
+
+    > .header > span
+      padding: 0.5em 0 0.25em 0
+      color: var(--color-blue)
+      white-space: nowrap
+      text-align: center
+
+      &.sortable
+        cursor: pointer
+
+        &.sorted::after
+          content: " ▴"
+
+        &.sorted.descending::after
+          content: " ▾"
+
+    > .rows
+      min-height: 0
+      align-content: start
+      row-gap: 3px
+      padding: 0.25em 0 0.5em 0
+      overflow: hidden auto
+      scrollbar-width: thin
+      mask-image: linear-gradient(to bottom, transparent, black calc(1.5em * var(--fade-top, 0)), black calc(100% - 1.5em * var(--fade-bottom, 0)), transparent)
+
+      > .placeholder
+        grid-column: 1 / -1
+        padding: 2em 0
+        text-align: center
+        color: var(--color-shadow)
+
+      > .row
+        > span
+          white-space: nowrap
+          overflow: hidden
+          text-overflow: ellipsis
+          text-align: right
+
+        > .value
+          justify-self: end
+
+          &.link
+            cursor: pointer
+
+            &:hover
+              color: var(--color-blue)
+
+        > .dropdown
+          min-width: 0
+
+          > button
+            width: 100%
+
+            > label
+              width: 100%
+              justify-content: flex-start
+              font-size: 1em
+              min-width: 0
+
+              > span
+                overflow: hidden
+                text-overflow: ellipsis
+                white-space: nowrap
+
+          &.centered > button > label
+            justify-content: center
+
+        > .delete:hover
+          color: var(--color-red)
+
+      > .row:hover > span:not(.link)
+        color: var(--color-white)

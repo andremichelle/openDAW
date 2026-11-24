@@ -228,6 +228,23 @@ $library-guide-left: 2.5px
     border-bottom: 3px solid transparent
     transition: transform 0.12s ease
 
+@mixin tiny-triangle
+  content: "▾"
+  font-size: 0.625em
+  position: relative
+  top: 0.75em
+  left: 0
+
+@mixin midi-map-ring
+  &.midi-map
+    box-shadow: 0 0 0 1px var(--color-purple)
+
+    &.midi-map-mapped
+      box-shadow: 0 0 0 1px var(--color-orange)
+
+    &.midi-map-target
+      box-shadow: 0 0 0 1px var(--color-white)
+
 @mixin color-icon-tile($size: 18px)
   box-sizing: border-box
   width: $size
