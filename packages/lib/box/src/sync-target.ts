@@ -23,7 +23,7 @@ export const applyUpdateTasks = <M>(graph: BoxGraph<M>, updates: ReadonlyArray<U
             const field = graph.findVertex(Address.reconstruct(update.address))
                 .unwrap(() => `Could not find bytes field ${update.address}`)
             if (!(field instanceof ByteArrayField)) {return panic(`${update.address} is no bytes field`)}
-            field.setValue(BytesSplice.apply(field.getValue(),
+            field.replayValue(BytesSplice.apply(field.getValue(),
                 {offset: update.offset, deleteCount: update.deleteCount, insert: update.bytes}))
         } else if (type === "update-pointer") {
             (graph.findVertex(Address.reconstruct(update.address))
