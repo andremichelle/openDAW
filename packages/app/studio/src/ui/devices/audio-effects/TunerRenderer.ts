@@ -4,9 +4,8 @@ import {CanvasPainter} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {Fonts} from "@/ui/Fonts"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
-import {fitTunerCanvas, TunerLayout, tunerMeterX} from "./TunerCanvasLayout"
-import {tunerHistoryKeys} from "./TunerHistoryAxis"
-import {tunerNoteName} from "./TunerNoteName"
+import {TunerCanvasLayout, TunerLayout} from "./TunerCanvasLayout"
+import {TunerHistoryAxis} from "./TunerHistoryAxis"
 import {TunerPoint, TunerTiming, TunerViewState} from "./TunerViewState"
 
 export class TunerRenderer {
@@ -18,7 +17,7 @@ export class TunerRenderer {
     paint(painter: CanvasPainter, now: number, histogram: boolean, strobe: boolean, frequency: boolean, reference: number): void {
         const context = painter.context
         this.#context = context
-        const {scale, x, y} = fitTunerCanvas(painter.actualWidth, painter.actualHeight)
+        const {scale, x, y} = TunerCanvasLayout.fit(painter.actualWidth, painter.actualHeight)
         context.setTransform(scale, 0, 0, scale, x, y)
         if (histogram) {this.#history(now)}
         else {this.#meter(strobe)}
@@ -29,7 +28,7 @@ export class TunerRenderer {
         const context = this.#context
         if (isAbsent(context)) {return}
         const {center, span, display, visible} = this.#state
-        for (const key of tunerHistoryKeys(center, span)) {
+        for (const key of TunerHistoryAxis.keys(center, span)) {
             const {note, y, top, height} = key
             context.fillStyle = Colors.dark.opacity(MidiKeys.isBlackKey(note) ? 0.025 : 0.06).toString()
             context.fillRect(TunerLayout.historyRight, top, TunerLayout.keyWidth, height)
@@ -43,7 +42,7 @@ export class TunerRenderer {
             }
             if (y >= TunerLayout.historyTop && y <= TunerLayout.historyBottom) {
                 this.#line(TunerLayout.left, y, TunerLayout.historyRight, y, DisplayPaint.gridStyle())
-                this.#text(tunerNoteName(note), TunerLayout.keyCenter, y + TunerLayout.keyLabelOffset,
+                this.#text(MidiKeys.toFullString(note), TunerLayout.keyCenter, y + TunerLayout.keyLabelOffset,
                     Math.min(TunerLayout.maxKeyFont, TunerLayout.historyHeight / span * TunerLayout.keyFontRatio),
                     selected ? Colors.panelBackground.toString() : Colors.shadow.toString())
             }
@@ -80,7 +79,7 @@ export class TunerRenderer {
         const guide = DisplayPaint.strokeStyle(visible ? 0.6 : 0.35)
         this.#line(TunerLayout.left, TunerLayout.meterY, TunerLayout.right, TunerLayout.meterY, guide)
         for (let value = -TunerLayout.centsLimit; value <= TunerLayout.centsLimit; value += TunerLayout.tickStep) {
-            const x = tunerMeterX(value)
+            const x = TunerCanvasLayout.meterX(value)
             this.#line(x, TunerLayout.tickTop, x, TunerLayout.tickBottom, guide)
         }
         this.#line(TunerLayout.center, TunerLayout.zeroTop, TunerLayout.center,
@@ -99,7 +98,7 @@ export class TunerRenderer {
                 this.#line(x, TunerLayout.strobeTop, x, TunerLayout.strobeBottom, this.#color(), TunerLayout.strobeWidth)
             }
         } else if (visible) {
-            const x = tunerMeterX(cents)
+            const x = TunerCanvasLayout.meterX(cents)
             context.beginPath()
             context.moveTo(x, TunerLayout.triangleTip)
             context.lineTo(x - TunerLayout.triangleHalfWidth, TunerLayout.triangleTop)
@@ -118,7 +117,7 @@ export class TunerRenderer {
         const hz = reference * Math.pow(2, (display.midi - 69) / 12)
         context.save()
         context.globalAlpha = display.opacity
-        this.#text(tunerNoteName(display.midi), TunerLayout.noteX, TunerLayout.readoutY,
+        this.#text(MidiKeys.toFullString(Math.round(display.midi)), TunerLayout.noteX, TunerLayout.readoutY,
             TunerLayout.readoutFont, this.#color())
         this.#text(frequency ? `${hz.toFixed(1)} Hz` : `${cents >= 0 ? "+" : ""}${cents.toFixed(1)} ct`,
             TunerLayout.valueX, TunerLayout.readoutY, TunerLayout.readoutFont, this.#color())

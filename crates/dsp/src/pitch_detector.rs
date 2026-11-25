@@ -36,7 +36,7 @@ impl Detector {
 
     /// Clears captured audio, in-flight analysis and published measurements.
     pub fn reset(&mut self) {
-        self.ring = [[0.0; SIZE]; 2];
+        self.ring.iter_mut().for_each(|channel| channel.fill(0.0));
         self.write = 0;
         self.count = 0;
         self.pending = [0.0; 2];
@@ -151,7 +151,7 @@ impl Detector {
                     }
                 }
             }
-            let refined = if cycles >= 2.0 {
+            let refined = if cycles >= 2.0 && (samples / cycles - period).abs() < 1.0 {
                 samples / cycles
             } else {
                 period

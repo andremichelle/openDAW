@@ -1,17 +1,17 @@
 import {describe, expect, it} from "vitest"
-import {fitTunerCanvas, tunerMeterX} from "./TunerCanvasLayout"
+import {TunerCanvasLayout} from "./TunerCanvasLayout"
 
 describe("tuner display proportions", () => {
     it("uses the inset display width with a centered zero and bounded markers", () => {
-        expect(tunerMeterX(-50)).toBeCloseTo(18)
-        expect(tunerMeterX(0)).toBe(240)
-        expect(tunerMeterX(50)).toBeCloseTo(462)
-        expect(tunerMeterX(-100)).toBeCloseTo(18)
-        expect(tunerMeterX(100)).toBeCloseTo(462)
+        expect(TunerCanvasLayout.meterX(-50)).toBeCloseTo(18)
+        expect(TunerCanvasLayout.meterX(0)).toBe(240)
+        expect(TunerCanvasLayout.meterX(50)).toBeCloseTo(462)
+        expect(TunerCanvasLayout.meterX(-100)).toBeCloseTo(18)
+        expect(TunerCanvasLayout.meterX(100)).toBeCloseTo(462)
     })
     it("fits wide, tall and high-DPI panels without distorting the target circles", () => {
         for (const [width, height] of [[328, 148], [480, 300], [656, 296], [960, 480]]) {
-            const {scale, x, y} = fitTunerCanvas(width, height)
+            const {scale, x, y} = TunerCanvasLayout.fit(width, height)
             expect(scale).toBeGreaterThan(0)
             expect(x).toBeGreaterThanOrEqual(0)
             expect(y).toBeGreaterThanOrEqual(0)

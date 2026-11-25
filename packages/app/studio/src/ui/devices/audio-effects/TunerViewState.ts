@@ -7,7 +7,7 @@ export const TunerTiming = Object.freeze({history: 8000, freshness: 300, interva
 
 export class TunerViewState {
     readonly display: TunerDisplayState
-    readonly history: TunerPoint[]
+    readonly history: Array<TunerPoint>
     center: number
     span: number
     phase = 0

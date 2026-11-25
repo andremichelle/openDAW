@@ -709,7 +709,6 @@ export namespace EffectFactories {
         StereoComposite,      // Stereo Split
         FrequencySplit,       // Frequency Split
         Autotune,
-        Tuner,
         Compressor,
         Convolver,
         Crusher,
@@ -722,6 +721,7 @@ export namespace EffectFactories {
         Revamp,
         StereoTool,      // Stereo Tool
         Tidal,
+        Tuner,
         NeuralAmp,       // Tone3000
         Vocoder,
         Waveshaper,

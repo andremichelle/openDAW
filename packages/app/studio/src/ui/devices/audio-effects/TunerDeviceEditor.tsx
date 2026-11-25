@@ -22,17 +22,18 @@ export const TunerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const {project} = service
     const {editing} = project
     const {box} = adapter
+    const {reference} = adapter.namedParameter
     const canvas: HTMLCanvasElement = <canvas/>
     const state = new TunerViewState(box.historyCenter.getValue(), box.historySpan.getValue())
     const renderer = new TunerRenderer(state)
     const pending: {timer: Optional<number>} = {timer: undefined}
     const range = (): TunerRange => ({center: box.historyCenter.getValue(), span: box.historySpan.getValue()})
     const update = () => state.update(performance.now(), box.enabled.getValue(),
-        box.reference.getValue(), box.autoFollow.getValue(), range())
+        reference.getControlledValue(), box.autoFollow.getValue(), range())
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         update()
         renderer.paint(painter, performance.now(), box.view.getValue() === 1, box.strobe.getValue(),
-            box.showFrequency.getValue(), box.reference.getValue())
+            box.showFrequency.getValue(), reference.getControlledValue())
     }))
     const refresh = () => {
         update()
@@ -48,7 +49,8 @@ export const TunerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         project.liveStreamReceiver.subscribeFloats(adapter.address.append(0), values => {
             if (state.receive(values, performance.now())) {refresh()}
         }),
-        ...[box.enabled, box.reference, box.view, box.showFrequency, box.strobe,
+        reference.subscribe(refresh),
+        ...[box.enabled, box.view, box.showFrequency, box.strobe,
             box.autoFollow, box.historyCenter, box.historySpan].map(field => field.subscribe(refresh)),
         Dragging.attach(canvas, event => {
             if (box.view.getValue() !== 1) {return Option.None}

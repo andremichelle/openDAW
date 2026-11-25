@@ -12,11 +12,13 @@ export const TunerLayout = Object.freeze({
     maxKeyFont: 18, keyFontRatio: 0.65, centsLimit: 50, tickStep: 10
 })
 
-export const fitTunerCanvas = (width: number, height: number) => {
-    const scale = Math.min(width / TunerLayout.width, height / TunerLayout.height)
-    return {scale, x: (width - TunerLayout.width * scale) / 2, y: (height - TunerLayout.height * scale) / 2}
-}
+export namespace TunerCanvasLayout {
+    export const fit = (width: number, height: number) => {
+        const scale = Math.min(width / TunerLayout.width, height / TunerLayout.height)
+        return {scale, x: (width - TunerLayout.width * scale) / 2, y: (height - TunerLayout.height * scale) / 2}
+    }
 
-export const tunerMeterX = (cents: number) => TunerLayout.center
-    + clamp(cents, -TunerLayout.centsLimit, TunerLayout.centsLimit)
-    * (TunerLayout.right - TunerLayout.left) / (2 * TunerLayout.centsLimit)
+    export const meterX = (cents: number) => TunerLayout.center
+        + clamp(cents, -TunerLayout.centsLimit, TunerLayout.centsLimit)
+        * (TunerLayout.right - TunerLayout.left) / (2 * TunerLayout.centsLimit)
+}

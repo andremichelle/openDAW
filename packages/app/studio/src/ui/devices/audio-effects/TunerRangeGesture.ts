@@ -1,5 +1,5 @@
-import {clamp, isDefined, Procedure} from "@opendaw/lib-std"
-import {fitTunerCanvas, TunerLayout} from "./TunerCanvasLayout"
+import {clamp, isAbsent, isDefined, Procedure} from "@opendaw/lib-std"
+import {TunerCanvasLayout, TunerLayout} from "./TunerCanvasLayout"
 import {TunerRange, TunerViewState} from "./TunerViewState"
 
 export class TunerRangeGesture {
@@ -12,7 +12,7 @@ export class TunerRangeGesture {
     constructor(state: TunerViewState, width: number, height: number, commit: Procedure<TunerRange>) {
         this.#state = state
         this.#range = {center: state.center, span: state.span}
-        const {scale} = fitTunerCanvas(width, height)
+        const {scale} = TunerCanvasLayout.fit(width, height)
         this.#width = (TunerLayout.historyRight - TunerLayout.left) * scale
         this.#height = TunerLayout.historyHeight * scale
         this.#commit = commit
@@ -20,6 +20,7 @@ export class TunerRangeGesture {
 
     move(horizontal: number, vertical: number): void {
         if (this.#width <= 0 || this.#height <= 0) {return}
+        if (isAbsent(this.#state.preview) && Math.hypot(horizontal, vertical) < 3) {return}
         this.#state.preview = {
             center: clamp(this.#range.center + vertical / this.#height * this.#range.span, 12, 120),
             span: clamp(this.#range.span * Math.exp(horizontal / this.#width * 2), 2, 24)

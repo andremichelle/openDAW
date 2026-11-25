@@ -19,6 +19,15 @@ describe("tuner range gesture", () => {
         expect([state.center, state.span]).toEqual([69, 6])
         expect(commits).toEqual([])
     })
+    it("ignores a click with a tiny pointer jitter", () => {
+        const state = new TunerViewState(69, 6)
+        const commits: Array<number> = []
+        const gesture = new TunerRangeGesture(state, 480, 240, range => commits.push(range.center))
+        gesture.move(1, -2)
+        expect(state.preview).toBeUndefined()
+        gesture.approve()
+        expect(commits).toEqual([])
+    })
     it("previews all movements and commits pan, zoom and Manual in a single undo step", () => {
         const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
             ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
