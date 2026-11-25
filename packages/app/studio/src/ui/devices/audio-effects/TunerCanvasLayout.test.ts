@@ -36,12 +36,12 @@ describe("tuner display proportions", () => {
             expect(rowPixels).toBeCloseTo(14)
         }
     })
-    it("draws every key row one css px shorter than the stored range gives", () => {
+    it("draws every key row two css px shorter than the stored range gives", () => {
         for (const ratio of [1, 2]) {
             const frame = TunerCanvasLayout.fit(328 * ratio, 132 * ratio, ratio)
             const rowPixels = (span: number) => 180 / span / frame.pixel
             for (const span of [4, 6, 8]) {
-                expect(rowPixels(TunerCanvasLayout.visibleSpan(frame, span))).toBeCloseTo(rowPixels(span) - 1)
+                expect(rowPixels(TunerCanvasLayout.visibleSpan(frame, span))).toBeCloseTo(rowPixels(span) - 2)
             }
         }
     })
