@@ -35,6 +35,7 @@ first draft to a design ready for production. Every rule below came from a concr
 4. Make the whole column of a toggle clickable, its name included, so the hit area is not just the 18px box.
 5. Controls that make no sense in the current state are disabled. When Chord Keys follows the project key, Root and
    Scale are disabled and show the followed key.
+6. A radio group with text options has no frame. The active option is coloured, the others stay plain text (Tuner).
 
 ## 4. Displays
 
@@ -44,6 +45,10 @@ first draft to a design ready for production. Every rule below came from a concr
 3. Use the colours of the studio keyboard (`DevicePiano`): gray white keys, black black keys, the device accent for
    active keys. Dimmed keys have no contrast.
 4. A display needs no outline of its own when it sits directly on the device. Round its corners by 2px.
+5. A display fills the width of the device and its edges line up with the control row. Never keep a fixed aspect
+   ratio that leaves empty space at the sides or at the bottom.
+6. Text in a canvas is sized in CSS px (times `devicePixelRatio`), never scaled with the drawing. Small labels match
+   the 9px of the controls. When labels get too dense, show fewer of them instead of shrinking them.
 
 ## 5. Labels and text
 
