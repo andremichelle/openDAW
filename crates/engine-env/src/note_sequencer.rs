@@ -99,7 +99,7 @@ impl NoteSequencer {
             raw_notes: Vec::new(),
             audition_queue: Vec::new(),
             audition_retainer: EventSpanRetainer::new(),
-            random: Decisions {random: HostRandom::new(), winners: Vec::with_capacity(64), members: Vec::with_capacity(256)},
+            random: Decisions {random: HostRandom::new(), winners: Vec::with_capacity(256), members: Vec::with_capacity(256)},
             next_id: 0,
             truncate_at_region_end: Rc::new(Cell::new(false))
         }
@@ -373,6 +373,18 @@ fn plays(decisions: &mut Decisions, notes: &EventCollection<NoteEvent>, note: &N
     }
 }
 
+// whether the note, or one of its repeated parts, starts inside the window
+fn sounds_in(note: &NoteEvent, audible: (f64, f64)) -> bool {
+    let inside = |position: f64| position >= audible.0 && position < audible.1;
+    if note.play_count <= 1 || note.position >= audible.0 {
+        return inside(note.position);
+    }
+    let count = note.play_count as f64;
+    (0..note.play_count).map(|index| curve_func(index as f64 / count, note.play_curve as f64) * note.duration)
+        .take_while(|offset| *offset < note.duration)
+        .any(|offset| inside(note.position + offset))
+}
+
 struct Decisions {
     random: HostRandom,
     winners: Vec<(u64, u64, usize, (u64, u64), u64)>, // group, pass, collection, audible window, winner of the current block
@@ -392,8 +404,7 @@ impl Decisions {
         self.members.clear();
         self.members.extend(notes.as_slice().iter()
             .filter(|member| member.group.is_some_and(|member_group| member_group.key == group)
-                && member.position < audible.1
-                && (member.position >= audible.0 || (member.play_count > 1 && member.position + member.duration > audible.0)))
+                && sounds_in(member, audible))
             .map(|member| (member.position, member.pitch, member.key)));
         self.members.sort_unstable_by(|first, second|
             first.0.total_cmp(&second.0).then(first.1.cmp(&second.1)).then(first.2.cmp(&second.2)));

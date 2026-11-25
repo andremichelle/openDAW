@@ -343,6 +343,25 @@ fn play_one_keeps_a_ratchet_member_that_starts_before_the_region_but_repeats_ins
 }
 
 #[test]
+fn play_one_never_picks_a_ratchet_whose_parts_all_start_before_the_region() {
+    let mut ratchet = NoteEvent::new(0.0, 100.0, 60, 0.0, 1.0);
+    ratchet.key = 10;
+    ratchet.play_count = 4;
+    ratchet.group = Some(group(100.0, true));
+    let mut other = NoteEvent::new(85.0, 10.0, 64, 0.0, 1.0);
+    other.key = 11;
+    other.group = Some(group(100.0, true));
+    for seed in 0..40 {
+        // the parts start at 0, 25, 50 and 75, the region starts at 80
+        let region = NoteRegion {position: 80.0, duration: 20.0, loop_offset: 80.0, loop_duration: 100.0, mute: false, groove: None};
+        let mut trimmed = sequencer(region, &[ratchet, other]);
+        trimmed.bind_seed(Rc::new(Cell::new(seed)));
+        let events = pull(&mut trimmed, 0.0, 100.0);
+        assert_eq!(starts_of(&events, 64), vec![85.0], "seed {seed}: the only member with a part inside plays");
+    }
+}
+
+#[test]
 fn repeat_length_and_velocity_fade_shape_the_parts() {
     let region = NoteRegion {position: 0.0, duration: 960.0, loop_offset: 0.0, loop_duration: 960.0, mute: false, groove: None};
     let mut note = NoteEvent::new(0.0, 160.0, 60, 0.0, 0.9);
