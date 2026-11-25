@@ -86,22 +86,20 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
             repairedAny = true
             continue
         }
+        // --- Exclusive target overflow (a box or a field): keep the lowest-addressed incoming pointer, clear
+        // the rest. If a cleared pointer was mandatory its owner is now unsatisfied, the rule above deletes it. ---
+        const overflowing = boxGraph.edges().overflowingExclusives()
+        if (overflowing.length > 0) {
+            const incoming = overflowing[0].pointerHub.incoming().slice().sort(byAddress)
+            for (let index = 1; index < incoming.length; index++) {incoming[index].defer()}
+            changed = true
+            repairedAny = true
+            continue
+        }
         // Stable, client-independent iteration order: the graph keeps its boxes sorted by uuid.
         const boxes = boxGraph.boxes().slice()
         for (const box of boxes) {
             if (!box.isAttached()) {continue}
-            // --- Exclusive target overflow: keep the lowest-addressed incoming pointer, drop the rest. ---
-            if (box.pointerRules.exclusive) {
-                const incoming = box.incomingEdges().slice().sort(byAddress)
-                if (incoming.length > 1) {
-                    // Just clear the edge. If the pointer was mandatory its owner is now unsatisfied, and
-                    // the rule above deletes it on the next round.
-                    for (let index = 1; index < incoming.length; index++) {incoming[index].defer()}
-                    changed = true
-                    repairedAny = true
-                    break // graph mutated: restart the scan from a fresh, ordered snapshot
-                }
-            }
             // --- A merge can take an instrument's capture away: give it back, deterministically. ---
             if (isInstrumentWithoutCapture(box)) {
                 if (!AudioUnitCapture.restore(boxGraph, box)) {box.delete()}

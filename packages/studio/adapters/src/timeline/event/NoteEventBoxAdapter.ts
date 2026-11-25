@@ -149,9 +149,14 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     computeCurveValue(ratio: unitValue): unitValue {return NoteEvent.curveFunc(ratio, this.playCurve)}
     canConsolidate(): boolean {return this.playCount > 1}
     consolidate(): ReadonlyArray<NoteEventBoxAdapter> {
-        const {playCount, repeatLength, velocityFade} = this
+        const {playCount, repeatLength, velocityFade, chance, group: sourceGroup} = this
+        const playOne = sourceGroup.mapOr(group => group.mode.getValue() === NoteEventFeatures.GroupMode.PlayOne, false)
         const groups = NoteEventFeatures.createGroupMapping()
-        this.group.ifSome(group => groups.add({source: group.address.uuid, target: group}))
+        sourceGroup.ifSome(group => {
+            if (!playOne || group.pointerHub.incoming().length === 1) {
+                groups.add({source: group.address.uuid, target: group})
+            }
+        })
         const events = this.collection.unwrap("collection").box.events
         const adapters = Arrays.create((index) => {
             const a = Math.floor(this.computeCurveValue(index / playCount) * this.duration)
@@ -166,6 +171,11 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
             })
         }, playCount)
         this.#box.delete()
+        if (playOne) {
+            adapters[0].group.ifSome(group => group.mode.setValue(NoteEventFeatures.GroupMode.PlayAll))
+        } else if (sourceGroup.isEmpty() && chance < 100) {
+            NoteEventFeatures.group(adapters.map(adapter => adapter.box), NoteEventFeatures.GroupMode.PlayAll)
+        }
         return adapters
     }
 }

@@ -248,6 +248,31 @@ fn play_one_only_picks_members_the_pass_plays() {
 }
 
 #[test]
+fn play_one_never_picks_a_member_the_region_trims_away() {
+    let notes: Vec<NoteEvent> = [(0.0, 60), (50.0, 64)].iter().enumerate().map(|(index, (position, pitch))| {
+        let mut note = NoteEvent::new(*position, 10.0, *pitch, 0.0, 1.0);
+        note.key = index as u64 + 10;
+        note.group = Some(group(100.0, true));
+        note
+    }).collect();
+    for seed in 0..40 {
+        // the end is trimmed: only the member at 0 sounds
+        let region = NoteRegion {position: 0.0, duration: 40.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
+        let mut trimmed_end = sequencer(region, &notes);
+        trimmed_end.bind_seed(Rc::new(Cell::new(seed)));
+        let events = pull(&mut trimmed_end, 0.0, 100.0);
+        assert_eq!(starts_of(&events, 60).len(), 1, "seed {seed}: the end trim leaves one member, it plays");
+        // the start is trimmed: the first pass holds only the member at 50, the second only the member at 0
+        let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 30.0, loop_duration: 100.0, mute: false, groove: None};
+        let mut trimmed_start = sequencer(region, &notes);
+        trimmed_start.bind_seed(Rc::new(Cell::new(seed)));
+        let events = pull(&mut trimmed_start, 0.0, 100.0);
+        assert_eq!(starts_of(&events, 64), vec![20.0], "seed {seed}: the first pass plays its only member");
+        assert_eq!(starts_of(&events, 60), vec![70.0], "seed {seed}: the second pass plays its only member");
+    }
+}
+
+#[test]
 fn repeat_length_and_velocity_fade_shape_the_parts() {
     let region = NoteRegion {position: 0.0, duration: 960.0, loop_offset: 0.0, loop_duration: 960.0, mute: false, groove: None};
     let mut note = NoteEvent::new(0.0, 160.0, 60, 0.0, 0.9);

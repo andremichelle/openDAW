@@ -201,6 +201,50 @@ describe("copying a note keeps all of its settings", () => {
         expect(group.pointerHub.incoming().length).toBe(Source.playCount)
         project.terminate()
     })
+    it("Consolidating an ungrouped note with chance groups its hits, so they still decide once", async () => {
+        const {project, note} = await buildProject()
+        const hits = project.editing.modify(() => note.consolidate()).unwrap("modify")
+        const group = hits[0].group.unwrap("group")
+        hits.forEach(hit => expect(hit.group.unwrap("group")).toBe(group))
+        expect(group.mode.getValue()).toBe(NoteEventFeatures.GroupMode.PlayAll)
+        expect(group.chance.getValue()).toBe(Source.chance)
+        hits.forEach(hit => expect(NoteEventFeatures.chanceBox(hit.box).isEmpty()).toBe(true))
+        project.terminate()
+    })
+    it("Consolidating an ungrouped note at full chance leaves its hits ungrouped", async () => {
+        const {project, note} = await buildProject()
+        project.editing.modify(() => NoteEventFeatures.writeChance(note.box, 100))
+        const hits = project.editing.modify(() => note.consolidate()).unwrap("modify")
+        hits.forEach(hit => expect(hit.group.isEmpty()).toBe(true))
+        project.terminate()
+    })
+    it("Consolidating the only member of a Play One group plays all its hits", async () => {
+        const {project, note} = await buildProject()
+        const group = project.editing.modify(() =>
+            NoteEventFeatures.group([note.box], NoteEventFeatures.GroupMode.PlayOne).unwrap("group")).unwrap("modify")
+        const hits = project.editing.modify(() => note.consolidate()).unwrap("modify")
+        hits.forEach(hit => expect(hit.group.unwrap("group")).toBe(group))
+        expect(group.mode.getValue()).toBe(NoteEventFeatures.GroupMode.PlayAll)
+        project.terminate()
+    })
+    it("Consolidating one of several Play One members gives its hits a Play All group of their own", async () => {
+        const {project, note} = await buildProject()
+        const {group, other} = project.editing.modify(() => {
+            const other = note.copyTo({position: note.position + Bar, playCount: 1})
+            const group = NoteEventFeatures.group([note.box, other.box], NoteEventFeatures.GroupMode.PlayOne).unwrap("group")
+            group.chance.setValue(30)
+            return {group, other}
+        }).unwrap("modify")
+        const hits = project.editing.modify(() => note.consolidate()).unwrap("modify")
+        const own = hits[0].group.unwrap("group")
+        expect(own).not.toBe(group)
+        hits.forEach(hit => expect(hit.group.unwrap("group")).toBe(own))
+        expect(own.mode.getValue()).toBe(NoteEventFeatures.GroupMode.PlayAll)
+        expect(own.chance.getValue()).toBe(30)
+        expect(other.group.unwrap("other group")).toBe(group)
+        expect(group.mode.getValue()).toBe(NoteEventFeatures.GroupMode.PlayOne)
+        project.terminate()
+    })
     it("Length and velocity fade shape the consolidated hits", async () => {
         const {project, note} = await buildProject()
         project.editing.modify(() => {

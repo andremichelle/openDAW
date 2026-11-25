@@ -1,13 +1,24 @@
 import css from "./PropertyTable.sass?inline"
-import {Arrays, Editing, isNotNull, Lifecycle, Nullable, Option, Selection, Subscription, Terminable} from "@opendaw/lib-std"
-import {Propagation} from "@opendaw/lib-box"
+import {
+    Arrays,
+    Editing,
+    int,
+    isDefined,
+    isNotNull,
+    Lifecycle,
+    Nullable,
+    Option,
+    Selection,
+    Subscription,
+    Terminable
+} from "@opendaw/lib-std"
 import {deferNextFrame, Html} from "@opendaw/lib-dom"
 import {TimeCodeInput} from "@/ui/components/TimeCodeInput.tsx"
 import {PropertyParameters} from "@/ui/timeline/editors/notes/property/PropertyParameters.ts"
 import {NumberInput} from "@/ui/components/NumberInput.tsx"
 import {createElement, Inject} from "@opendaw/lib-jsx"
 import {MidiKeys} from "@opendaw/lib-dsp"
-import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
+import {NoteEventBoxAdapter, NoteEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
@@ -169,7 +180,8 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
         }
     }))
     let ignore = false
-    const noteSubscriptions = new Map<NoteEventBoxAdapter, Subscription>()
+    const noteCollections = new Map<NoteEventBoxAdapter, NoteEventCollectionBoxAdapter>()
+    const collectionWatches = new Map<NoteEventCollectionBoxAdapter, { count: int, subscription: Subscription }>()
     lifecycle.ownAll(...cells
             .map(({key}) => {
                 const {parameter, write} = PropertyParameters[key]
@@ -182,13 +194,29 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
             }),
         selection.catchupAndSubscribe({
             onSelected: (adapter: NoteEventBoxAdapter) => {
-                noteSubscriptions.set(adapter, adapter.box.subscribe(Propagation.Children, updateState.request))
+                adapter.collection.ifSome(collection => {
+                    noteCollections.set(adapter, collection)
+                    const watch = collectionWatches.get(collection)
+                    if (isDefined(watch)) {
+                        watch.count++
+                    } else {
+                        collectionWatches.set(collection,
+                            {count: 1, subscription: collection.subscribeChange(updateState.request)})
+                    }
+                })
                 focus = adapter
                 updateState.request()
             },
             onDeselected: (adapter: NoteEventBoxAdapter) => {
-                noteSubscriptions.get(adapter)?.terminate()
-                noteSubscriptions.delete(adapter)
+                const collection = noteCollections.get(adapter)
+                noteCollections.delete(adapter)
+                if (isDefined(collection)) {
+                    const watch = collectionWatches.get(collection)
+                    if (isDefined(watch) && --watch.count === 0) {
+                        watch.subscription.terminate()
+                        collectionWatches.delete(collection)
+                    }
+                }
                 if (focus === adapter) {focus = null}
                 updateState.request()
             }
@@ -196,8 +224,9 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
         modifyContext.subscribeUpdate(updateState.request),
         editing.subscribe(updateState.request),
         Terminable.create(() => {
-            noteSubscriptions.forEach(subscription => subscription.terminate())
-            noteSubscriptions.clear()
+            collectionWatches.forEach(({subscription}) => subscription.terminate())
+            collectionWatches.clear()
+            noteCollections.clear()
         })
     )
     updateState.immediate()

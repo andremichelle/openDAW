@@ -99,7 +99,7 @@ impl NoteSequencer {
             raw_notes: Vec::new(),
             audition_queue: Vec::new(),
             audition_retainer: EventSpanRetainer::new(),
-            random: Decisions {random: HostRandom::new(), winners: Vec::new(), members: Vec::new()},
+            random: Decisions {random: HostRandom::new(), winners: Vec::with_capacity(64), members: Vec::with_capacity(256)},
             next_id: 0,
             truncate_at_region_end: Rc::new(Cell::new(false))
         }
@@ -211,7 +211,8 @@ impl NoteEventSource for NoteSequencer {
                             let end = if truncate { cycle.raw_end.min(region.complete()) - cycle.raw_start } else { f64::INFINITY };
                             let local_from = cycle.result_start - cycle.raw_start;
                             let local_to = cycle.result_end - cycle.raw_start;
-                            process_collection(notes, local_from, local_to, cycle.raw_start, end, region.loop_duration, retainer, random, next_id, sink);
+                            let audible = ((region.position - cycle.raw_start).max(0.0), (region.complete() - cycle.raw_start).min(region.loop_duration));
+                            process_collection(notes, local_from, local_to, cycle.raw_start, end, audible, retainer, random, next_id, sink);
                         }
                     }),
                     // A launched clip: its collection cycles at the CLIP duration (TS `#processClip`).
@@ -229,10 +230,10 @@ impl NoteEventSource for NoteSequencer {
                             let clip_end = clip_start + clip_duration;
                             let truncate_end = if truncate { clip_duration } else { f64::INFINITY };
                             if section.to > clip_end {
-                                process_collection(notes, section.from - clip_start, clip_duration, clip_start, truncate_end, clip_duration, retainer, random, next_id, sink);
-                                process_collection(notes, 0.0, section.to - clip_end, clip_end, truncate_end, clip_duration, retainer, random, next_id, sink);
+                                process_collection(notes, section.from - clip_start, clip_duration, clip_start, truncate_end, (0.0, clip_duration), retainer, random, next_id, sink);
+                                process_collection(notes, 0.0, section.to - clip_end, clip_end, truncate_end, (0.0, clip_duration), retainer, random, next_id, sink);
                             } else {
-                                process_collection(notes, section.from - clip_start, section.to - clip_start, clip_start, truncate_end, clip_duration, retainer, random, next_id, sink);
+                                process_collection(notes, section.from - clip_start, section.to - clip_start, clip_start, truncate_end, (0.0, clip_duration), retainer, random, next_id, sink);
                             }
                         });
                     }
@@ -296,11 +297,11 @@ fn quantize_floor(value: f64, interval: f64) -> f64 {
 /// collection's longest duration (a ratchet note that started before the window still repeats inside
 /// it). `delta` is also the start of the pass, so every member of a chance group decides alike.
 #[allow(clippy::too_many_arguments)]
-fn process_collection(notes: &EventCollection<NoteEvent>, local_from: f64, local_to: f64, delta: f64, end: f64, span: f64,
+fn process_collection(notes: &EventCollection<NoteEvent>, local_from: f64, local_to: f64, delta: f64, end: f64, audible: (f64, f64),
                       retainer: &mut EventSpanRetainer<RetainedNote>, random: &mut Decisions, next_id: &mut u64,
                       sink: &mut dyn FnMut(Event)) {
     for note in notes.iterate_range(local_from - notes.max_duration(), local_to) {
-        if !plays(random, notes, note, delta + note.position, delta, span) {
+        if !plays(random, notes, note, delta + note.position, delta, audible) {
             continue;
         }
         if note.play_count > 1 {
@@ -360,13 +361,13 @@ fn process_collection(notes: &EventCollection<NoteEvent>, local_from: f64, local
 }
 
 // an ungrouped note decides at its own start, a group once at the pass start
-fn plays(decisions: &mut Decisions, notes: &EventCollection<NoteEvent>, note: &NoteEvent, start: f64, pass: f64, span: f64) -> bool {
+fn plays(decisions: &mut Decisions, notes: &EventCollection<NoteEvent>, note: &NoteEvent, start: f64, pass: f64, audible: (f64, f64)) -> bool {
     match note.group {
         Some(group) => {
             if group.chance < 100.0 && decisions.random.value(pass, group.key, 0) * 100.0 >= group.chance as f64 {
                 return false;
             }
-            !group.play_one || decisions.winner(notes, group.key, pass, span) == note.key
+            !group.play_one || decisions.winner(notes, group.key, pass, audible) == note.key
         }
         None => note.chance >= 100.0 || decisions.random.value(start, note.key, 0) * 100.0 < note.chance as f64
     }
@@ -379,8 +380,8 @@ struct Decisions {
 }
 
 impl Decisions {
-    // the members inside the pass, ordered by position, pitch and key, the pick indexes into that order
-    fn winner(&mut self, notes: &EventCollection<NoteEvent>, group: u64, pass: f64, span: f64) -> u64 {
+    // the members the pass can play, ordered by position, pitch and key, the pick indexes into that order
+    fn winner(&mut self, notes: &EventCollection<NoteEvent>, group: u64, pass: f64, audible: (f64, f64)) -> u64 {
         let pass_bits = pass.to_bits();
         let collection = notes.as_slice().as_ptr() as usize;
         if let Some(entry) = self.winners.iter()
@@ -390,7 +391,7 @@ impl Decisions {
         self.members.clear();
         self.members.extend(notes.as_slice().iter()
             .filter(|member| member.group.is_some_and(|member_group| member_group.key == group)
-                && member.position >= 0.0 && member.position < span)
+                && member.position >= audible.0 && member.position < audible.1)
             .map(|member| (member.position, member.pitch, member.key)));
         self.members.sort_unstable_by(|first, second|
             first.0.total_cmp(&second.0).then(first.1.cmp(&second.1)).then(first.2.cmp(&second.2)));
@@ -430,7 +431,7 @@ fn process_grooved(notes: &EventCollection<NoteEvent>, grooved: &Grooved, from: 
         if local_from < local_to {
             let end = if *truncate {access.warp(groove, (base + length).min(*high))} else {f64::INFINITY};
             play_grooved(notes, &|position: f64| access.warp(groove, base + position), local_from, local_to, *origin,
-                *origin + base, end, length, retainer, random, next_id, sink);
+                *origin + base, end, ((*low - base).max(0.0), (*high - base).min(length)), retainer, random, next_id, sink);
         }
         base += length;
     }
@@ -438,7 +439,7 @@ fn process_grooved(notes: &EventCollection<NoteEvent>, grooved: &Grooved, from: 
 
 // One content pass of `process_grooved`: `warp` maps a content position to its grooved position after the origin
 #[allow(clippy::too_many_arguments)]
-fn play_grooved(notes: &EventCollection<NoteEvent>, warp: &dyn Fn(f64) -> f64, from: f64, to: f64, delta: f64, pass: f64, end: f64, span: f64,
+fn play_grooved(notes: &EventCollection<NoteEvent>, warp: &dyn Fn(f64) -> f64, from: f64, to: f64, delta: f64, pass: f64, end: f64, audible: (f64, f64),
                 retainer: &mut EventSpanRetainer<RetainedNote>, random: &mut Decisions, next_id: &mut u64,
                 sink: &mut dyn FnMut(Event)) {
     let mut start = |position: f64, stop: f64, note: &NoteEvent, velocity: f32| {
@@ -452,7 +453,7 @@ fn play_grooved(notes: &EventCollection<NoteEvent>, warp: &dyn Fn(f64) -> f64, f
         retainer.add_and_retain(RetainedNote {position: delta + begin, duration, id, pitch: note.pitch});
     };
     for note in notes.iterate_range(from - notes.max_duration(), to) {
-        if !plays(random, notes, note, pass + note.position, pass, span) {
+        if !plays(random, notes, note, pass + note.position, pass, audible) {
             continue;
         }
         if note.play_count > 1 {

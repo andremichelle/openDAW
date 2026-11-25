@@ -1,7 +1,17 @@
 import {describe, expect, it} from "vitest"
 import {Address, BoxGraph} from "@opendaw/lib-box"
 import {isDefined, Option, UUID} from "@opendaw/lib-std"
-import {BoxIO, BoxVisitor, SelectionBox, ValueEventBox, ValueEventCollectionBox, ZeitgeistDeviceBox} from "@opendaw/studio-boxes"
+import {
+    BoxIO,
+    BoxVisitor,
+    NoteEventBox,
+    NoteEventChanceBox,
+    NoteEventCollectionBox,
+    SelectionBox,
+    ValueEventBox,
+    ValueEventCollectionBox,
+    ZeitgeistDeviceBox
+} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {deterministicReconcile} from "./Reconcile"
 
@@ -181,4 +191,26 @@ describe("deterministicReconcile: dangling pointers", () => {
         expect(rootBox.isAttached(), "the rest is untouched").toBe(true)
     })
 
+})
+
+describe("deterministicReconcile: a field accepting one pointer", () => {
+    it("keeps one of two chance boxes two users added to the same note at the same time", () => {
+        const boxGraph = new BoxGraph<BoxIO.TypeMap>()
+        boxGraph.beginTransaction()
+        const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
+        const note = NoteEventBox.create(boxGraph, UUID.generate(), box => box.events.refer(collection.events))
+        const chances = [30, 60].map(chance => NoteEventChanceBox.create(boxGraph, UUID.generate(), box => {
+            box.event.refer(note.random)
+            box.chance.setValue(chance)
+        }))
+        boxGraph.endTransaction()
+        expect(note.random.pointerHub.size()).toBe(2)
+        expect(reconcile(boxGraph)).toBe(true)
+        expect(note.random.pointerHub.size()).toBe(1)
+        const kept = chances.filter(box => box.isAttached())
+        expect(kept.length).toBe(1)
+        expect(kept[0]).toBe([...chances].sort((a, b) => Address.Comparator(a.event.address, b.event.address))[0])
+        expect(boxGraph.edges().overflowingExclusives()).toEqual([])
+        expect(reconcile(boxGraph)).toBe(false)
+    })
 })

@@ -95,6 +95,7 @@ class Dispatcher<TARGET extends Addressable> {
                 while (--index >= 0) {
                     if (this.#monitors[index] === monitor) {
                         this.#monitors.splice(index, 1)
+                        return
                     }
                 }
             }

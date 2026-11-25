@@ -7,15 +7,6 @@ export namespace NoteEventFeatures {
 
     export type GroupMapping = SortedSet<UUID.Bytes, { source: UUID.Bytes, target: NoteEventGroupBox }>
 
-    export type Values = {
-        readonly chance: int
-        readonly group: Option<NoteEventGroupBox>
-        readonly playCount: int
-        readonly playCurve: bipolar
-        readonly repeatLength: unitValue
-        readonly velocityFade: bipolar
-    }
-
     export type CopyOptions = {
         readonly split: boolean
         readonly groups: GroupMapping
@@ -42,15 +33,6 @@ export namespace NoteEventFeatures {
         repeatBox(note).mapOr(box => box.length.getValue(), 1.0)
     export const readVelocityFade = (note: NoteEventBox): bipolar =>
         repeatBox(note).mapOr(box => box.velocityFade.getValue(), 0.0)
-
-    export const read = (note: NoteEventBox): Values => ({
-        chance: readChance(note),
-        group: groupBox(note),
-        playCount: readPlayCount(note),
-        playCurve: readPlayCurve(note),
-        repeatLength: readRepeatLength(note),
-        velocityFade: readVelocityFade(note)
-    })
 
     export const velocityGain = (fade: bipolar, index: int, count: int): unitValue => {
         const ratio = count > 1 ? index / (count - 1) : 0.0
@@ -98,7 +80,6 @@ export namespace NoteEventFeatures {
         writeRepeat(note, box => box.velocityFade.setValue(value), value === 0.0)
 
     export const clearRandom = (note: NoteEventBox): void => chanceBox(note).ifSome(box => box.delete())
-    export const clearSplit = (note: NoteEventBox): void => repeatBox(note).ifSome(box => box.delete())
 
     const collectGroups = (notes: ReadonlyArray<NoteEventBox>): ReadonlyArray<NoteEventGroupBox> => {
         const groups = UUID.newSet<NoteEventGroupBox>(group => group.address.uuid)

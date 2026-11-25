@@ -70,9 +70,11 @@ describe("NoteEvent feature boxes", () => {
         expect(loaded.pitch.getValue()).toBe(42)
         expect(loaded.velocity.getValue()).toBe(0.5)
         expect(loaded.cent.getValue()).toBe(25)
-        expect(NoteEventFeatures.read(loaded)).toEqual({
-            chance: 50, group: Option.None, playCount: 4, playCurve: 0.5, repeatLength: 0.25, velocityFade: -0.5
-        })
+        expect({
+            chance: NoteEventFeatures.readChance(loaded), group: NoteEventFeatures.groupBox(loaded).isEmpty(),
+            playCount: NoteEventFeatures.readPlayCount(loaded), playCurve: NoteEventFeatures.readPlayCurve(loaded),
+            repeatLength: NoteEventFeatures.readRepeatLength(loaded), velocityFade: NoteEventFeatures.readVelocityFade(loaded)
+        }).toEqual({chance: 50, group: true, playCount: 4, playCurve: 0.5, repeatLength: 0.25, velocityFade: -0.5})
     })
     it("keeps chance, group and repeat boxes through save and load", () => {
         const {boxGraph, collection} = buildSkeleton()
