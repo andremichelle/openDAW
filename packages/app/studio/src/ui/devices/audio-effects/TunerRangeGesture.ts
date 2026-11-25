@@ -7,6 +7,7 @@ export class TunerRangeGesture {
     readonly #range: TunerRange
     readonly #width: number
     readonly #height: number
+    readonly #maxSpan: number
     readonly #commit: Procedure<TunerRange>
 
     constructor(state: TunerViewState, width: number, height: number, commit: Procedure<TunerRange>) {
@@ -15,6 +16,7 @@ export class TunerRangeGesture {
         const frame = TunerCanvasLayout.fit(width, height)
         this.#width = (frame.historyRight - frame.left) * frame.scale
         this.#height = TunerLayout.historyHeight * frame.scale
+        this.#maxSpan = Math.min(24, frame.maxSpan)
         this.#commit = commit
     }
 
@@ -23,7 +25,7 @@ export class TunerRangeGesture {
         if (isAbsent(this.#state.preview) && Math.hypot(horizontal, vertical) < 3) {return}
         this.#state.preview = {
             center: clamp(this.#range.center + vertical / this.#height * this.#range.span, 12, 120),
-            span: clamp(this.#range.span * Math.exp(horizontal / this.#width * 2), 2, 24)
+            span: clamp(Math.min(this.#range.span, this.#maxSpan) * Math.exp(horizontal / this.#width * 2), 2, this.#maxSpan)
         }
     }
 

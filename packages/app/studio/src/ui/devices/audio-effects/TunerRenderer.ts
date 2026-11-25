@@ -31,7 +31,8 @@ export class TunerRenderer {
     #history(now: number): void {
         const context = this.#context
         if (isAbsent(context)) {return}
-        const {center, span, display, visible} = this.#state
+        const {center, display, visible} = this.#state
+        const span = Math.min(this.#state.span, this.#frame.maxSpan)
         const font = this.#frame.keyFont
         const rows = TunerLayout.historyHeight / span / font
         context.save()

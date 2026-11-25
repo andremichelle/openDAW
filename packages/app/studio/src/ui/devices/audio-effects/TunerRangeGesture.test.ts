@@ -3,13 +3,14 @@ import {BoxEditing} from "@opendaw/lib-box"
 import {UUID} from "@opendaw/lib-std"
 import {AudioUnitBox, TunerDeviceBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {TunerCanvasLayout} from "./TunerCanvasLayout"
 import {TunerRangeGesture} from "./TunerRangeGesture"
 import {TunerViewState} from "./TunerViewState"
 
 describe("tuner range gesture", () => {
     it.each([[0, 240], [480, 0], [0, 0]])("does not preview or commit a canvas sized %s by %s", (width, height) => {
         const state = new TunerViewState(69, 6)
-        const commits: number[] = []
+        const commits: Array<number> = []
         const gesture = new TunerRangeGesture(state, width, height, range => commits.push(range.center))
         for (const displacement of [0, 10, -10]) {
             gesture.move(displacement, displacement)
@@ -63,10 +64,10 @@ describe("tuner range gesture", () => {
     })
     it("cancels preview without committing and clamps extreme pan/zoom", () => {
         const state = new TunerViewState(69, 6)
-        const commits: number[] = []
+        const commits: Array<number> = []
         const gesture = new TunerRangeGesture(state, 480, 240, range => commits.push(range.center))
         gesture.move(10000, -10000)
-        expect(state.preview).toEqual({center: 12, span: 24})
+        expect(state.preview).toEqual({center: 12, span: TunerCanvasLayout.fit(480, 240).maxSpan})
         gesture.cancel()
         expect(state.preview).toBeUndefined()
         expect([state.center, state.span]).toEqual([69, 6])

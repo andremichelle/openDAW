@@ -5,7 +5,7 @@ export const TunerLayout = Object.freeze({
     historyTop: 4, historyBottom: 184, historyCenter: 94, historyHeight: 180,
     keyWidth: 44, keyGap: 6,
     meterY: 86, tickTop: 81, tickBottom: 91, zeroTop: 72, zeroBottom: 106, zeroWidth: 3,
-    scaleLabelY: 133, labelPixels: 9, keyPixels: 10, readoutPixels: 12,
+    scaleLabelY: 133, labelPixels: 9, keyPixels: 10, readoutPixels: 12, minRowPixels: 14,
     triangleTip: 79, triangleTop: 59, triangleHalfWidth: 11,
     strobeTop: 53, strobeBottom: 66, strobeCount: 20, strobeWidth: 4,
     readoutY: 207, traceWidth: 2, edgeFade: 14,
@@ -16,7 +16,7 @@ export namespace TunerCanvasLayout {
     export type Frame = {
         scale: number, y: number, left: number, right: number, center: number,
         meterLeft: number, meterRight: number, historyRight: number, keyLeft: number, keyCenter: number,
-        labelFont: number, keyFont: number, readoutFont: number
+        labelFont: number, keyFont: number, readoutFont: number, maxSpan: number
     }
 
     export const fit = (width: number, height: number, devicePixelRatio: number = 1): Frame => {
@@ -30,7 +30,8 @@ export namespace TunerCanvasLayout {
             historyRight: keyLeft - TunerLayout.keyGap, keyLeft, keyCenter: keyLeft + TunerLayout.keyWidth / 2,
             labelFont: TunerLayout.labelPixels * pixel,
             keyFont: TunerLayout.keyPixels * pixel,
-            readoutFont: TunerLayout.readoutPixels * pixel
+            readoutFont: TunerLayout.readoutPixels * pixel,
+            maxSpan: Math.max(2, TunerLayout.historyHeight / (TunerLayout.minRowPixels * pixel))
         }
     }
 

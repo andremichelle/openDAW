@@ -29,4 +29,11 @@ describe("tuner display proportions", () => {
             expect(frame.readoutFont * frame.scale / ratio).toBeCloseTo(12)
         }
     })
+    it("limits the visible range so a key row stays at least 14 css px tall", () => {
+        for (const ratio of [1, 2]) {
+            const frame = TunerCanvasLayout.fit(328 * ratio, 132 * ratio, ratio)
+            const rowPixels = 180 / frame.maxSpan * frame.scale / ratio
+            expect(rowPixels).toBeCloseTo(14)
+        }
+    })
 })
