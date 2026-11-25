@@ -156,6 +156,14 @@
         "build"
       ],
       "cache": false
+    },
+    "@opendaw/studio-core-wasm#test:rust": {
+      "inputs": [
+        "cargo-env.sh",
+        "$TURBO_ROOT$/crates/**",
+        "!$TURBO_ROOT$/crates/target/**"
+      ],
+      "outputs": []
     }
   }
 }

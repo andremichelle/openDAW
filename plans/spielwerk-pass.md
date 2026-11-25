@@ -148,7 +148,7 @@ suppression.
 `packages/app/wasm/test/spielwerk-automation-parity.test.ts`: its `SPIELWERK` script gets `// @no-pass` so the
 assertions stay about the transform.
 
-The .od loading tests (`freeze-pipeline`, `freeze-80s-full`, `live-meter-teardown-fuzz`, `load-303-project`)
+The .od loading tests (`freeze-pipeline`, `freeze-80s-full-slow`, `live-meter-teardown-fuzz-slow`, `load-303-project`)
 carry stored scripts that will now double. `load-303-project` only asserts peak greater than 0.01 and the
 freeze tests compare two renders through the same path, so they are expected to stay green. Run them and check
 rather than assume.

@@ -27,9 +27,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.ts\"",
     "test:rust": ". ./cargo-env.sh && cargo test --manifest-path ../../../crates/Cargo.toml --workspace",
-    "test:vitest": "vitest run --exclude \"**/*-bench.test.ts\"",
+    "test:vitest": "vitest run --exclude \"**/*-bench.test.ts\" --exclude \"**/*-slow.test.ts\"",
     "test:bench": "vitest run bench.test",
-    "test": "npm run test:rust && npm run test:vitest",
+    "test:slow": "vitest run slow.test",
+    "test": "npm run test:vitest",
     "clean": "rm -rf dist"
   },
   "dependencies": {

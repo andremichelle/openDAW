@@ -305,40 +305,25 @@ fn process_collection(notes: &EventCollection<NoteEvent>, local_from: f64, local
             continue;
         }
         if note.play_count > 1 {
-            let duration = note.duration;
-            let count = note.play_count as f64;
-            let curve = note.play_curve as f64;
-            let search_start = inverse_curve_func((local_from - note.position) / duration, curve);
-            let search_limit = inverse_curve_func((local_to - note.position) / duration, curve);
-            let mut search_index = math::floor(search_start * count);
-            let mut search_position = search_index / count;
-            while search_position < search_limit {
-                if search_position >= search_start {
-                    let a = curve_func(search_position, curve) * duration;
-                    if a >= duration {
-                        break;
-                    }
-                    let b = curve_func(search_position + 1.0 / count, curve) * duration;
-                    let position = delta + note.position + a;
-                    let ratchet = (b - a) * note.repeat_length as f64;
-                    let id = {
-                        let value = *next_id;
-                        *next_id += 1;
-                        value
-                    };
-                    sink(Event::NoteStart {
-                        id,
-                        position,
-                        duration: ratchet,
-                        pitch: note.pitch,
-                        cent: note.cent,
-                        velocity: note.velocity * velocity_gain(note.velocity_fade, search_index as i32, note.play_count)
-                    });
-                    retainer.add_and_retain(RetainedNote {position, duration: ratchet, id, pitch: note.pitch});
-                }
-                search_index += 1.0;
-                search_position = search_index / count;
-            }
+            ratchet_parts(note, local_from, local_to, &mut |index, a, b| {
+                let position = delta + note.position + a;
+                let ratchet = (b - a) * note.repeat_length as f64;
+                let id = {
+                    let value = *next_id;
+                    *next_id += 1;
+                    value
+                };
+                sink(Event::NoteStart {
+                    id,
+                    position,
+                    duration: ratchet,
+                    pitch: note.pitch,
+                    cent: note.cent,
+                    velocity: note.velocity * velocity_gain(note.velocity_fade, index, note.play_count)
+                });
+                retainer.add_and_retain(RetainedNote {position, duration: ratchet, id, pitch: note.pitch});
+                true
+            });
         } else if local_from <= note.position && note.position < local_to {
             let global = delta + note.position;
             let duration = note.duration.min(end - note.position);
@@ -373,16 +358,45 @@ fn plays(decisions: &mut Decisions, notes: &EventCollection<NoteEvent>, note: &N
     }
 }
 
-// whether the note, or one of its repeated parts, starts inside the window
-fn sounds_in(note: &NoteEvent, audible: (f64, f64)) -> bool {
-    let inside = |position: f64| position >= audible.0 && position < audible.1;
-    if note.play_count <= 1 || note.position >= audible.0 {
-        return inside(note.position);
+// visits the repeated parts starting in [from, to) with their index and start and end offset, until visit returns false
+fn ratchet_parts(note: &NoteEvent, from: f64, to: f64, visit: &mut dyn FnMut(i32, f64, f64) -> bool) {
+    let duration = note.duration;
+    if duration <= 0.0 {
+        return;
     }
     let count = note.play_count as f64;
-    (0..note.play_count).map(|index| curve_func(index as f64 / count, note.play_curve as f64) * note.duration)
-        .take_while(|offset| *offset < note.duration)
-        .any(|offset| inside(note.position + offset))
+    let curve = note.play_curve as f64;
+    let search_start = inverse_curve_func((from - note.position) / duration, curve);
+    let search_limit = inverse_curve_func((to - note.position) / duration, curve);
+    let mut search_index = math::floor(search_start * count);
+    let mut search_position = search_index / count;
+    while search_position < search_limit {
+        if search_position >= search_start {
+            let a = curve_func(search_position, curve) * duration;
+            if a >= duration {
+                return;
+            }
+            let b = curve_func(search_position + 1.0 / count, curve) * duration;
+            if !visit(search_index as i32, a, b) {
+                return;
+            }
+        }
+        search_index += 1.0;
+        search_position = search_index / count;
+    }
+}
+
+// whether the note, or one of its repeated parts, starts inside the window, exactly as the sequencer plays them
+fn sounds_in(note: &NoteEvent, audible: (f64, f64)) -> bool {
+    if note.play_count <= 1 {
+        return audible.0 <= note.position && note.position < audible.1;
+    }
+    let mut sounds = false;
+    ratchet_parts(note, audible.0, audible.1, &mut |_, _, _| {
+        sounds = true;
+        false
+    });
+    sounds
 }
 
 struct Decisions {
@@ -470,26 +484,11 @@ fn play_grooved(notes: &EventCollection<NoteEvent>, warp: &dyn Fn(f64) -> f64, f
             continue;
         }
         if note.play_count > 1 {
-            let duration = note.duration;
-            let count = note.play_count as f64;
-            let curve = note.play_curve as f64;
-            let search_start = inverse_curve_func((from - note.position) / duration, curve);
-            let search_limit = inverse_curve_func((to - note.position) / duration, curve);
-            let mut search_index = math::floor(search_start * count);
-            let mut search_position = search_index / count;
-            while search_position < search_limit {
-                if search_position >= search_start {
-                    let a = curve_func(search_position, curve) * duration;
-                    if a >= duration {
-                        break;
-                    }
-                    let b = curve_func(search_position + 1.0 / count, curve) * duration;
-                    let stop = note.position + a + (b - a) * note.repeat_length as f64;
-                    start(note.position + a, stop, note, note.velocity * velocity_gain(note.velocity_fade, search_index as i32, note.play_count));
-                }
-                search_index += 1.0;
-                search_position = search_index / count;
-            }
+            ratchet_parts(note, from, to, &mut |index, a, b| {
+                let stop = note.position + a + (b - a) * note.repeat_length as f64;
+                start(note.position + a, stop, note, note.velocity * velocity_gain(note.velocity_fade, index, note.play_count));
+                true
+            });
         } else if from <= note.position && note.position < to {
             start(note.position, note.position + note.duration, note, note.velocity);
         }

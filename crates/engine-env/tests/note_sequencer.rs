@@ -362,6 +362,34 @@ fn play_one_never_picks_a_ratchet_whose_parts_all_start_before_the_region() {
 }
 
 #[test]
+fn play_one_decides_like_the_sequencer_plays_when_a_region_starts_on_a_part() {
+    for curve in [0.0f32, -3.0, 1.0] {
+        let mut ratchet = NoteEvent::new(0.0, 240.0, 60, 0.0, 1.0);
+        ratchet.key = 10;
+        ratchet.play_count = 3;
+        ratchet.play_curve = curve;
+        ratchet.group = Some(group(100.0, true));
+        let mut other = NoteEvent::new(200.0, 10.0, 64, 0.0, 1.0);
+        other.key = 11;
+        other.group = Some(group(100.0, true));
+        let start = value::note::curve_func(1.0 / 3.0, curve as f64) * 240.0;
+        for seed in 0..40 {
+            let region = NoteRegion {position: start, duration: 240.0 - start, loop_offset: start, loop_duration: 240.0, mute: false, groove: None};
+            let mut trimmed = sequencer(region, &[ratchet, other]);
+            trimmed.bind_seed(Rc::new(Cell::new(seed)));
+            let mut events = Vec::new();
+            let mut from = 0.0;
+            while from < 240.0 {
+                events.extend(pull(&mut trimmed, from, from + 32.0));
+                from += 32.0;
+            }
+            let (parts, single) = (starts_of(&events, 60), starts_of(&events, 64));
+            assert!(parts.is_empty() != single.is_empty(), "curve {curve}, seed {seed}: exactly one member plays: {parts:?} {single:?}");
+        }
+    }
+}
+
+#[test]
 fn repeat_length_and_velocity_fade_shape_the_parts() {
     let region = NoteRegion {position: 0.0, duration: 960.0, loop_offset: 0.0, loop_duration: 960.0, mute: false, groove: None};
     let mut note = NoteEvent::new(0.0, 160.0, 60, 0.0, 0.9);
