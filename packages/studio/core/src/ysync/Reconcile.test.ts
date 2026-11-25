@@ -209,7 +209,7 @@ describe("deterministicReconcile: a field accepting one pointer", () => {
         expect(note.random.pointerHub.size()).toBe(1)
         const kept = chances.filter(box => box.isAttached())
         expect(kept.length).toBe(1)
-        expect(kept[0]).toBe([...chances].sort((a, b) => Address.Comparator(a.event.address, b.event.address))[0])
+        expect(kept[0]).toBe([...chances].sort((first, second) => Address.Comparator(first.event.address, second.event.address))[0])
         expect(boxGraph.edges().overflowingExclusives()).toEqual([])
         expect(reconcile(boxGraph)).toBe(false)
     })

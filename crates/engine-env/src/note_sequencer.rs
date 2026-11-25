@@ -375,7 +375,7 @@ fn plays(decisions: &mut Decisions, notes: &EventCollection<NoteEvent>, note: &N
 
 struct Decisions {
     random: HostRandom,
-    winners: Vec<(u64, u64, usize, u64)>, // group, pass, collection, winner of the current block
+    winners: Vec<(u64, u64, usize, (u64, u64), u64)>, // group, pass, collection, audible window, winner of the current block
     members: Vec<(f64, u8, u64)> // reused, no allocation once grown
 }
 
@@ -384,20 +384,22 @@ impl Decisions {
     fn winner(&mut self, notes: &EventCollection<NoteEvent>, group: u64, pass: f64, audible: (f64, f64)) -> u64 {
         let pass_bits = pass.to_bits();
         let collection = notes.as_slice().as_ptr() as usize;
+        let window = (audible.0.to_bits(), audible.1.to_bits());
         if let Some(entry) = self.winners.iter()
-            .find(|entry| entry.0 == group && entry.1 == pass_bits && entry.2 == collection) {
-            return entry.3;
+            .find(|entry| entry.0 == group && entry.1 == pass_bits && entry.2 == collection && entry.3 == window) {
+            return entry.4;
         }
         self.members.clear();
         self.members.extend(notes.as_slice().iter()
             .filter(|member| member.group.is_some_and(|member_group| member_group.key == group)
-                && member.position >= audible.0 && member.position < audible.1)
+                && member.position < audible.1
+                && (member.position >= audible.0 || (member.play_count > 1 && member.position + member.duration > audible.0)))
             .map(|member| (member.position, member.pitch, member.key)));
         self.members.sort_unstable_by(|first, second|
             first.0.total_cmp(&second.0).then(first.1.cmp(&second.1)).then(first.2.cmp(&second.2)));
         let index = (self.random.value(pass, group, 1) * self.members.len() as f64) as usize;
         let winner = self.members.get(index).map_or(0, |member| member.2);
-        self.winners.push((group, pass_bits, collection, winner));
+        self.winners.push((group, pass_bits, collection, window, winner));
         winner
     }
 }

@@ -2,8 +2,6 @@ import css from "./PropertyTable.sass?inline"
 import {
     Arrays,
     Editing,
-    int,
-    isDefined,
     isNotNull,
     Lifecycle,
     Nullable,
@@ -160,7 +158,21 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
         </div>
     )
     let focus: Nullable<NoteEventBoxAdapter> = null
+    const watches = new Map<NoteEventCollectionBoxAdapter, Subscription>()
+    const watchCollections = (adapters: ReadonlyArray<NoteEventBoxAdapter>): void => {
+        const collections = new Set<NoteEventCollectionBoxAdapter>()
+        adapters.forEach(adapter => adapter.collection.ifSome(collection => collections.add(collection)))
+        watches.forEach((subscription, collection) => {
+            if (collections.has(collection)) {return}
+            subscription.terminate()
+            watches.delete(collection)
+        })
+        collections.forEach(collection => {
+            if (!watches.has(collection)) {watches.set(collection, collection.subscribeChange(updateState.request))}
+        })
+    }
     const updateState = lifecycle.own(deferNextFrame(() => {
+        watchCollections(selection.selected())
         if (selection.isEmpty()) {
             element.classList.add("disabled")
             cells.forEach(cell => cell.input.classList.remove("invalid"))
@@ -180,8 +192,6 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
         }
     }))
     let ignore = false
-    const noteCollections = new Map<NoteEventBoxAdapter, NoteEventCollectionBoxAdapter>()
-    const collectionWatches = new Map<NoteEventCollectionBoxAdapter, { count: int, subscription: Subscription }>()
     lifecycle.ownAll(...cells
             .map(({key}) => {
                 const {parameter, write} = PropertyParameters[key]
@@ -194,29 +204,10 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
             }),
         selection.catchupAndSubscribe({
             onSelected: (adapter: NoteEventBoxAdapter) => {
-                adapter.collection.ifSome(collection => {
-                    noteCollections.set(adapter, collection)
-                    const watch = collectionWatches.get(collection)
-                    if (isDefined(watch)) {
-                        watch.count++
-                    } else {
-                        collectionWatches.set(collection,
-                            {count: 1, subscription: collection.subscribeChange(updateState.request)})
-                    }
-                })
                 focus = adapter
                 updateState.request()
             },
             onDeselected: (adapter: NoteEventBoxAdapter) => {
-                const collection = noteCollections.get(adapter)
-                noteCollections.delete(adapter)
-                if (isDefined(collection)) {
-                    const watch = collectionWatches.get(collection)
-                    if (isDefined(watch) && --watch.count === 0) {
-                        watch.subscription.terminate()
-                        collectionWatches.delete(collection)
-                    }
-                }
                 if (focus === adapter) {focus = null}
                 updateState.request()
             }
@@ -224,9 +215,8 @@ export const PropertyTable = ({lifecycle, selection, modifyContext, editing, row
         modifyContext.subscribeUpdate(updateState.request),
         editing.subscribe(updateState.request),
         Terminable.create(() => {
-            collectionWatches.forEach(({subscription}) => subscription.terminate())
-            collectionWatches.clear()
-            noteCollections.clear()
+            watches.forEach(subscription => subscription.terminate())
+            watches.clear()
         })
     )
     updateState.immediate()

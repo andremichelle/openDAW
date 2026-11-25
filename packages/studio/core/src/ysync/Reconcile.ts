@@ -86,8 +86,7 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
             repairedAny = true
             continue
         }
-        // --- Exclusive target overflow (a box or a field): keep the lowest-addressed incoming pointer, clear
-        // the rest. If a cleared pointer was mandatory its owner is now unsatisfied, the rule above deletes it. ---
+        // --- Exclusive box or field overflow: keep the lowest-addressed pointer, clear the rest. ---
         const overflowing = boxGraph.edges().overflowingExclusives()
         if (overflowing.length > 0) {
             const incoming = overflowing[0].pointerHub.incoming().slice().sort(byAddress)

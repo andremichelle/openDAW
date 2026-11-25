@@ -272,6 +272,76 @@ fn play_one_never_picks_a_member_the_region_trims_away() {
     }
 }
 
+// the two halves of a region cut at 50, sharing one collection and one loop pass
+struct CutHalves {
+    notes: EventCollection<NoteEvent>
+}
+
+impl NoteTrackAccess for CutHalves {
+    fn for_each_region(&self, from: f64, to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
+        for region in [
+            NoteRegion {position: 0.0, duration: 50.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None},
+            NoteRegion {position: 50.0, duration: 50.0, loop_offset: 50.0, loop_duration: 100.0, mute: false, groove: None}
+        ] {
+            if region.position < to && region.complete() > from {
+                visit(&region, &self.notes)
+            }
+        }
+    }
+    fn clip_info(&self, _clip: &[u8; 16]) -> Option<(f64, bool)> {
+        None
+    }
+    fn clip_events(&self, _clip: &[u8; 16], _visit: &mut dyn FnMut(&EventCollection<NoteEvent>)) {}
+    fn warp(&self, _groove: &[u8; 16], position: f64) -> f64 {position}
+    fn unwarp(&self, _groove: &[u8; 16], position: f64) -> f64 {position}
+}
+
+impl NoteContentSource for CutHalves {
+    fn for_each_track(&self, visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {
+        visit(&TRACK, self)
+    }
+}
+
+#[test]
+fn play_one_picks_per_half_when_a_cut_region_shares_its_collection() {
+    let mut collection = EventCollection::new();
+    for (index, (position, pitch)) in [(10.0, 60), (60.0, 64)].iter().enumerate() {
+        let mut note = NoteEvent::new(*position, 10.0, *pitch, 0.0, 1.0);
+        note.key = index as u64 + 10;
+        note.group = Some(group(100.0, true));
+        collection.add(note);
+    }
+    let mut sequencer = NoteSequencer::new(Box::new(CutHalves {notes: collection}), Rc::new(RefCell::new(ClipSequencer::new())));
+    let events = pull(&mut sequencer, 0.0, 100.0);
+    assert_eq!(starts_of(&events, 60), vec![10.0], "the left half plays its only member");
+    assert_eq!(starts_of(&events, 64), vec![60.0], "the right half plays its only member, also in the same block");
+}
+
+#[test]
+fn play_one_keeps_a_ratchet_member_that_starts_before_the_region_but_repeats_inside() {
+    let mut ratchet = NoteEvent::new(0.0, 100.0, 60, 0.0, 1.0);
+    ratchet.key = 10;
+    ratchet.play_count = 4;
+    ratchet.group = Some(group(100.0, true));
+    let mut other = NoteEvent::new(80.0, 10.0, 64, 0.0, 1.0);
+    other.key = 11;
+    other.group = Some(group(100.0, true));
+    let mut ratchet_wins = 0;
+    for seed in 0..40 {
+        let region = NoteRegion {position: 30.0, duration: 70.0, loop_offset: 30.0, loop_duration: 100.0, mute: false, groove: None};
+        let mut trimmed = sequencer(region, &[ratchet, other]);
+        trimmed.bind_seed(Rc::new(Cell::new(seed)));
+        let events = pull(&mut trimmed, 0.0, 100.0);
+        let (parts, single) = (starts_of(&events, 60), starts_of(&events, 64));
+        assert!(parts.is_empty() != single.is_empty(), "seed {seed}: exactly one member plays: {parts:?} {single:?}");
+        if !parts.is_empty() {
+            assert_eq!(parts, vec![50.0, 75.0], "seed {seed}: the repeats inside the region play");
+            ratchet_wins += 1;
+        }
+    }
+    assert!(ratchet_wins > 5 && ratchet_wins < 35, "both members win sometimes: {ratchet_wins}");
+}
+
 #[test]
 fn repeat_length_and_velocity_fade_shape_the_parts() {
     let region = NoteRegion {position: 0.0, duration: 960.0, loop_offset: 0.0, loop_duration: 960.0, mute: false, groove: None};
