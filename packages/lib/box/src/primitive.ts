@@ -130,6 +130,8 @@ export abstract class PrimitiveField<
         assert(this.#unsaved, `${this.debugPath} is not deprecated`)
         this.#assign(value)
     }
+    // Replays a recorded value (undo, redo, sync), which a deprecated field only has from a migration or an old log.
+    replayValue(value: V): void {this.#assign(value)}
     protected restoreValue(value: V): void {this.#assign(value)}
     #assign(value: V): void {
         const oldValue = this.#value

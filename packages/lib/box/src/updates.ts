@@ -146,8 +146,8 @@ export class PrimitiveUpdate<V extends PrimitiveValues = PrimitiveValues> implem
 
     matches(field: PrimitiveField): boolean {return field.address.equals(this.address)}
 
-    inverse(graph: BoxGraph): void {this.field(graph).setValue(this.#oldValue)}
-    forward(graph: BoxGraph): void {this.field(graph).setValue(this.#newValue)}
+    inverse(graph: BoxGraph): void {this.field(graph).replayValue(this.#oldValue)}
+    forward(graph: BoxGraph): void {this.field(graph).replayValue(this.#newValue)}
 
     field(graph: BoxGraph): PrimitiveField<V> {
         return graph.findVertex(this.#address)

@@ -5,6 +5,7 @@ import {NoPointers, VertexVisitor} from "./vertex"
 import {UnreferenceableType} from "./pointer"
 import {FieldConstruct} from "./field"
 import {applyUpdateTasks} from "./sync-target"
+import {PrimitiveUpdate} from "./updates"
 import {PrimitiveType} from "./primitive"
 import {ByteArrayInput, ByteArrayOutput, Maybe, Option, panic, Procedure, safeExecute, UUID} from "@opendaw/lib-std"
 
@@ -99,5 +100,16 @@ describe("deprecated primitive fields", () => {
         }])
         graph.endTransaction()
         expect(box.chance.getValue()).toBe(40)
+    })
+
+    it("replay a recorded value, as undo and an old sync log do", () => {
+        const graph = createGraph()
+        graph.beginTransaction()
+        const box = LegacyBox.create(graph, UUID.generate())
+        new PrimitiveUpdate(box.chance.address, box.chance.serialization(), 100, 60).forward(graph)
+        expect(box.chance.getValue()).toBe(60)
+        new PrimitiveUpdate(box.chance.address, box.chance.serialization(), 100, 60).inverse(graph)
+        graph.endTransaction()
+        expect(box.chance.getValue()).toBe(100)
     })
 })
