@@ -1,4 +1,4 @@
-import {Editing, Exec, int} from "@opendaw/lib-std"
+import {Editing, Exec, int, tryCatch} from "@opendaw/lib-std"
 import {ppqn} from "@opendaw/lib-dsp"
 import {AnyRegionBoxAdapter, BoxAdapters, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {RegionModifyStrategies} from "./RegionModifyStrategies"
@@ -27,12 +27,23 @@ export class RegionOverlapResolver {
           changes: (trackResolver: TrackResolver) => void): void {
         const behaviour = StudioPreferences.settings.editing["overlapping-regions-behaviour"]
         if (behaviour === "clip") {
+            const before = tracks.map(RegionClipResolver.describeTrack)
+            const selection = adapters.map((adapter, index) => ({
+                ...RegionClipResolver.describeRegion(adapter, index),
+                track: adapter.trackBoxAdapter.mapOr(track => track.listIndex, -1),
+                targetPosition: strategy.selectedModifyStrategy().readPosition(adapter),
+                targetComplete: strategy.selectedModifyStrategy().readComplete(adapter)
+            }))
             const {postProcess, trackResolver} = RegionClipResolver.fromSelection(tracks, adapters, strategy, deltaIndex)
             this.#editing.modify(() => {
                 changes(trackResolver)
                 postProcess()
             })
-            RegionClipResolver.validateTracks(tracks)
+            const {status, error} = tryCatch(() => RegionClipResolver.validateTracks(tracks))
+            if (status === "failure") {
+                console.debug("regions-before", {deltaIndex, showOrigin: strategy.showOrigin(), selection, tracks: before})
+                throw error
+            }
         } else if (behaviour === "push-existing") {
             const {postProcess, trackResolver} = RegionPushExistingResolver.fromSelection(
                 tracks, adapters, strategy, deltaIndex, this.#projectApi, this.#boxAdapters)
