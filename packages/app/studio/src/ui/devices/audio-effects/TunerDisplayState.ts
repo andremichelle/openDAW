@@ -2,6 +2,7 @@ import {clamp} from "@opendaw/lib-std"
 
 export class TunerDisplayState {
     midi = NaN
+    last = NaN
     opacity = 0
     #lastSignal = -Infinity
     #lastFrame = NaN
@@ -13,6 +14,7 @@ export class TunerDisplayState {
         if (Number.isFinite(midi)) {
             if (!this.#live || !Number.isFinite(this.midi) || Math.abs(midi - this.midi) > 0.75) {this.midi = midi}
             else {this.midi += (midi - this.midi) * (1 - Math.exp(-dt / (0.015 + damping * 0.3)))}
+            this.last = this.midi
             this.#lastSignal = now
             this.opacity = 1
             this.#live = true
@@ -26,6 +28,7 @@ export class TunerDisplayState {
 
     reset(): void {
         this.midi = NaN
+        this.last = NaN
         this.opacity = 0
         this.#lastSignal = -Infinity
         this.#lastFrame = NaN

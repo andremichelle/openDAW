@@ -3,7 +3,7 @@ import {TunerCanvasLayout} from "./TunerCanvasLayout"
 
 describe("tuner display proportions", () => {
     it("centers zero on the meter and bounds markers to the scale", () => {
-        const frame = TunerCanvasLayout.fit(480, 240)
+        const frame = TunerCanvasLayout.fit(480, 210)
         expect(TunerCanvasLayout.meterX(frame, -50)).toBeCloseTo(12)
         expect(TunerCanvasLayout.meterX(frame, 0)).toBe(240)
         expect(TunerCanvasLayout.meterX(frame, 50)).toBeCloseTo(468)
@@ -16,9 +16,17 @@ describe("tuner display proportions", () => {
             expect(frame.scale).toBeGreaterThan(0)
             expect(frame.y).toBeGreaterThanOrEqual(0)
             expect(frame.right * frame.scale).toBeCloseTo(width)
-            expect(240 * frame.scale + 2 * frame.y).toBeCloseTo(height)
-            expect(frame.keyLeft + 58).toBeCloseTo(frame.right)
+            expect(210 * frame.scale + 2 * frame.y).toBeCloseTo(height)
+            expect(frame.keyLeft + 44).toBeCloseTo(frame.right)
             expect(frame.historyRight).toBeLessThan(frame.keyLeft)
+        }
+    })
+    it("sizes text in css pixels on any display density", () => {
+        for (const ratio of [1, 2, 3]) {
+            const frame = TunerCanvasLayout.fit(328 * ratio, 132 * ratio, ratio)
+            expect(frame.labelFont * frame.scale / ratio).toBeCloseTo(9)
+            expect(frame.keyFont * frame.scale / ratio).toBeCloseTo(10)
+            expect(frame.readoutFont * frame.scale / ratio).toBeCloseTo(12)
         }
     })
 })

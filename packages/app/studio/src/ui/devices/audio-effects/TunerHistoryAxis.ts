@@ -1,3 +1,4 @@
+import {MidiKeys} from "@opendaw/lib-dsp"
 import {TunerLayout} from "./TunerCanvasLayout"
 
 export namespace TunerHistoryAxis {
@@ -15,4 +16,7 @@ export namespace TunerHistoryAxis {
         }
         return result
     }
+
+    export const labeled = (note: number, rowsPerLabel: number): boolean =>
+        rowsPerLabel >= 1.2 || (rowsPerLabel >= 0.6 ? !MidiKeys.isBlackKey(note) : note % 12 === 0)
 }

@@ -21,7 +21,7 @@ export class TunerRenderer {
     paint(painter: CanvasPainter, now: number, histogram: boolean, strobe: boolean, frequency: boolean, reference: number): void {
         const context = painter.context
         this.#context = context
-        this.#frame = TunerCanvasLayout.fit(painter.actualWidth, painter.actualHeight)
+        this.#frame = TunerCanvasLayout.fit(painter.actualWidth, painter.actualHeight, painter.devicePixelRatio)
         context.setTransform(this.#frame.scale, 0, 0, this.#frame.scale, 0, this.#frame.y)
         if (histogram) {this.#history(now)}
         else {this.#meter(strobe)}
@@ -32,6 +32,8 @@ export class TunerRenderer {
         const context = this.#context
         if (isAbsent(context)) {return}
         const {center, span, display, visible} = this.#state
+        const font = this.#frame.keyFont
+        const rows = TunerLayout.historyHeight / span / font
         context.save()
         context.beginPath()
         context.rect(this.#frame.left, TunerLayout.historyTop,
@@ -50,9 +52,10 @@ export class TunerRenderer {
                 context.restore()
             }
             this.#line(this.#frame.left, y, this.#frame.historyRight, y, DisplayPaint.gridStyle())
-            this.#text(MidiKeys.toFullString(note), this.#frame.keyCenter, y + TunerLayout.keyLabelOffset,
-                Math.min(TunerLayout.maxKeyFont, TunerLayout.historyHeight / span * TunerLayout.keyFontRatio),
-                selected ? Colors.panelBackground.toString() : Colors.shadow.toString())
+            if (selected || TunerHistoryAxis.labeled(note, rows)) {
+                this.#text(MidiKeys.toFullString(note), this.#frame.keyCenter, y + font * 0.35, font,
+                    selected ? Colors.panelBackground.toString() : Colors.shadow.toString())
+            }
         }
         context.restore()
         context.save()
@@ -78,6 +81,27 @@ export class TunerRenderer {
         context.lineWidth = TunerLayout.traceWidth
         context.stroke()
         context.restore()
+        this.#fadeEdges()
+    }
+
+    #fadeEdges(): void {
+        const context = this.#context
+        if (isAbsent(context)) {return}
+        const {historyTop, historyBottom, edgeFade} = TunerLayout
+        const width = this.#frame.right - this.#frame.left
+        context.save()
+        context.globalCompositeOperation = "destination-out"
+        const top = context.createLinearGradient(0, historyTop, 0, historyTop + edgeFade)
+        top.addColorStop(0, "black")
+        top.addColorStop(1, "transparent")
+        context.fillStyle = top
+        context.fillRect(this.#frame.left, historyTop, width, edgeFade)
+        const bottom = context.createLinearGradient(0, historyBottom - edgeFade, 0, historyBottom)
+        bottom.addColorStop(0, "transparent")
+        bottom.addColorStop(1, "black")
+        context.fillStyle = bottom
+        context.fillRect(this.#frame.left, historyBottom - edgeFade, width, edgeFade)
+        context.restore()
     }
 
     #meter(strobe: boolean): void {
@@ -92,10 +116,10 @@ export class TunerRenderer {
         }
         this.#line(this.#frame.center, TunerLayout.zeroTop, this.#frame.center,
             TunerLayout.zeroBottom, Colors.green.toString(), TunerLayout.zeroWidth)
-        this.#text("0", this.#frame.center, TunerLayout.scaleLabelY, TunerLayout.zeroFont, Colors.gray.toString())
-        this.#text("−50", this.#frame.left, TunerLayout.scaleLabelY, TunerLayout.scaleFont,
+        this.#text("0", this.#frame.center, TunerLayout.scaleLabelY, this.#frame.labelFont, Colors.gray.toString())
+        this.#text("−50", this.#frame.left, TunerLayout.scaleLabelY, this.#frame.labelFont,
             Colors.shadow.toString(), "left")
-        this.#text("+50", this.#frame.right, TunerLayout.scaleLabelY, TunerLayout.scaleFont,
+        this.#text("+50", this.#frame.right, TunerLayout.scaleLabelY, this.#frame.labelFont,
             Colors.shadow.toString(), "right")
         context.save()
         context.globalAlpha = display.opacity
@@ -120,16 +144,28 @@ export class TunerRenderer {
 
     #readout(frequency: boolean, reference: number): void {
         const context = this.#context
-        if (isAbsent(context) || !this.#state.visible) {return}
-        const {display, cents} = this.#state
-        const hz = reference * Math.pow(2, (display.midi - 69) / 12)
+        if (isAbsent(context)) {return}
+        const {display, visible} = this.#state
+        const midi = visible ? display.midi : display.last
+        const [note, value] = this.#readoutTexts(midi, frequency, reference)
+        if (!visible || display.opacity < 1) {
+            this.#text(note, this.#frame.left, TunerLayout.readoutY, this.#frame.readoutFont, Colors.shadow.toString(), "left")
+            this.#text(value, this.#frame.right, TunerLayout.readoutY, this.#frame.readoutFont, Colors.shadow.toString(), "right")
+        }
+        if (!visible) {return}
         context.save()
         context.globalAlpha = display.opacity
-        this.#text(MidiKeys.toFullString(Math.round(display.midi)), this.#frame.left, TunerLayout.readoutY,
-            TunerLayout.readoutFont, this.#color(), "left")
-        this.#text(frequency ? `${hz.toFixed(1)} Hz` : `${cents >= 0 ? "+" : ""}${cents.toFixed(1)} ct`,
-            this.#frame.right, TunerLayout.readoutY, TunerLayout.readoutFont, this.#color(), "right")
+        this.#text(note, this.#frame.left, TunerLayout.readoutY, this.#frame.readoutFont, this.#color(), "left")
+        this.#text(value, this.#frame.right, TunerLayout.readoutY, this.#frame.readoutFont, this.#color(), "right")
         context.restore()
+    }
+
+    #readoutTexts(midi: number, frequency: boolean, reference: number): [string, string] {
+        if (!Number.isFinite(midi)) {return ["–", frequency ? "– Hz" : "– ct"]}
+        const cents = (midi - Math.round(midi)) * 100
+        const hz = reference * Math.pow(2, (midi - 69) / 12)
+        return [MidiKeys.toFullString(Math.round(midi)),
+            frequency ? `${hz.toFixed(1)} Hz` : `${cents >= 0 ? "+" : ""}${cents.toFixed(1)} ct`]
     }
 
     #color(): string {return (Math.abs(this.#state.cents) <= 5 ? Colors.green : Colors.orange).toString()}

@@ -14,7 +14,7 @@ The row above the display holds four controls, each with its label above it.
 
 ## Display
 
-Green means the note is within 5 cents of the target, orange means it is out of tune. After the signal stops, the last reading holds for 120 ms and then fades out over one second. In History, the key of the detected note lights up on the right and silence leaves gaps in the trace. Bypass clears the display.
+Green means the note is within 5 cents of the target, orange means it is out of tune. After the signal stops, the last reading holds for 120 ms, then fades over one second and stays dimmed below the display until the next note. In History, the key of the detected note lights up on the right, silence leaves gaps in the trace, and the note names thin out to white keys or only C when the range is zoomed out. Bypass clears the display.
 
 ## Detection
 

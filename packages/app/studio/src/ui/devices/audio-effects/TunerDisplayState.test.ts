@@ -17,6 +17,7 @@ describe("tuner visual release", () => {
         state.update(NaN, 1220, 0.15)
         expect(state.opacity).toBe(0)
         expect(Number.isNaN(state.midi)).toBe(true)
+        expect(state.last).toBe(69.03)
     })
     it("reacquires a new note immediately during release and clears on bypass", () => {
         const state = new TunerDisplayState()
@@ -25,8 +26,10 @@ describe("tuner visual release", () => {
         state.update(69.4, 250, 1)
         expect(state.midi).toBe(69.4)
         expect(state.opacity).toBe(1)
+        expect(state.last).toBe(69.4)
         state.reset()
         expect(state.opacity).toBe(0)
         expect(Number.isNaN(state.midi)).toBe(true)
+        expect(Number.isNaN(state.last)).toBe(true)
     })
 })

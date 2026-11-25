@@ -2,27 +2,30 @@
 
 component
   @include mixins.Control
-  width: 24em
+  width: 336px
   display: grid
-  grid-template-rows: auto 1fr
-  gap: 0.5em
+  grid-template-rows: 36px 1fr
+  row-gap: 8px
 
   > div.controls
     display: grid
     grid-template-columns: repeat(4, 1fr)
-    column-gap: 0.5em
-    font-size: 0.625rem
+    column-gap: 8px
+    font-size: 9px
 
     > div
-      display: flex
-      flex-direction: column
+      display: grid
+      grid-template-rows: 16px 18px
+      row-gap: 2px
+      justify-items: center
       align-items: center
-      gap: 0.25em
 
       > h1
-        align-self: stretch
-        padding: 2px 0
-        text-align: center
+        justify-self: stretch
+        height: 100%
+        display: flex
+        align-items: center
+        justify-content: center
         color: var(--color-orange)
         font-size: inherit
         border-radius: 4px
