@@ -117,10 +117,10 @@ export class TunerRenderer {
         const hz = reference * Math.pow(2, (display.midi - 69) / 12)
         context.save()
         context.globalAlpha = display.opacity
-        this.#text(MidiKeys.toFullString(Math.round(display.midi)), TunerLayout.noteX, TunerLayout.readoutY,
-            TunerLayout.readoutFont, this.#color())
+        this.#text(MidiKeys.toFullString(Math.round(display.midi)), TunerLayout.left, TunerLayout.readoutY,
+            TunerLayout.readoutFont, this.#color(), "left")
         this.#text(frequency ? `${hz.toFixed(1)} Hz` : `${cents >= 0 ? "+" : ""}${cents.toFixed(1)} ct`,
-            TunerLayout.valueX, TunerLayout.readoutY, TunerLayout.readoutFont, this.#color())
+            TunerLayout.right, TunerLayout.readoutY, TunerLayout.readoutFont, this.#color(), "right")
         context.restore()
     }
 

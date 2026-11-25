@@ -8,7 +8,7 @@ export const TunerLayout = Object.freeze({
     scaleLabelY: 137, zeroFont: 17, scaleFont: 16,
     triangleTip: 83, triangleTop: 63, triangleHalfWidth: 11,
     strobeTop: 57, strobeBottom: 70, strobeCount: 20, strobeWidth: 4,
-    noteX: 112, valueX: 305, readoutY: 205, readoutFont: 36, traceWidth: 2,
+    readoutY: 205, readoutFont: 36, traceWidth: 2,
     maxKeyFont: 18, keyFontRatio: 0.65, centsLimit: 50, tickStep: 10
 })
 

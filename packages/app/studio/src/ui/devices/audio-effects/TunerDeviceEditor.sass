@@ -2,15 +2,32 @@
 
 component
   @include mixins.Control
-  width: 21em
+  width: 24em
   display: grid
-  grid-template-rows: auto 1fr auto
-  gap: 0.25em
+  grid-template-rows: auto 1fr
+  gap: 0.5em
 
-  > div.toggle-buttons
+  > div.controls
     display: grid
     grid-template-columns: repeat(4, 1fr)
-    column-gap: 0.25em
+    column-gap: 0.5em
+    font-size: 0.625rem
+
+    > div
+      display: flex
+      flex-direction: column
+      align-items: center
+      gap: 0.25em
+
+      > h1
+        color: var(--color-dark)
+        font-size: inherit
+
+      > div.stack
+        display: grid
+
+        > *
+          grid-area: 1 / 1
 
   > canvas
     display: block
@@ -18,13 +35,3 @@ component
     height: 100%
     min-height: 0
     touch-action: none
-
-  > div.reference
-    display: flex
-    align-items: center
-    justify-content: flex-end
-    gap: 0.25em
-
-    > span
-      font-size: 9px
-      color: var(--color-shadow)

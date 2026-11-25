@@ -2,18 +2,22 @@
 
 Tuner measures the pitch of one note at a time without changing the audio. Insert it in an audio-effect chain on an instrument or monitored audio track. For a microphone or guitar input, enable the track's input monitoring.
 
+## Controls
+
+The row above the display holds four controls, each with its label above it.
+
+- **View**: **Meter** shows how far the note is from the nearest note. **History** shows the pitch of the last eight seconds.
+- **Display** (in Meter): **Needle** points a triangle at the deviation, flat to the left and sharp to the right, from −50 to +50 cents. **Strobe** moves stripes to the right when sharp and to the left when flat, and they stand still when the note is in tune.
+- **Range** (in History): **Follow** keeps the played note in the middle. **Fixed** keeps the current note range. Drag the display vertically to pan and horizontally to zoom, which also switches to Fixed in one undo step. Escape cancels a drag. Double-click the display to follow again.
+- **Readout**: shows the deviation in **Cents** or the frequency in **Hz** below the display.
+- **Reference**: the tuning frequency of A3 (MIDI 69), from 410 to 480 Hz, 440 Hz by default. Drag the value or double-click it to type. openDAW names this note A3, matching its piano roll, scientific pitch notation calls it A4.
+
 ## Display
 
-- **Target**: a straight meter spans −50 to +50 cents around the closest equal-tempered note. Flat is left; sharp is right. A downward triangle points to the current deviation, with a fixed center mark at zero; green indicates a deviation within ±5 cents and orange indicates an out-of-tune note. The note and signed deviation are displayed below the scale. After signal loss the last reading holds for 120ms, then gently fades over 1000ms. A new note is acquired immediately; bypass clears the reading immediately.
-- **Strobe**: segments move right for sharp and left for flat above the straight scale. Motion slows as the note approaches the target.
-- **Histogram**: an eight-second pitch trace against note-center lines, with labeled note-key bands on the right-hand Y axis. The detected note's key is highlighted green; the highlight follows the reading's hold/fade behavior. Silence and unreliable detections leave gaps. Drag vertically to pan and horizontally to zoom, with live feedback. Releasing the pointer saves the range and selects Manual in one undo step; Escape cancels the gesture without saving. Double-click to resume automatic following.
-- Four equal-width controls at the top select **Meter**, **Hist** (Histogram), **ct/Hz**, and the contextual mode. In Meter, the mode switches **Target/Strobe**. In Histogram, it switches **Auto/Manual**: Auto follows incoming pitch; Manual freezes the currently visible range. View selection does not change the stored meter mode.
-- **ct/Hz** switches the main readout between tuning deviation and absolute frequency.
+Green means the note is within 5 cents of the target, orange means it is out of tune. After the signal stops, the last reading holds for 120 ms and then fades out over one second. In History, the key of the detected note lights up on the right and silence leaves gaps in the trace. Bypass clears the display.
 
-## Parameters
+## Detection
 
-- **Reference**: drag the tuning-frequency value in the bottom bar, or double-click to type it, just like Revamp's values. Range 410–480 Hz; default 440 Hz. openDAW labels this reference A3 (MIDI 69), matching its piano roll; scientific pitch notation calls it A4. This is only a naming convention.
+The detector covers about 30 to 2000 Hz and updates 30 times per second. It analyses the louder stereo channel and ignores audio below −55 dBFS. Low notes need several periods of audio before a reading appears. Play clean, sustained, single notes, chords and noise give ambiguous readings. Tuner measures, it does not correct pitch.
 
-The detector covers approximately 30–2000 Hz and updates at 30 Hz. It defaults to analyzing the stronger stereo channel, ignoring audio below −55 dBFS, and smoothing the display. Low notes need several periods of audio before a reading appears. Play clean, sustained, monophonic notes; chords, noise, and strong harmonics can produce ambiguous pitches. The detector is a measurement aid, not pitch correction.
-
-Settings are saved with the project. History is a live display and is not saved. Tuner currently requires the default WASM engine.
+Settings are saved with the project. The history is not saved.

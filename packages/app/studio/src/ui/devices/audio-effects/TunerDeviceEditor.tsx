@@ -1,4 +1,4 @@
-import {clamp, DefaultObservableValue, isDefined, Lifecycle, Option, Optional} from "@opendaw/lib-std"
+import {clamp, isDefined, Lifecycle, MutableObservableValue, Option, Optional} from "@opendaw/lib-std"
 import {Dragging, Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceHost, TunerDeviceBoxAdapter} from "@opendaw/studio-adapters"
@@ -8,7 +8,8 @@ import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor"
 import {MenuItems} from "@/ui/devices/menu-items"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter"
-import {ToggleButton} from "@/ui/devices/ToggleButton"
+import {RadioGroup} from "@/ui/components/RadioGroup"
+import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import css from "./TunerDeviceEditor.sass?inline"
 import {TunerRangeGesture} from "./TunerRangeGesture"
@@ -74,48 +75,75 @@ export const TunerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             if (box.view.getValue() === 1) {editing.modify(() => box.autoFollow.setValue(true))}
         })
     )
-    const tabs = ["Meter", "Hist"].map((label, index) => {
-        const active = lifecycle.own(new DefaultObservableValue(false))
-        lifecycle.own(box.view.catchupAndSubscribe(field => active.setValue(field.getValue() === index)))
-        return <ToggleButton lifecycle={lifecycle} active={active}
-            onClick={() => editing.modify(() => box.view.setValue(index))}>{label}</ToggleButton>
-    })
-    const modeActive = lifecycle.own(new DefaultObservableValue(false))
-    const modeLabel: HTMLElement = <span/>
-    const mode = <ToggleButton lifecycle={lifecycle} active={modeActive}
-        onClick={() => editing.modify(() => {
-            if (box.view.getValue() === 1) {
-                if (box.autoFollow.getValue()) {box.historyCenter.setValue(clamp(state.center, 12, 120))}
-                box.autoFollow.setValue(!box.autoFollow.getValue())
-            } else {box.strobe.setValue(!box.strobe.getValue())}
-        })}>{modeLabel}</ToggleButton>
-    const updateMode = () => {
-        const histogram = box.view.getValue() === 1
-        const active = histogram ? box.autoFollow.getValue() : box.strobe.getValue()
-        modeLabel.textContent = histogram ? (active ? "Auto" : "Manual") : (active ? "Strobe" : "Target")
-        modeActive.setValue(active)
+    const follow: MutableObservableValue<boolean> = {
+        getValue: () => box.autoFollow.getValue(),
+        setValue: (value: boolean) => editing.modify(() => {
+            if (!value && box.autoFollow.getValue()) {box.historyCenter.setValue(clamp(state.center, 12, 120))}
+            box.autoFollow.setValue(value)
+        }),
+        subscribe: observer => box.autoFollow.subscribe(() => observer(follow)),
+        catchupAndSubscribe: observer => {
+            observer(follow)
+            return follow.subscribe(observer)
+        }
     }
-    lifecycle.ownAll(box.view.catchupAndSubscribe(updateMode),
-        box.autoFollow.subscribe(updateMode), box.strobe.subscribe(updateMode))
-    const unitLabel: HTMLElement = <span/>
-    const unit = <ToggleButton lifecycle={lifecycle} active={box.showFrequency}
-        onClick={() => editing.modify(() => box.showFrequency.setValue(!box.showFrequency.getValue()))}>
-        {unitLabel}
-    </ToggleButton>
-    lifecycle.own(box.showFrequency.catchupAndSubscribe(field => {
-        unitLabel.textContent = field.getValue() ? "Hz" : "ct"
+    const displayHeading: HTMLElement = <h1/>
+    const meterDisplay: HTMLElement = (
+        <RadioGroup lifecycle={lifecycle} appearance={{framed: true}}
+                    model={EditWrapper.forValue(editing, box.strobe)}
+                    elements={[
+                        {value: false, element: <span>Needle</span>, tooltip: "A marker points at the deviation"},
+                        {value: true, element: <span>Strobe</span>, tooltip: "Stripes move while out of tune and stand still in tune"}
+                    ]}/>
+    )
+    const historyDisplay: HTMLElement = (
+        <RadioGroup lifecycle={lifecycle} appearance={{framed: true}} model={follow}
+                    elements={[
+                        {value: true, element: <span>Follow</span>, tooltip: "The note range follows the played note"},
+                        {value: false, element: <span>Fixed</span>, tooltip: "Drag to pan and zoom, double-click to follow again"}
+                    ]}/>
+    )
+    lifecycle.own(box.view.catchupAndSubscribe(field => {
+        const history = field.getValue() === 1
+        displayHeading.textContent = history ? "Range" : "Display"
+        meterDisplay.classList.toggle("hidden", history)
+        historyDisplay.classList.toggle("hidden", !history)
     }))
     return <DeviceEditor lifecycle={lifecycle} service={service} adapter={adapter}
         populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
         populateControls={() => <div className={className}>
-            <div className="toggle-buttons">{tabs}{unit}{mode}</div>
-            {canvas}
-            <div className="reference"><span>Reference</span>
-                <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
-                    parameter={adapter.namedParameter.reference}>
-                    <ParameterLabel lifecycle={lifecycle} parameter={adapter.namedParameter.reference} framed/>
-                </RelativeUnitValueDragging>
+            <div className="controls">
+                <div>
+                    <h1>View</h1>
+                    <RadioGroup lifecycle={lifecycle} appearance={{framed: true}}
+                                model={EditWrapper.forValue(editing, box.view)}
+                                elements={[
+                                    {value: 0, element: <span>Meter</span>, tooltip: "Deviation from the nearest note"},
+                                    {value: 1, element: <span>History</span>, tooltip: "Pitch of the last eight seconds"}
+                                ]}/>
+                </div>
+                <div>
+                    {displayHeading}
+                    <div className="stack">{meterDisplay}{historyDisplay}</div>
+                </div>
+                <div>
+                    <h1>Readout</h1>
+                    <RadioGroup lifecycle={lifecycle} appearance={{framed: true}}
+                                model={EditWrapper.forValue(editing, box.showFrequency)}
+                                elements={[
+                                    {value: false, element: <span>Cents</span>, tooltip: "Deviation in cents"},
+                                    {value: true, element: <span>Hz</span>, tooltip: "Frequency in Hertz"}
+                                ]}/>
+                </div>
+                <div>
+                    <h1>Reference</h1>
+                    <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
+                                               parameter={adapter.namedParameter.reference}>
+                        <ParameterLabel lifecycle={lifecycle} parameter={adapter.namedParameter.reference} framed/>
+                    </RelativeUnitValueDragging>
+                </div>
             </div>
+            {canvas}
         </div>}
         populateMeter={() => <DevicePeakMeter lifecycle={lifecycle} receiver={project.liveStreamReceiver}
             address={adapter.address}/>}
