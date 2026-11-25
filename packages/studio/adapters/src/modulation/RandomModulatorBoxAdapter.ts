@@ -2,7 +2,7 @@ import {RandomModulatorBox} from "@opendaw/studio-boxes"
 import {int, StringMapping, unitValue, ValueMapping} from "@opendaw/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {LfoModulatorBoxAdapter} from "./LfoModulatorBoxAdapter"
-import {ModulatorBoxAdapter} from "./ModulatorBoxAdapter"
+import {biasStringMapping, ModulatorBoxAdapter} from "./ModulatorBoxAdapter"
 
 // WASM CONTRACT: `draw`, `focus` and `quantize` mirror the engine's `modulation::hash_bipolar` / `focus` / `quantize`.
 export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulatorBox> {
@@ -53,7 +53,8 @@ export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulat
         const extent = value >= bias ? 1.0 - bias : 1.0 + bias
         if (focus >= 1.0 || extent <= 0.0) {return bias}
         const distance = (value - bias) / extent
-        return bias + Math.sign(distance) * Math.pow(Math.abs(distance), 1.0 / (1.0 - focus)) * extent
+        const rest = 1.0 - focus
+        return bias + Math.sign(distance) * Math.pow(Math.abs(distance), 1.0 / (rest * rest)) * extent
     }
 
     #quantize(value: unitValue): unitValue {
@@ -77,7 +78,7 @@ export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulat
             smooth: this.parametric.createParameter(box.smooth,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Smooth"),
             bias: this.parametric.createParameter(box.bias,
-                ValueMapping.bipolar(), StringMapping.percent({fractionDigits: 0}), "Bias"),
+                ValueMapping.bipolar(), biasStringMapping(box.bipolar), "Bias"),
             focus: this.parametric.createParameter(box.focus,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Focus")
         } as const

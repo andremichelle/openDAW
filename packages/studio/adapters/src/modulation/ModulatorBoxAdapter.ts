@@ -9,6 +9,7 @@ import {
 import {
     asInstanceOf,
     AssertType,
+    bipolar as bipolarValue,
     isInstanceOf,
     ParseResult,
     StringMapping,
@@ -46,7 +47,17 @@ export const polarityStringMapping = (bipolar: BooleanField): StringMapping<unit
     }
 })
 
-export type ModulatorBox = LfoModulatorBox | StepsModulatorBox | MacroModulatorBox | RandomModulatorBox
+export const biasStringMapping = (bipolar: BooleanField): StringMapping<bipolarValue> => ({
+    x: (value: bipolarValue): StringResult =>
+        ({value: percent(bipolar.getValue() ? value : value * 0.5 + 0.5), unit: "%"}),
+    y: (text: string): ParseResult<bipolarValue> => {
+        const value = parseFloat(text.replace("%", "").trim())
+        if (isNaN(value)) {return {type: "unknown", value: text.trim()}}
+        return {type: "explicit", value: bipolar.getValue() ? value / 100.0 : value / 50.0 - 1.0}
+    }
+})
+
+export type ModulatorBox =LfoModulatorBox | StepsModulatorBox | MacroModulatorBox | RandomModulatorBox
 
 export const isModulatorBox = (box: Box): box is ModulatorBox => box.tags.type === "modulator"
 

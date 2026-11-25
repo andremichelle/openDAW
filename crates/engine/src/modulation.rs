@@ -175,7 +175,8 @@ fn focus(value: f32, bias: f32, focus: f32) -> f32 {
         return bias;
     }
     let distance = (value - bias) / extent;
-    bias + distance.signum() * math::pow(distance.abs() as f64, 1.0 / (1.0 - focus as f64)) as f32 * extent
+    let rest = 1.0 - focus as f64;
+    bias + distance.signum() * math::pow(distance.abs() as f64, 1.0 / (rest * rest)) as f32 * extent
 }
 
 /// WASM CONTRACT: mirrors `RandomModulatorBoxAdapter.quantize` (packages/studio/adapters).
@@ -869,7 +870,7 @@ mod tests {
         let plain: Vec<f32> = (0..256).map(|index| state.draw(index)).collect();
         state.bias.set(0.5);
         assert!((0..256).all(|index| state.draw(index) == plain[index as usize]), "no focus leaves every draw untouched");
-        state.focus.set(0.75);
+        state.focus.set(0.5);
         let near = |values: &[f32]| values.iter().filter(|value| (**value - 0.5).abs() < 0.25).count();
         let focused: Vec<f32> = (0..256).map(|index| state.draw(index)).collect();
         assert!(near(&focused) > near(&plain) * 2, "focus gathers the draws around the bias");

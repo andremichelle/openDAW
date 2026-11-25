@@ -42,7 +42,7 @@ describe("random modulator focus", () => {
         const plain = draws()
         project.editing.modify(() => box.bias.setValue(0.5))
         expect(draws()).toEqual(plain)
-        project.editing.modify(() => box.focus.setValue(0.75))
+        project.editing.modify(() => box.focus.setValue(0.5))
         const focused = draws()
         const near = (values: ReadonlyArray<number>) => values.filter(value => Math.abs(value - 0.5) < 0.25).length
         expect(near(focused)).toBeGreaterThan(near(plain) * 2)
