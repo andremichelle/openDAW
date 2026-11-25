@@ -51,6 +51,11 @@ type Construct = {
 const scale = new ScaleConfig()
 const ownScale = new ScaleConfig()
 const followKey = new DefaultObservableValue(false)
+followKey.subscribe(owner => {
+    const [from, to] = owner.getValue() ? [scale, ownScale] : [ownScale, scale]
+    to.key = from.key
+    to.setBits(from.bits)
+})
 const tab = new DefaultObservableValue<NoteEditorTab>("basic")
 const pitchPositioner = new PitchPositioner()
 
@@ -117,13 +122,7 @@ export const NoteEditor =
             scale.key = root
             scale.setBits(bits)
         }
-        const swapOwnScale = (following: boolean) => {
-            const [from, to] = following ? [scale, ownScale] : [ownScale, scale]
-            to.key = from.key
-            to.setBits(from.bits)
-        }
         lifecycle.ownAll(
-            followKey.subscribe(owner => swapOwnScale(owner.getValue())),
             followKey.catchupAndSubscribe(applyProjectKey),
             engine.position.subscribe(applyProjectKey),
             keyTrack.subscribe(applyProjectKey)
