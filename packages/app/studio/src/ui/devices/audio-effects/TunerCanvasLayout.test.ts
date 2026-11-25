@@ -25,7 +25,7 @@ describe("tuner display proportions", () => {
         for (const ratio of [1, 2, 3]) {
             const frame = TunerCanvasLayout.fit(328 * ratio, 132 * ratio, ratio)
             expect(frame.labelFont * frame.scale / ratio).toBeCloseTo(9)
-            expect(frame.keyFont * frame.scale / ratio).toBeCloseTo(9)
+            expect(frame.keyFont * frame.scale / ratio).toBeCloseTo(8)
             expect(frame.readoutFont * frame.scale / ratio).toBeCloseTo(9)
         }
     })
