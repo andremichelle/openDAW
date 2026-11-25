@@ -162,6 +162,7 @@ extern "C" {
     fn host_broadcast_ptr(id: u32) -> u32;
     fn host_broadcast_active(id: u32) -> u32;
     fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32;
+    fn host_parameter_at(id: u32, position: f64, out_ptr: u32) -> u32;
     fn host_first_update_position(at: f64) -> f64;
     fn host_next_update_position(after: f64) -> f64;
     fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32;
@@ -1570,6 +1571,21 @@ pub fn update_parameters(position: f64, out: &mut [ParamChange]) -> usize {
     { unsafe { host_update_parameters(position, out.as_mut_ptr() as u32, out.len() as u32) as usize } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (position, out.len()); 0 }
+}
+
+/// The automated value of THIS device's parameter `id` at a straight grid `position` the update clock has not
+/// reached, for a generating device whose groove moves a step away from its grid. `None` when only the clock
+/// resolves it, the device then keeps the value `parameter_changed` gave it. Native stub returns `None`.
+#[inline]
+pub fn parameter_at(id: u32, position: f64) -> Option<ParamValue> {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut change = ParamChange {id: 0, kind: 0, value: 0.0, modulation: f32::NAN};
+        let found = unsafe { host_parameter_at(id, position, &mut change as *mut ParamChange as u32) };
+        if found == 0 {None} else {Some(ParamValue::from_wire(change.kind, change.value, change.modulation))}
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (id, position); None }
 }
 
 /// The FIRST update position at or AFTER `at` (INCLUSIVE) — the seed for a fragment loop, mirroring TS

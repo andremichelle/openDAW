@@ -158,6 +158,7 @@ export type EngineExports = {
     // position after a pulse (or +Infinity when the device has no automation), so the render fragments at it.
     host_bind_parameter: (pathPtr: number, pathLen: number) => number
     host_update_parameters: (position: number, outPtr: number, max: number) => number
+    host_parameter_at: (id: number, position: number, outPtr: number) => number
     host_first_update_position: (at: number) => number
     host_next_update_position: (after: number) => number
     // Route F (samples). A device imports `host_resolve_sample` from `env` to resolve a sample handle to its

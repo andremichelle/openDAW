@@ -3,8 +3,11 @@
 // The oscillator runs freely, so a moved note starts at another phase and only its onset can be compared.
 import {describe, expect, it} from "vitest"
 import {int, UUID} from "@opendaw/lib-std"
-import {AudioUnitBox, CubedDeviceBox, GrooveOffsetBox} from "@opendaw/studio-boxes"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {Interpolation} from "@opendaw/lib-dsp"
+import {
+    AudioUnitBox, CubedDeviceBox, GrooveOffsetBox, TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox
+} from "@opendaw/studio-boxes"
+import {InterpolationFieldAdapter, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
 
@@ -12,7 +15,10 @@ const SAMPLES_PER_PULSE = 25 // 48k, 120 bpm, 960 per quarter
 const BAR = 3840
 const GATE = 1 << 7
 
-const render = async (offset: int | null, bars: int): Promise<Float32Array> => {
+// pattern 0 stays empty, pattern 1 holds the note, the pattern index automated from 0 to 1 at `switchAt`
+type Switch = { switchAt: int }
+
+const render = async (offset: int | null, bars: int, automated?: Switch): Promise<Float32Array> => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox, timelineBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -27,9 +33,35 @@ const render = async (offset: int | null, bars: int): Promise<Float32Array> => {
         box.decay.setValue(0.0)
         box.cutoff.setValue(0.6)
     })
-    const pattern = cubed.patterns.fields()[0]
+    const pattern = cubed.patterns.fields()[automated === undefined ? 0 : 1]
     pattern.length.setValue(16)
     pattern.steps.fields()[0].setValue(72 | GATE)
+    if (automated !== undefined) {
+        const lane = TrackBox.create(source, UUID.generate(), box => {
+            box.type.setValue(TrackType.Value)
+            box.enabled.setValue(true)
+            box.index.setValue(1)
+            box.target.refer(cubed.patternIndex)
+            box.tracks.refer(unit.tracks)
+        })
+        const curve = ValueEventCollectionBox.create(source, UUID.generate())
+        ;[[0, 0.0], [automated.switchAt, 1 / 15]].forEach(([position, value], order) =>
+            ValueEventBox.create(source, UUID.generate(), box => {
+                box.position.setValue(position)
+                box.value.setValue(value)
+                box.index.setValue(order)
+                box.slope.setValue(NaN)
+                box.events.refer(curve.events)
+                InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
+            }))
+        ValueRegionBox.create(source, UUID.generate(), box => {
+            box.regions.refer(lane.regions)
+            box.events.refer(curve.owners)
+            box.position.setValue(0)
+            box.duration.setValue(bars * BAR)
+            box.loopDuration.setValue(bars * BAR)
+        })
+    }
     if (offset !== null) {
         const groove = GrooveOffsetBox.create(source, UUID.generate(), box => {
             box.collection.refer(rootBox.grooves)
@@ -82,6 +114,14 @@ describe("Cubed through a groove", () => {
             // the first note of a render attacks a little differently, the groove moves notes by thousands of samples
             actual.forEach((sample, index) =>
                 expect(Math.abs(sample - expected[index]), `offset ${offset}: onset ${index}`).toBeLessThanOrEqual(40))
+        }
+    }, 300000)
+    it("plays the automated pattern from the step the groove pulls before the switch", async () => {
+        for (const offset of [0, -240]) {
+            const actual = onsets(await render(offset === 0 ? null : offset, 4, {switchAt: 2 * BAR}))
+            expect(actual.length, `offset ${offset}: ${actual}`).toBeGreaterThanOrEqual(2)
+            expect(Math.abs(actual[0] - (2 * BAR + offset) * SAMPLES_PER_PULSE), `offset ${offset}: ${actual}`)
+                .toBeLessThanOrEqual(40)
         }
     }, 300000)
     it("plays exactly as before with a zero offset", async () => {

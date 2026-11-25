@@ -272,8 +272,7 @@ impl State {
         self.patterns[slot].length = length.clamp(1, STEP_COUNT as i32) as usize;
     }
 
-    fn custom_shape(&self) -> Option<Tab> {
-        let index = self.settings.chord;
+    fn custom_shape(&self, index: i32) -> Option<Tab> {
         if index < 1 || index > SHAPES as i32 {
             return None;
         }
@@ -414,7 +413,10 @@ impl State {
             self.release_strummed();
             return;
         }
-        let custom = self.custom_shape();
+        let grid = (event.id & !STROKE_MARK) as f64 * strum::step_length(self.settings.rate);
+        let chord = abi::parameter_at(self.ids[param::CHORD], grid)
+            .map_or(self.settings.chord, |value| int_value(value, &CHORD_MAPPING).clamp(0, SHAPES as i32));
+        let custom = self.custom_shape(chord);
         let open = self.open();
         let tab = if let Some(mut tab) = custom {
             self.chord_root = -1;
@@ -425,7 +427,7 @@ impl State {
             }
             tab
         } else {
-            let Some((root, voicing)) = abi::harmony_at(event.position).chord else {
+            let Some((root, voicing)) = abi::harmony_at(grid).chord else {
                 self.chord_root = -1;
                 self.release_strummed();
                 return;
@@ -655,7 +657,9 @@ pub fn generate(state: &mut State, from: f64, to: f64, flags: BlockFlags, out: &
         let index = grid_index;
         grid_index += 1;
         let position = state.groove.warp(grid);
-        let pattern = &state.patterns[state.slot];
+        let slot = abi::parameter_at(state.ids[param::SLOT], grid)
+            .map_or(state.slot, |value| int_value(value, &SLOT_MAPPING).clamp(0, SLOTS as i32 - 1) as usize);
+        let pattern = &state.patterns[slot];
         let step = index.rem_euclid(pattern.length as i64) as usize;
         state.step = step as i32;
         let kind = pattern.kinds[step];

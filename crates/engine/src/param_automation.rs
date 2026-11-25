@@ -117,6 +117,18 @@ impl ParamHandle {
         self.track.as_ref().is_some_and(|curve| curve.is_suspended())
     }
 
+    /// The automated value at a position away from the update clock, `None` when only the clock can read it.
+    pub(crate) fn automation_at(&self, position: f64) -> Option<(f32, u32)> {
+        let curve = self.track.as_ref()?;
+        if self.suspended() {
+            return None;
+        }
+        Some(match curve.timeline_value_at(position)? {
+            Some(value) => (value, PARAM_KIND_UNIT),
+            None => (self.field.get(), self.kind)
+        })
+    }
+
     fn resolve_base(&self, position: f64) -> (f32, u32) {
         if self.suspended() {
             return (self.field.get(), self.kind);
@@ -316,6 +328,15 @@ impl ParamCurve {
             };
         });
         value
+    }
+
+    /// The timeline's value at any `position` without advancing the clip state, `None` while a clip plays or waits.
+    pub(crate) fn timeline_value_at(&self, position: f64) -> Option<Option<f32>> {
+        let state = self.0.borrow();
+        if !state.sequencer.borrow().is_idle(&state.track) {
+            return None;
+        }
+        Some(Self::region_value_at(&state.regions, position))
     }
 
     fn region_value_at(regions: &RegionCollection<ValueBoundRegion>, position: f64) -> Option<f32> {

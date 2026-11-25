@@ -1437,6 +1437,22 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
     update_parameters(position, out)
 }
 
+/// Host import a generating device calls for an automated parameter at a straight grid `position` the update
+/// clock has not reached: writes one `ParamChange` (the modulation as last handed out) and returns 1, or
+/// returns 0 when only the clock can resolve it (not automated, paused, lagged, under manual control, a clip).
+/// Pure, the diff state of `host_update_parameters` stays untouched.
+#[no_mangle]
+pub extern "C" fn host_parameter_at(id: u32, position: f64, out_ptr: u32) -> u32 {
+    let pull = unsafe { PULL.get() };
+    if !quantum_transporting() || pull.automation_lag > 0 {
+        return 0;
+    }
+    let Some(param) = pull.params.iter().find(|param| param.id == id) else { return 0 };
+    let Some((value, kind)) = param.automation_at(position) else { return 0 };
+    unsafe { *(out_ptr as usize as *mut ParamChange) = ParamChange {id, kind, value, modulation: param.last_modulation.get()}; }
+    1
+}
+
 fn update_parameters(position: f64, out: &mut [ParamChange]) -> u32 {
     let pull = unsafe { PULL.get() };
     let mut count = 0;

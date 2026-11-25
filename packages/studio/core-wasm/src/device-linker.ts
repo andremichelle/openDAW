@@ -18,7 +18,7 @@ export type BridgeImports = Record<string, (...args: Array<number>) => number | 
 const HOST_IMPORTS: ReadonlyArray<string> = [
     "host_pull_events", "host_pulse_to_offset", "host_block_at",
     "host_bind_parameter", "host_bind_broadcast", "host_broadcast_ptr", "host_broadcast_active",
-    "host_update_parameters", "host_first_update_position", "host_next_update_position",
+    "host_update_parameters", "host_parameter_at", "host_first_update_position", "host_next_update_position",
     "host_resolve_sample", "host_observe_sample",
     "host_resolve_soundfont", "host_observe_soundfont",
     "host_observe_field", "host_observe_target_string", "host_observe_table",
