@@ -12,9 +12,9 @@ export class TunerRangeGesture {
     constructor(state: TunerViewState, width: number, height: number, commit: Procedure<TunerRange>) {
         this.#state = state
         this.#range = {center: state.center, span: state.span}
-        const {scale} = TunerCanvasLayout.fit(width, height)
-        this.#width = (TunerLayout.historyRight - TunerLayout.left) * scale
-        this.#height = TunerLayout.historyHeight * scale
+        const frame = TunerCanvasLayout.fit(width, height)
+        this.#width = (frame.historyRight - frame.left) * frame.scale
+        this.#height = TunerLayout.historyHeight * frame.scale
         this.#commit = commit
     }
 

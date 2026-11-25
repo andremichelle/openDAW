@@ -11,14 +11,18 @@ import {TunerPoint, TunerTiming, TunerViewState} from "./TunerViewState"
 export class TunerRenderer {
     readonly #state: TunerViewState
     #context: Optional<CanvasRenderingContext2D>
+    #frame: TunerCanvasLayout.Frame
 
-    constructor(state: TunerViewState) {this.#state = state}
+    constructor(state: TunerViewState) {
+        this.#state = state
+        this.#frame = TunerCanvasLayout.fit(TunerLayout.minWidth, TunerLayout.height)
+    }
 
     paint(painter: CanvasPainter, now: number, histogram: boolean, strobe: boolean, frequency: boolean, reference: number): void {
         const context = painter.context
         this.#context = context
-        const {scale, x, y} = TunerCanvasLayout.fit(painter.actualWidth, painter.actualHeight)
-        context.setTransform(scale, 0, 0, scale, x, y)
+        this.#frame = TunerCanvasLayout.fit(painter.actualWidth, painter.actualHeight)
+        context.setTransform(this.#frame.scale, 0, 0, this.#frame.scale, 0, this.#frame.y)
         if (histogram) {this.#history(now)}
         else {this.#meter(strobe)}
         this.#readout(frequency, reference)
@@ -31,34 +35,34 @@ export class TunerRenderer {
         for (const key of TunerHistoryAxis.keys(center, span)) {
             const {note, y, top, height} = key
             context.fillStyle = Colors.dark.opacity(MidiKeys.isBlackKey(note) ? 0.025 : 0.06).toString()
-            context.fillRect(TunerLayout.historyRight, top, TunerLayout.keyWidth, height)
+            context.fillRect(this.#frame.keyLeft, top, TunerLayout.keyWidth, height)
             const selected = visible && note === Math.round(display.midi)
             if (selected) {
                 context.save()
                 context.globalAlpha = display.opacity
                 context.fillStyle = Colors.green.toString()
-                context.fillRect(TunerLayout.historyRight, top, TunerLayout.keyWidth, height)
+                context.fillRect(this.#frame.keyLeft, top, TunerLayout.keyWidth, height)
                 context.restore()
             }
             if (y >= TunerLayout.historyTop && y <= TunerLayout.historyBottom) {
-                this.#line(TunerLayout.left, y, TunerLayout.historyRight, y, DisplayPaint.gridStyle())
-                this.#text(MidiKeys.toFullString(note), TunerLayout.keyCenter, y + TunerLayout.keyLabelOffset,
+                this.#line(this.#frame.left, y, this.#frame.historyRight, y, DisplayPaint.gridStyle())
+                this.#text(MidiKeys.toFullString(note), this.#frame.keyCenter, y + TunerLayout.keyLabelOffset,
                     Math.min(TunerLayout.maxKeyFont, TunerLayout.historyHeight / span * TunerLayout.keyFontRatio),
                     selected ? Colors.panelBackground.toString() : Colors.shadow.toString())
             }
         }
         context.save()
         context.beginPath()
-        context.rect(TunerLayout.left, TunerLayout.historyTop,
-            TunerLayout.historyRight - TunerLayout.left, TunerLayout.historyHeight)
+        context.rect(this.#frame.left, TunerLayout.historyTop,
+            this.#frame.historyRight - this.#frame.left, TunerLayout.historyHeight)
         context.clip()
         context.beginPath()
-        const plotWidth = TunerLayout.historyRight - TunerLayout.left
+        const plotWidth = this.#frame.historyRight - this.#frame.left
         const yOf = (midi: number) => TunerLayout.historyCenter - (midi - center) / span * TunerLayout.historyHeight
         const cursor: {previous: Optional<TunerPoint>} = {previous: undefined}
         for (const point of this.#state.history) {
             if (!Number.isFinite(point.midi)) {cursor.previous = undefined; continue}
-            const x = TunerLayout.historyRight - (now - point.time) / TunerTiming.history * plotWidth
+            const x = this.#frame.historyRight - (now - point.time) / TunerTiming.history * plotWidth
             const y = yOf(point.midi)
             const previous = cursor.previous
             if (isAbsent(previous) || Math.abs(point.midi - previous.midi) > 1.5 || point.time - previous.time > 100) {
@@ -77,28 +81,28 @@ export class TunerRenderer {
         if (isAbsent(context)) {return}
         const {display, visible, cents, phase} = this.#state
         const guide = DisplayPaint.strokeStyle(visible ? 0.6 : 0.35)
-        this.#line(TunerLayout.left, TunerLayout.meterY, TunerLayout.right, TunerLayout.meterY, guide)
+        this.#line(this.#frame.meterLeft, TunerLayout.meterY, this.#frame.meterRight, TunerLayout.meterY, guide)
         for (let value = -TunerLayout.centsLimit; value <= TunerLayout.centsLimit; value += TunerLayout.tickStep) {
-            const x = TunerCanvasLayout.meterX(value)
+            const x = TunerCanvasLayout.meterX(this.#frame, value)
             this.#line(x, TunerLayout.tickTop, x, TunerLayout.tickBottom, guide)
         }
-        this.#line(TunerLayout.center, TunerLayout.zeroTop, TunerLayout.center,
+        this.#line(this.#frame.center, TunerLayout.zeroTop, this.#frame.center,
             TunerLayout.zeroBottom, Colors.green.toString(), TunerLayout.zeroWidth)
-        this.#text("0", TunerLayout.center, TunerLayout.scaleLabelY, TunerLayout.zeroFont, Colors.gray.toString())
-        this.#text("−50", TunerLayout.left, TunerLayout.scaleLabelY, TunerLayout.scaleFont,
+        this.#text("0", this.#frame.center, TunerLayout.scaleLabelY, TunerLayout.zeroFont, Colors.gray.toString())
+        this.#text("−50", this.#frame.left, TunerLayout.scaleLabelY, TunerLayout.scaleFont,
             Colors.shadow.toString(), "left")
-        this.#text("+50", TunerLayout.right, TunerLayout.scaleLabelY, TunerLayout.scaleFont,
+        this.#text("+50", this.#frame.right, TunerLayout.scaleLabelY, TunerLayout.scaleFont,
             Colors.shadow.toString(), "right")
         context.save()
         context.globalAlpha = display.opacity
         if (strobe) {
             for (let index = 0; index < TunerLayout.strobeCount; index++) {
                 const position = ((index / TunerLayout.strobeCount + phase) % 1 + 1) % 1
-                const x = TunerLayout.left + position * (TunerLayout.right - TunerLayout.left)
+                const x = this.#frame.meterLeft + position * (this.#frame.meterRight - this.#frame.meterLeft)
                 this.#line(x, TunerLayout.strobeTop, x, TunerLayout.strobeBottom, this.#color(), TunerLayout.strobeWidth)
             }
         } else if (visible) {
-            const x = TunerCanvasLayout.meterX(cents)
+            const x = TunerCanvasLayout.meterX(this.#frame, cents)
             context.beginPath()
             context.moveTo(x, TunerLayout.triangleTip)
             context.lineTo(x - TunerLayout.triangleHalfWidth, TunerLayout.triangleTop)
@@ -117,10 +121,10 @@ export class TunerRenderer {
         const hz = reference * Math.pow(2, (display.midi - 69) / 12)
         context.save()
         context.globalAlpha = display.opacity
-        this.#text(MidiKeys.toFullString(Math.round(display.midi)), TunerLayout.left, TunerLayout.readoutY,
+        this.#text(MidiKeys.toFullString(Math.round(display.midi)), this.#frame.left, TunerLayout.readoutY,
             TunerLayout.readoutFont, this.#color(), "left")
         this.#text(frequency ? `${hz.toFixed(1)} Hz` : `${cents >= 0 ? "+" : ""}${cents.toFixed(1)} ct`,
-            TunerLayout.right, TunerLayout.readoutY, TunerLayout.readoutFont, this.#color(), "right")
+            this.#frame.right, TunerLayout.readoutY, TunerLayout.readoutFont, this.#color(), "right")
         context.restore()
     }
 
