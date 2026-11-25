@@ -5,7 +5,7 @@ export const TunerLayout = Object.freeze({
     historyTop: 4, historyBottom: 184, historyCenter: 94, historyHeight: 180,
     keyWidth: 44, keyGap: 6,
     meterY: 86, tickTop: 81, tickBottom: 91, zeroTop: 72, zeroBottom: 106, zeroWidth: 3,
-    scaleLabelY: 133, labelPixels: 9, keyPixels: 8, readoutPixels: 9, minRowPixels: 14, rowTrimPixels: 2,
+    scaleLabelY: 133, labelPixels: 9, keyPixels: 9, readoutPixels: 9, rowPixels: 13, defaultSpan: 6,
     triangleTip: 79, triangleTop: 59, triangleHalfWidth: 11,
     strobeTop: 53, strobeBottom: 66, strobeCount: 20, strobeWidth: 4,
     readoutY: 207, traceWidth: 2, edgeFade: 14,
@@ -31,14 +31,14 @@ export namespace TunerCanvasLayout {
             labelFont: TunerLayout.labelPixels * pixel,
             keyFont: TunerLayout.keyPixels * pixel,
             readoutFont: TunerLayout.readoutPixels * pixel,
-            maxSpan: Math.max(2, TunerLayout.historyHeight / (TunerLayout.minRowPixels * pixel)),
+            maxSpan: TunerLayout.defaultSpan,
             pixel
         }
     }
 
     export const visibleSpan = (frame: Frame, span: number): number => {
-        const rowPixels = TunerLayout.historyHeight / Math.min(span, frame.maxSpan) / frame.pixel
-        return TunerLayout.historyHeight / ((rowPixels - TunerLayout.rowTrimPixels) * frame.pixel)
+        const rowPixels = TunerLayout.rowPixels * TunerLayout.defaultSpan / clamp(span, 2, frame.maxSpan)
+        return TunerLayout.historyHeight / (rowPixels * frame.pixel)
     }
 
     export const meterX = (frame: Frame, cents: number) => frame.center

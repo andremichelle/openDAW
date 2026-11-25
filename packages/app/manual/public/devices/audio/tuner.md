@@ -8,7 +8,7 @@ The row above the display holds four controls, each with its label above it.
 
 - **View**: **Meter** shows how far the note is from the nearest note. **History** shows the pitch of the last eight seconds.
 - **Display** (in Meter): **Needle** points a triangle at the deviation, flat to the left and sharp to the right, from −50 to +50 cents. **Strobe** moves stripes to the right when sharp and to the left when flat, and they stand still when the note is in tune.
-- **Range** (in History): **Follow** keeps the played note in the middle. **Fixed** keeps the current note range. Drag the display vertically to pan and horizontally to zoom, which also switches to Fixed in one undo step. Escape cancels a drag. Double-click the display to follow again.
+- **Range** (in History): **Follow** keeps the played note in the middle. **Fixed** keeps the current note range. Drag the display vertically to pan and horizontally to zoom in, which also switches to Fixed in one undo step. Escape cancels a drag. Double-click the display to follow again.
 - **Readout**: shows the deviation in **Cents** or the frequency in **Hz** below the display.
 - **Reference**: the tuning frequency of A3 (MIDI 69), from 410 to 480 Hz, 440 Hz by default. Drag the value or double-click it to type. openDAW names this note A3, matching its piano roll, scientific pitch notation calls it A4.
 

@@ -25,24 +25,17 @@ describe("tuner display proportions", () => {
         for (const ratio of [1, 2, 3]) {
             const frame = TunerCanvasLayout.fit(328 * ratio, 132 * ratio, ratio)
             expect(frame.labelFont * frame.scale / ratio).toBeCloseTo(9)
-            expect(frame.keyFont * frame.scale / ratio).toBeCloseTo(8)
+            expect(frame.keyFont * frame.scale / ratio).toBeCloseTo(9)
             expect(frame.readoutFont * frame.scale / ratio).toBeCloseTo(9)
         }
     })
-    it("limits the visible range so a key row stays at least 14 css px tall", () => {
+    it("draws 13px rows in the default range, taller when zoomed in, never shorter", () => {
         for (const ratio of [1, 2]) {
             const frame = TunerCanvasLayout.fit(328 * ratio, 132 * ratio, ratio)
-            const rowPixels = 180 / frame.maxSpan * frame.scale / ratio
-            expect(rowPixels).toBeCloseTo(14)
-        }
-    })
-    it("draws every key row two css px shorter than the stored range gives", () => {
-        for (const ratio of [1, 2]) {
-            const frame = TunerCanvasLayout.fit(328 * ratio, 132 * ratio, ratio)
-            const rowPixels = (span: number) => 180 / span / frame.pixel
-            for (const span of [4, 6, 8]) {
-                expect(rowPixels(TunerCanvasLayout.visibleSpan(frame, span))).toBeCloseTo(rowPixels(span) - 2)
-            }
+            const rowPixels = (span: number) => 180 / TunerCanvasLayout.visibleSpan(frame, span) / frame.pixel
+            expect(rowPixels(6)).toBeCloseTo(13)
+            expect(rowPixels(3)).toBeCloseTo(26)
+            expect(rowPixels(24)).toBeCloseTo(13)
         }
     })
 })

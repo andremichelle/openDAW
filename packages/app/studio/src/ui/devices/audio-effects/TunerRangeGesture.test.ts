@@ -46,10 +46,10 @@ describe("tuner range gesture", () => {
             box.historySpan.setValue(range.span)
             box.autoFollow.setValue(false)
         }))
-        for (const displacement of [10, 20, 30, 40]) {gesture.move(displacement, displacement)}
+        for (const displacement of [10, 20, 30, 40]) {gesture.move(-displacement, displacement)}
         state.update(0, true, 440, true, {center: 69, span: 6})
         expect(state.center).toBeGreaterThan(69)
-        expect(state.span).toBeGreaterThan(6)
+        expect(state.span).toBeLessThan(6)
         expect(box.historyCenter.getValue()).toBe(69)
         expect(editing.canUndo()).toBe(false)
         gesture.approve()

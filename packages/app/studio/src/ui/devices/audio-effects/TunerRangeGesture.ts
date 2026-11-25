@@ -16,7 +16,7 @@ export class TunerRangeGesture {
         const frame = TunerCanvasLayout.fit(width, height)
         this.#width = (frame.historyRight - frame.left) * frame.scale
         this.#height = TunerLayout.historyHeight * frame.scale
-        this.#maxSpan = Math.min(24, frame.maxSpan)
+        this.#maxSpan = frame.maxSpan
         this.#commit = commit
     }
 
