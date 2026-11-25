@@ -3,6 +3,7 @@ import {
     EmptyExec,
     EmptyProcedure,
     int,
+    isDefined,
     MutableObservableOption,
     ObservableOption,
     ObservableValue
@@ -11,15 +12,18 @@ import {Promises} from "@opendaw/lib-runtime"
 import {StorageWalk} from "@opendaw/lib-fusion"
 
 export namespace StorageUsage {
-    export const WarnBytes = 2_000_000_000
+    export const WarnRatio = 0.75
 
     const usage = new MutableObservableOption<int>()
+    const quota = new MutableObservableOption<int>()
     const scanning = new DefaultObservableValue<boolean>(false)
     let running: Promise<void> = Promise.resolve()
     let queued = false
 
     export const observable = (): ObservableOption<int> => usage
     export const isScanning = (): ObservableValue<boolean> => scanning
+    export const exceeds = (bytes: int, allowed: int): boolean => bytes > allowed * WarnRatio
+    export const isCritical = (bytes: int): boolean => quota.match({none: () => false, some: allowed => exceeds(bytes, allowed)})
 
     // estimate() leaves out what sync access handles wrote before a browser restart
     export const refresh = (): Promise<void> => {
@@ -39,6 +43,8 @@ export namespace StorageUsage {
                 usage.clear()
                 return
             }
+            const estimate = await Promises.tryCatch(navigator.storage.estimate())
+            if (estimate.status === "resolved" && isDefined(estimate.value.quota)) {quota.wrap(estimate.value.quota)}
             const bytes = StorageWalk.totalSize(walk.value.files)
             usage.wrap(bytes)
             console.debug(`[StorageUsage] scanned ${walk.value.files.length} files, ${format(bytes)} in ${Math.round(performance.now() - start)}ms`)

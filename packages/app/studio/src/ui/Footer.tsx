@@ -143,7 +143,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                             `${megabytes(values[0])}/${megabytes(values[2])}M`))
                             }))
                         }}>N/A</FooterItem>
-            <FooterItem title="Storage" minWidth="11ch"
+            <FooterItem title="Storage" minWidth="11ch" className="clickable"
                         onInit={({component, value}) => {
                             const render = () => {
                                 if (StorageUsage.isScanning().getValue()) {
@@ -158,7 +158,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                     },
                                     some: bytes => {
                                         value.textContent = StorageUsage.format(bytes)
-                                        value.style.color = bytes > StorageUsage.WarnBytes ? Colors.red.toString() : ""
+                                        value.style.color = StorageUsage.isCritical(bytes) ? Colors.red.toString() : ""
                                     }
                                 })
                             }
