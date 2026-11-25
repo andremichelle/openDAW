@@ -11,8 +11,11 @@ describe("StorageUsage.format", () => {
         expect(StorageUsage.format(876_000)).toBe("876kB")
         expect(StorageUsage.format(0)).toBe("0kB")
     })
-    it("warns above two gigabytes", () => {
-        expect(2_000_000_001 > StorageUsage.WarnBytes).toBe(true)
-        expect(2_000_000_000 > StorageUsage.WarnBytes).toBe(false)
+    it("warns above 75 percent of the allowed storage", () => {
+        expect(StorageUsage.exceeds(750_000_001, 1_000_000_000)).toBe(true)
+        expect(StorageUsage.exceeds(750_000_000, 1_000_000_000)).toBe(false)
+    })
+    it("does not warn while the allowed storage is unknown", () => {
+        expect(StorageUsage.isCritical(Number.MAX_SAFE_INTEGER)).toBe(false)
     })
 })
