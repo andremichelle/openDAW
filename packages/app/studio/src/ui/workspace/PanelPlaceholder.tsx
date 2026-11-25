@@ -134,7 +134,7 @@ export const PanelPlaceholder =
         }))
         appendChildren(element, <Frag>{header}{container}</Frag>)
         lifecycle.own(Events.subscribe(header, "pointerdown", event => {
-            if (event.button !== 0 || (Browser.isMacOS() && event.ctrlKey)) {return}
+            if (!Events.isPrimaryButton(event)) {return}
             handler.toggleMinimize()
         }))
         lifecycle.own(ContextMenu.subscribe(header, collector => collector.addItems(

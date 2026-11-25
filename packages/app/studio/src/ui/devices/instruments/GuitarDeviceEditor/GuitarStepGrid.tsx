@@ -156,7 +156,7 @@ export const GuitarStepGrid = ({lifecycle, editing, adapter, page, lane, brush, 
         if (!stringsLane) {
             const drag = inner.own(new Terminator())
             inner.own(Events.subscribe(laneArea, "pointerdown", (event: PointerEvent) => {
-                if (event.button !== 0 || event.ctrlKey) {return}
+                if (!Events.isPrimaryButton(event) || event.ctrlKey) {return}
                 let mark = true
                 const paint = (pointer: PointerEvent) => {
                     const column = laneCells.findIndex(cell => {

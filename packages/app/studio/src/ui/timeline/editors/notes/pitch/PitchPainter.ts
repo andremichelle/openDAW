@@ -1,4 +1,6 @@
-import {int, linear, Option, Procedure} from "@opendaw/lib-std"
+import {int, linear, ObservableOption, Option, Procedure} from "@opendaw/lib-std"
+import {NoteEventGroupBox} from "@opendaw/studio-boxes"
+import {NoteEventFeatures} from "@opendaw/studio-adapters"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {MidiKeys, NoteEvent, ppqn} from "@opendaw/lib-dsp"
@@ -17,11 +19,12 @@ type Construct = {
     range: TimelineRange,
     snapping: Snapping,
     modifyContext: ObservableModifyContext<NoteModifier>,
-    reader: NoteEventOwnerReader
+    reader: NoteEventOwnerReader,
+    hoverGroup: ObservableOption<NoteEventGroupBox>
 }
 
 export const createNotePitchPainter =
-    ({canvas, positioner, scale, range, snapping, modifyContext, reader}: Construct): Procedure<CanvasPainter> =>
+    ({canvas, positioner, scale, range, snapping, modifyContext, reader, hoverGroup}: Construct): Procedure<CanvasPainter> =>
         painter => {
             const {context} = painter
             const {canvas: {width, height}} = context
@@ -73,7 +76,9 @@ export const createNotePitchPainter =
                     const x1 = unitToX(complete)
                     const y0 = pitchToY(pitch)
                     const xn = Math.max(x1 - x0, 3) // ensure that the note color is coming through the outline
-                    context.fillStyle = selected ? "white" : "black"
+                    const group = noteEvent.group
+                    const hovered = group.nonEmpty() && hoverGroup.contains(group.unwrap("group"))
+                    context.fillStyle = selected ? "white" : hovered ? "rgba(255, 255, 255, 0.5)" : "black"
                     context.fillRect(x0, y0 - devicePixelRatio, xn + devicePixelRatio, noteOutlineHeight)
                     const w = xn - devicePixelRatio
                     if (w > 0) {
@@ -82,19 +87,31 @@ export const createNotePitchPainter =
                         context.fillStyle = `hsla(${reader.hue}, ${saturation}%, 50%, ${opacity}%)`
                         context.fillRect(x0 + devicePixelRatio, y0, w, noteHeight)
                     }
+                    if (group.nonEmpty()) {
+                        const size = Math.min(noteHeight, 5 * devicePixelRatio)
+                        context.fillStyle = selected ? "white" : "rgba(255, 255, 255, 0.75)"
+                        context.beginPath()
+                        context.moveTo(x0 + devicePixelRatio, y0)
+                        context.lineTo(x0 + devicePixelRatio + size, y0)
+                        context.lineTo(x0 + devicePixelRatio, y0 + size)
+                        context.fill()
+                    }
                     const ftRange = noteHeight >>> 1
                     const ft = strategy.readCent(noteEvent) / 50.0 * (ftRange - devicePixelRatio * 2)
-                    context.fillStyle = selected ? "rgba(255, 255, 255, 0.75)" : "rgba(0, 0, 0, 0.5)"
                     const y = y0 + ftRange - ft - 1
-                    const playCount = noteEvent.playCount
-                    const playCurve = noteEvent.playCurve
+                    const {playCount, playCurve} = noteEvent
+                    const repeatLength = playCount > 1 ? noteEvent.repeatLength : 1.0
+                    const velocityFade = playCount > 1 ? noteEvent.velocityFade : 0.0
                     const duration = complete - position
                     for (let cycle = 0; cycle < playCount; cycle++) {
                         const b0 = NoteEvent.curveFunc(cycle / playCount, playCurve)
                         const b1 = NoteEvent.curveFunc((cycle + 1) / playCount, playCurve)
+                        const end = b0 + (b1 - b0) * repeatLength
                         const cx0 = Math.max(unitToX(position + duration * b0), x0 + devicePixelRatio)
-                        const cx1 = Math.min(unitToX(position + duration * b1), x1 - devicePixelRatio)
-                        context.fillRect(cx0 + devicePixelRatio, y, cx1 - cx0 - devicePixelRatio, devicePixelRatio)
+                        const cx1 = Math.min(unitToX(position + duration * end), x1 - devicePixelRatio)
+                        const gain = Math.max(NoteEventFeatures.velocityGain(velocityFade, cycle, playCount), 0.2)
+                        context.fillStyle = selected ? `rgba(255, 255, 255, ${0.75 * gain})` : `rgba(0, 0, 0, ${0.5 * gain})`
+                        context.fillRect(cx0 + devicePixelRatio, y, Math.max(cx1 - cx0 - devicePixelRatio, devicePixelRatio), devicePixelRatio)
                     }
                 }
             }

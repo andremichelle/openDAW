@@ -474,7 +474,7 @@ impl MidiOutProcessor {
             let time_ms = (block_offset_seconds + event_offset_seconds) * 1000.0 + delay;
             let channel = self.controls.channel.get() as u8 & 0x0F;
             if record.kind == EVENT_NOTE_ON {
-                let velocity = ((record.velocity * 127.0 + 0.5) as i32).clamp(0, 255) as u8; // Math.round
+                let velocity = ((record.velocity * 127.0 + 0.5) as i32).clamp(1, 127) as u8; // a note-on with 0 is a note-off
                 self.controls.active_notes.borrow_mut().push(record.pitch as u8);
                 if device_num >= 0 {
                     self.midi_out.borrow_mut().push(MidiMsg {

@@ -46,7 +46,7 @@ export const ChordPads = ({lifecycle, service, player}: Construct) => {
         }),
         player.subscribe(updateActive),
         ...pads.map((pad, index) => Events.subscribe(pad, "pointerdown", (event: PointerEvent) => {
-            if (event.button !== 0) {return}
+            if (!Events.isPrimaryButton(event)) {return}
             event.stopPropagation()
             player.press(index + 1)
             const subscription = Events.subscribe(window, "pointerup", () => {

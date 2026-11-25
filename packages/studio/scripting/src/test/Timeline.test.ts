@@ -45,6 +45,44 @@ describe("Timeline", () => {
         expect(region.events.length).toBe(0)
     })
 
+    it("repeats, groups and the seed of note chance", () => {
+        const {project} = createFixture()
+        expect(project.seed).toBe(0)
+        project.seed = 4711
+        expect(project.seed).toBe(4711)
+        const region = project.addInstrumentUnit("Vaporisateur").noteTracks[0].addRegion({duration: PPQN.Bar})
+        const ratchet = region.addEvent({playCount: 4, repeatLength: 0.5, velocityFade: -1, chance: 70})
+        expect(ratchet.playCount).toBe(4)
+        expect(ratchet.repeatLength).toBe(0.5)
+        expect(ratchet.velocityFade).toBe(-1)
+        expect(ratchet.chance).toBe(70)
+        expect(ratchet.group).toBeNull()
+        ratchet.velocityFade = 2
+        expect(ratchet.velocityFade).toBe(1)
+        const chord = region.addEvents([60, 64, 67].map(pitch => ({pitch, duration: PPQN.Quarter})))
+        const group = region.groupEvents(chord, "play-one")
+        expect(group.mode).toBe("play-one")
+        expect(group.chance).toBe(100)
+        expect(group.events).toEqual(chord)
+        chord.forEach(note => expect(note.group).toBe(group))
+        group.chance = 40
+        expect(chord[1].chance, "a grouped note reads the chance of its group").toBe(40)
+        chord[2].chance = 25
+        expect(group.chance, "and writes it").toBe(25)
+        group.mode = "play-all"
+        expect(group.mode).toBe("play-all")
+        expect(() => group.mode = "random" as any).toThrow(TypeError)
+        chord[0].leaveGroup()
+        expect(chord[0].group).toBeNull()
+        expect(chord[0].chance).toBe(100)
+        expect(group.events.length).toBe(2)
+        group.ungroup()
+        expect(chord[1].group).toBeNull()
+        const other = project.addInstrumentUnit("Vaporisateur").noteTracks[0].addRegion({duration: PPQN.Bar})
+        expect(() => other.groupEvents(chord)).toThrow(RangeError)
+        expect(() => region.groupEvents([])).toThrow(RangeError)
+    })
+
     it("rejects overlapping regions and invalid durations", () => {
         const {project} = createFixture()
         const track = project.addInstrumentUnit("Vaporisateur").noteTracks[0]

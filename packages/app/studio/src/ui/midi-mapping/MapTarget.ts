@@ -7,7 +7,7 @@ export namespace MapTarget {
 
     export const select = (midiLearning: MIDILearning, field: MIDIMappableField, element: Element): Terminable =>
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-            if (!midiLearning.mapMode.getValue() || event.button !== 0) {return}
+            if (!midiLearning.mapMode.getValue() || !Events.isPrimaryButton(event)) {return}
             event.preventDefault()
             event.stopImmediatePropagation()
             midiLearning.mapTarget.wrap(field)

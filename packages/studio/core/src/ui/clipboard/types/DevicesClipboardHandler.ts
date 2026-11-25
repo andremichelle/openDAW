@@ -17,7 +17,10 @@ import {Pointers} from "@opendaw/studio-enums"
 import {
     ModulationBox,
     NoteEventBox,
+    NoteEventChanceBox,
     NoteEventCollectionBox,
+    NoteEventGroupBox,
+    NoteEventRepeatBox,
     RootBox,
     TrackBox,
     ValueEventBox,
@@ -170,6 +173,9 @@ export namespace DevicesClipboard {
         || isInstanceOf(box, NoteEventCollectionBox)
         || isInstanceOf(box, ValueEventCollectionBox)
         || isInstanceOf(box, NoteEventBox)
+        || isInstanceOf(box, NoteEventChanceBox)
+        || isInstanceOf(box, NoteEventRepeatBox)
+        || isInstanceOf(box, NoteEventGroupBox)
         || isInstanceOf(box, ValueEventBox)
         || isInstanceOf(box, ValueEventCurveBox)
 

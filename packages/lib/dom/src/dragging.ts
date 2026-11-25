@@ -1,5 +1,4 @@
 import {EmptyExec, Exec, Func, int, isDefined, Option, safeRead, Terminable, Terminator} from "@opendaw/lib-std"
-import {Browser} from "./browser"
 import {AnimationFrame} from "./frames"
 import {Events, PointerCaptureTarget} from "./events"
 import {Keyboard} from "./keyboard"
@@ -43,7 +42,7 @@ export namespace Dragging {
         return Terminable.many(processCycle, Events.subscribe(target, "pointerdown", (event: PointerEvent) => {
             if (event.defaultPrevented) {return}
             if (options?.multiTouch !== true && !event.isPrimary) {return}
-            if (event.buttons !== 1 || (Browser.isMacOS() && event.ctrlKey)) {return}
+            if (event.buttons !== 1 || !Events.isPrimaryButton(event)) {return}
             cancelActive()
             const option: Option<Process> = factory(event)
             if (option.isEmpty()) {return}

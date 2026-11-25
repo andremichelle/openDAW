@@ -128,5 +128,5 @@ Saving the whole track as a rack preset keeps every layer with its instrument an
 - Every layer receives the full note stream. To split by key or velocity, place a note filtering MIDI effect inside the layer.
 - One layer with its strip at 0 dB and centre renders exactly what the bare instrument renders.
 - Launched clips hand over once per track and at the same bar for every layer.
-- Notes with a chance below 100 % are decided per layer. Layers agree as long as they read the notes at the same time. A Zeitgeist inside one layer shifts that layer's timing, so that layer may keep or drop a chance note differently from the others. A Zeitgeist in front of the composite does not have this effect.
+- Notes with a chance below 100 % are decided the same way in every layer, also when a layer has its own Zeitgeist.
 - Editing a layer, adding an effect, swapping its instrument or reordering layers never interrupts the other layers.

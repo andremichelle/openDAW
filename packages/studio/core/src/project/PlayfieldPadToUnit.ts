@@ -9,11 +9,19 @@ import {
     NoteClipBox,
     NoteEventBox,
     NoteEventCollectionBox,
+    NoteEventGroupBox,
     NoteRegionBox,
     PlayfieldDeviceBox,
     TrackBox
 } from "@opendaw/studio-boxes"
-import {AudioUnitFactory, AudioUnitGroups, InstrumentBox, PlayfieldPads, TrackType} from "@opendaw/studio-adapters"
+import {
+    AudioUnitFactory,
+    AudioUnitGroups,
+    InstrumentBox,
+    NoteEventFeatures,
+    PlayfieldPads,
+    TrackType
+} from "@opendaw/studio-adapters"
 import type {Project} from "./Project"
 import type {AudioUnitInsertion} from "./ProjectApi"
 
@@ -92,10 +100,24 @@ export namespace PlayfieldPadToUnit {
             const notes = collection.events.pointerHub.incoming().map(({box}) => box)
                 .filter((box): box is NoteEventBox => isInstanceOf(box, NoteEventBox) && box.pitch.getValue() === padKey)
             const result = notes.length === 0 ? Option.None : Option.wrap(NoteEventCollectionBox.create(boxGraph, UUID.generate()))
-            result.ifSome(copy => notes.forEach(note => {
-                note.events.refer(copy.events)
-                note.pitch.setValue(playKey)
-            }))
+            result.ifSome(copy => {
+                const moved = new Set<Box>(notes)
+                const split = notes.filter(note => NoteEventFeatures.groupBox(note)
+                    .mapOr(group => !group.pointerHub.incoming().every(({box}) => moved.has(box)), false))
+                const groups = NoteEventFeatures.createGroupMapping()
+                split.forEach(note => NoteEventFeatures.groupBox(note).ifSome(group => note.group
+                    .refer(groups.getOrCreate(group.address.uuid, uuid => ({
+                        source: uuid,
+                        target: NoteEventGroupBox.create(boxGraph, UUID.generate(), box => {
+                            box.chance.setValue(group.chance.getValue())
+                            box.mode.setValue(group.mode.getValue())
+                        })
+                    })).target)))
+                notes.forEach(note => {
+                    note.events.refer(copy.events)
+                    note.pitch.setValue(playKey)
+                })
+            })
             collections.set(collection, result)
             return result
         }

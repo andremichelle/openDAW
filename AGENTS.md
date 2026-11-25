@@ -68,4 +68,5 @@ Pull requests are reviewed against these rules. Check every new or touched file 
 
 - Type-check every package you touched: `npx tsc --noEmit -p packages/<path>` (for example `packages/studio/core`, `packages/app/studio`).
 - Run the tests of every package you touched: `npx turbo run test --filter=@opendaw/<package>` (for example `@opendaw/studio-core`). Turbo builds the dependencies first.
+- After a change in `crates/`, also run `npx turbo run test:rust --filter=@opendaw/studio-core-wasm` (all Rust crates, cached while `crates/` is unchanged). Long render and fuzz tests run with `npm run test:slow -w @opendaw/studio-core-wasm`.
 - After a box schema change in `packages/studio/forge-boxes`, run `npm run build`. It regenerates the boxes and the Rust registry in `crates/studio-boxes/src/registry.rs`, commit both.

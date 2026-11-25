@@ -25,17 +25,19 @@ type Construct = {
     stretch?: boolean
     pointer?: boolean
     groupId?: string
+    className?: string
 }
 
 export const MenuButton =
-    ({root, onInit, style, appearance, horizontal, stretch, pointer, groupId}: Construct, children: JsxValue) => {
+    ({root, onInit, style, appearance, horizontal, stretch, pointer, groupId, className: externalClassName}: Construct,
+     children: JsxValue) => {
         let current: Option<Menu> = Option.None
         let touchDown = false
         const button: HTMLButtonElement = (
             <button onInit={onInit}
                     className={Html.buildClassList(className,
                         appearance?.framed && "framed", appearance?.tinyTriangle && "tiny-triangle",
-                        stretch && "stretch", pointer && "pointer")}
+                        stretch && "stretch", pointer && "pointer", externalClassName)}
                     onpointerdown={(event: PointerEvent) => {
                         touchDown = event.pointerType === "touch"
                         if (touchDown) {return} // iOS focuses on the compat mousedown after release, blurring the menu away

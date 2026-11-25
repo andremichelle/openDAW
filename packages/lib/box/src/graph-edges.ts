@@ -117,6 +117,10 @@ export class GraphEdges {
         return this.#requiresTarget.values().filter(pointer => pointer.isEmpty())
     }
 
+    overflowingExclusives(): ReadonlyArray<Vertex> {
+        return this.#requiresExclusive.values().filter(vertex => vertex.pointerHub.size() > 1)
+    }
+
     clearAffected(): void {this.#affected.clear()}
 
     tryValidateAffected(): Option<Error> {

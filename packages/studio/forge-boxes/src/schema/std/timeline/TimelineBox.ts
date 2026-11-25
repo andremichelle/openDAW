@@ -129,7 +129,8 @@ export const TimelineBox: BoxSchema<Pointers> = {
             31: {
                 type: "float32", name: "bpm",
                 value: 120.0, constraints: {min: 30.0, max: 999.0, scaling: "exponential"}, unit: "bpm"
-            }
+            },
+            32: {type: "int32", name: "seed", value: 0, constraints: {min: 0, max: 999999}, unit: ""}
         }
     }, pointerRules: {accepts: [Pointers.MetaData], mandatory: false}
 }

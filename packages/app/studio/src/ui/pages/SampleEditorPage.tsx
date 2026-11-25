@@ -356,7 +356,7 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
                 element.classList.toggle("edge", current().mapOr(document => edgeAt(document, event.clientX).nonEmpty(), false))
             }),
             Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-                if (event.button !== 0) {return}
+                if (!Events.isPrimaryButton(event)) {return}
                 current().ifSome(document => {
                     stop()
                     const frameOf = (clientX: number) => viewport.frameAt(xOf(clientX))
@@ -404,7 +404,7 @@ export const SampleEditorPage: PageFactory<StudioService> = ({lifecycle, service
                 if (event.buttons === 0) {element.classList.toggle("edge", edgeAt(event.clientX).nonEmpty())}
             }),
             Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-                if (event.button !== 0 || viewport.numberOfFrames === 0) {return}
+                if (!Events.isPrimaryButton(event) || viewport.numberOfFrames === 0) {return}
                 const edge = edgeAt(event.clientX)
                 const length = viewport.end - viewport.start
                 const pointer = frameAt(event.clientX)

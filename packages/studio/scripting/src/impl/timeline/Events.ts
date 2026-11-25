@@ -1,8 +1,8 @@
-import {NoteEventBox, NoteEventCollectionBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {NoteEventBox, NoteEventCollectionBox, NoteEventGroupBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {Interpolation, ppqn} from "@opendaw/lib-dsp"
-import {InterpolationFieldAdapter} from "@opendaw/studio-adapters"
-import {asInstanceOf, bipolar, float, int, isDefined, panic, unitValue, UUID} from "@opendaw/lib-std"
-import {NoteEvent, NoteEventProps, ValueEvent, ValueEventProps} from "../../Api"
+import {InterpolationFieldAdapter, NoteEventFeatures} from "@opendaw/studio-adapters"
+import {asInstanceOf, bipolar, float, int, isDefined, Nullable, panic, unitValue, UUID} from "@opendaw/lib-std"
+import {NoteEvent, NoteEventProps, NoteGroup, NoteGroupMode, ValueEvent, ValueEventProps} from "../../Api"
 import {Context} from "../Context"
 import {Facade, Props} from "../Common"
 import {Guard} from "../Guard"
@@ -17,16 +17,75 @@ export class NoteEventImpl extends Facade<NoteEventBox> implements NoteEvent {
     declare pitch: int
     declare velocity: unitValue
     declare cents: float
-    declare playCount: int
-    declare playCurve: bipolar
-    declare chance: int
 
     private constructor(context: Context, box: NoteEventBox) {
         super(context, box)
-        this.bind({
-            position: box.position, duration: box.duration, pitch: box.pitch, velocity: box.velocity,
-            cents: box.cent, playCount: box.playCount, playCurve: box.playCurve, chance: box.chance
-        })
+        this.bind({position: box.position, duration: box.duration, pitch: box.pitch, velocity: box.velocity, cents: box.cent})
+    }
+
+    get playCount(): int {return NoteEventFeatures.readPlayCount(this.box)}
+    set playCount(value: int) {
+        const validated = Guard.int32({min: 1, max: 128}, value, "playCount")
+        this.context.edit(() => NoteEventFeatures.writePlayCount(this.box, validated))
+    }
+    get playCurve(): bipolar {return NoteEventFeatures.readPlayCurve(this.box)}
+    set playCurve(value: bipolar) {
+        const validated = Guard.float32("bipolar", value, "playCurve")
+        this.context.edit(() => NoteEventFeatures.writePlayCurve(this.box, validated))
+    }
+    get repeatLength(): unitValue {return NoteEventFeatures.readRepeatLength(this.box)}
+    set repeatLength(value: unitValue) {
+        const validated = Guard.float32("unipolar", value, "repeatLength")
+        this.context.edit(() => NoteEventFeatures.writeRepeatLength(this.box, validated))
+    }
+    get velocityFade(): bipolar {return NoteEventFeatures.readVelocityFade(this.box)}
+    set velocityFade(value: bipolar) {
+        const validated = Guard.float32("bipolar", value, "velocityFade")
+        this.context.edit(() => NoteEventFeatures.writeVelocityFade(this.box, validated))
+    }
+    get chance(): int {return NoteEventFeatures.readChance(this.box)}
+    set chance(value: int) {
+        const validated = Guard.int32({min: 0, max: 100}, value, "chance")
+        this.context.edit(() => NoteEventFeatures.writeChance(this.box, validated))
+    }
+    get group(): Nullable<NoteGroupImpl> {
+        return NoteEventFeatures.groupBox(this.box).mapOr(box => NoteGroupImpl.wrap(this.context, box), null)
+    }
+    leaveGroup(): void {this.context.edit(() => NoteEventFeatures.leaveGroup([this.box]))}
+}
+
+export class NoteGroupImpl extends Facade<NoteEventGroupBox> implements NoteGroup {
+    static wrap(context: Context, box: NoteEventGroupBox): NoteGroupImpl {
+        return context.facade(box, () => new NoteGroupImpl(context, box))
+    }
+
+    declare chance: int
+
+    private constructor(context: Context, box: NoteEventGroupBox) {
+        super(context, box)
+        this.bind({chance: box.chance})
+    }
+
+    get mode(): NoteGroupMode {
+        return this.box.mode.getValue() === NoteEventFeatures.GroupMode.PlayOne ? "play-one" : "play-all"
+    }
+    set mode(value: NoteGroupMode) {
+        const validated = NoteGroupModes.validate(value)
+        this.context.edit(() => this.box.mode.setValue(validated))
+    }
+    get events(): ReadonlyArray<NoteEventImpl> {
+        return this.box.pointerHub.incoming()
+            .map(({box}) => NoteEventImpl.wrap(this.context, asInstanceOf(box, NoteEventBox)))
+            .sort((first, second) => first.position - second.position || first.pitch - second.pitch)
+    }
+    ungroup(): void {this.context.edit(() => this.box.delete())}
+}
+
+export namespace NoteGroupModes {
+    export const validate = (value: unknown, name: string = "mode"): NoteEventFeatures.GroupMode => {
+        if (value === "play-all") {return NoteEventFeatures.GroupMode.PlayAll}
+        if (value === "play-one") {return NoteEventFeatures.GroupMode.PlayOne}
+        return panic(new TypeError(`${name}: expected "play-all" or "play-one", got ${Guard.describe(value)}`))
     }
 }
 
@@ -94,6 +153,19 @@ export class NoteEvents {
     addAll(events: ReadonlyArray<NoteEventProps>): ReadonlyArray<NoteEventImpl> {
         if (!Array.isArray(events)) {return panic(new TypeError("addEvents: expected an array"))}
         return this.#context.edit(() => events.map(props => this.add(props)))
+    }
+
+    group(events: ReadonlyArray<NoteEvent>, mode: NoteGroupMode = "play-all"): NoteGroupImpl {
+        if (!Array.isArray(events)) {return panic(new TypeError("groupEvents: expected an array"))}
+        const validated = NoteGroupModes.validate(mode)
+        const members = this.list()
+        const boxes = events.map((event, index) => {
+            const member = members.find(candidate => candidate === event)
+            return isDefined(member) ? member.box : panic(new RangeError(`groupEvents: event ${index} is not a note of this owner`))
+        })
+        if (boxes.length === 0) {return panic(new RangeError("groupEvents: expected at least one note"))}
+        return this.#context.edit(() => NoteGroupImpl.wrap(this.#context,
+            NoteEventFeatures.group(boxes, validated).unwrap("group")))
     }
 
     clear(): void {this.#context.edit(() => this.list().forEach(event => event.box.delete()))}

@@ -55,6 +55,7 @@ pub mod note_event_source;
 pub mod note_region;
 pub mod note_content_source;
 pub mod note_sequencer;
+pub mod host_random;
 pub mod ppqn;
 pub mod process_info;
 pub mod process_phase;

@@ -1,4 +1,5 @@
 import {isAbsent, isDefined, Nullable, Procedure, Subscription} from "@opendaw/lib-std"
+import {Browser} from "./browser"
 
 type KnownEventMap = WindowEventMap & MIDIInputEventMap & MIDIPortEventMap
 
@@ -20,30 +21,34 @@ export class Events {
     }
 
     static DOUBLE_DOWN_THRESHOLD = 200 as const
+    static DOUBLE_DOWN_DISTANCE = 4 as const
+    static DOUBLE_TAP_DISTANCE = 24 as const
 
-    static subscribeDblDwn = (eventTarget: EventTarget, listener: (event: PointerEvent) => void): Subscription => {
-        let lastDownTime: number = 0.0
-        return this.subscribe(eventTarget, "pointerdown", event => {
+    static subscribeDblDwn = (eventTarget: EventTarget, listener: Procedure<PointerEvent>): Subscription =>
+        this.#subscribeDouble(eventTarget, "pointerdown", listener)
+
+    static subscribeDblUp = (eventTarget: EventTarget, listener: Procedure<PointerEvent>): Subscription =>
+        this.#subscribeDouble(eventTarget, "pointerup", listener)
+
+    // two presses count as double only when they are quick AND land on the same spot
+    static #subscribeDouble = (eventTarget: EventTarget,
+                               type: "pointerdown" | "pointerup",
+                               listener: Procedure<PointerEvent>): Subscription => {
+        const last = {time: Number.NEGATIVE_INFINITY, x: 0.0, y: 0.0}
+        return this.subscribe(eventTarget, type, event => {
             const now = performance.now()
-            if (now - lastDownTime < this.DOUBLE_DOWN_THRESHOLD) {
+            const distance = event.pointerType === "mouse" ? this.DOUBLE_DOWN_DISTANCE : this.DOUBLE_TAP_DISTANCE
+            if (now - last.time < this.DOUBLE_DOWN_THRESHOLD
+                && Math.hypot(event.clientX - last.x, event.clientY - last.y) <= distance) {
                 event.preventDefault()
                 event.stopImmediatePropagation()
                 listener(event)
+                last.time = Number.NEGATIVE_INFINITY
+                return
             }
-            lastDownTime = now
-        }, {capture: true})
-    }
-
-    static subscribeDblUp = (eventTarget: EventTarget, listener: (event: PointerEvent) => void): Subscription => {
-        let lastDownTime: number = 0.0
-        return this.subscribe(eventTarget, "pointerup", event => {
-            const now = performance.now()
-            if (now - lastDownTime < this.DOUBLE_DOWN_THRESHOLD) {
-                event.preventDefault()
-                event.stopImmediatePropagation()
-                listener(event)
-            }
-            lastDownTime = now
+            last.time = now
+            last.x = event.clientX
+            last.y = event.clientY
         }, {capture: true})
     }
 
@@ -53,6 +58,13 @@ export class Events {
     }
 
     static readonly PreventDefault: Procedure<Event> = event => event.preventDefault()
+
+    // ctrl + click opens the context menu on macOS, it is no primary press
+    static readonly isPrimaryButton = (event: MouseEvent): boolean =>
+        event.button === 0 && !(Browser.isMacOS() && event.ctrlKey)
+
+    static readonly isContextButton = (event: MouseEvent): boolean =>
+        event.button === 2 || (event.button === 0 && Browser.isMacOS() && event.ctrlKey)
 
     static readonly isTextInput = (target: Nullable<EventTarget>): boolean => {
         return target instanceof HTMLInputElement

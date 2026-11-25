@@ -380,6 +380,12 @@ impl ClipSequencer {
         }
     }
 
+    /// No clip plays or waits on `track`, so its timeline rules every position.
+    pub fn is_idle(&self, track: &TrackKey) -> bool {
+        self.states.iter().find(|state| &state.uuid == track)
+            .is_none_or(|state| state.playing.is_none() && state.waiting.is_none())
+    }
+
     /// Drain the queued transitions for the UI back-channel (TS `changes()`).
     pub fn take_changes(&mut self, visit: &mut dyn FnMut(&ClipKey, Change)) {
         for (key, change) in self.changes.drain(..) {

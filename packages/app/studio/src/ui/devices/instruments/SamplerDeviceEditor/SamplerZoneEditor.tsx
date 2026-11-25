@@ -535,7 +535,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         boxGraph.subscribeToAllUpdates({onUpdate: schedule}),
         adapter.labelField.subscribe(schedule),
         Events.subscribe(map, "pointerdown", (event: PointerEvent) => {
-            if (event.button !== 0) {return}
+            if (!Events.isPrimaryButton(event)) {return}
             const {x, y, width, height} = pointerOf(map, event)
             const key = SamplerZoneMap.keyAt(x, width)
             const velocity = SamplerZoneMap.velocityAt(y, height)
@@ -633,7 +633,7 @@ export const SamplerZoneEditor = ({lifecycle, service, adapter, deviceHost}: Con
         }),
         Events.subscribe(map, "pointerleave", () => readout.textContent = ""),
         Events.subscribe(waveform, "pointerdown", (event: PointerEvent) => {
-            if (event.button !== 0) {return}
+            if (!Events.isPrimaryButton(event)) {return}
             const marker = markerAt(event)
             if (!isDefined(marker)) {
                 focused?.file().ifSome(file => service.samplePlayback.toggle(UUID.toString(file.uuid)))

@@ -22,6 +22,8 @@ import {
     NoteClipProps,
     NoteEvent,
     NoteEventProps,
+    NoteGroup,
+    NoteGroupMode,
     NoteTrack,
     Sample,
     ValueClip,
@@ -90,6 +92,7 @@ export class NoteClipImpl extends ClipFacade<NoteClipBox> implements NoteClip {
     get events(): ReadonlyArray<NoteEvent> {return this.noteEvents.list()}
     addEvent(props?: NoteEventProps): NoteEvent {return this.noteEvents.add(props)}
     addEvents(events: ReadonlyArray<NoteEventProps>): ReadonlyArray<NoteEvent> {return this.noteEvents.addAll(events)}
+    groupEvents(events: ReadonlyArray<NoteEvent>, mode?: NoteGroupMode): NoteGroup {return this.noteEvents.group(events, mode)}
     clearEvents(): void {this.noteEvents.clear()}
 }
 

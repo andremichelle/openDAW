@@ -400,6 +400,7 @@ impl Engine {
             _ => {
                 let sequencer = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: unit.track_sets.clone()}), self.clip_sequencer.clone())));
                 sequencer.borrow_mut().bind_truncate_preference(self.truncate_pref.clone());
+                sequencer.borrow_mut().bind_seed(self.note_seed.clone());
                 sequencer
             }
         };
@@ -818,6 +819,7 @@ impl Engine {
             _ => {
                 let sequencer = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: unit.track_sets.clone()}), self.clip_sequencer.clone())));
                 sequencer.borrow_mut().bind_truncate_preference(self.truncate_pref.clone());
+                sequencer.borrow_mut().bind_seed(self.note_seed.clone());
                 sequencer
             }
         };
@@ -1178,6 +1180,7 @@ impl Engine {
             _ => {
                 let sequencer = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: track_sets.clone()}), self.clip_sequencer.clone())));
                 sequencer.borrow_mut().bind_truncate_preference(self.truncate_pref.clone());
+                sequencer.borrow_mut().bind_seed(self.note_seed.clone());
                 sequencer.borrow_mut().set_clip_read(self.clip_read);
                 sequencer
             }

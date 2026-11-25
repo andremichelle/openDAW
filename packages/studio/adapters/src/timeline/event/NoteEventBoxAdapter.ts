@@ -1,11 +1,23 @@
 import {NoteEvent, ppqn} from "@opendaw/lib-dsp"
-import {Arrays, bipolar, float, int, Option, Selectable, Subscription, unitValue, UUID} from "@opendaw/lib-std"
-import {NoteEventBox} from "@opendaw/studio-boxes"
+import {
+    Arrays,
+    bipolar,
+    float,
+    int,
+    isDefined,
+    Option,
+    Selectable,
+    Terminator,
+    unitValue,
+    UUID
+} from "@opendaw/lib-std"
+import {NoteEventBox, NoteEventGroupBox} from "@opendaw/studio-boxes"
 import {Address, Field, Propagation, Update} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {BoxAdapter} from "../../BoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {NoteEventCollectionBoxAdapter} from "../collection/NoteEventCollectionBoxAdapter"
+import {NoteEventFeatures} from "./NoteEventFeatures"
 
 type CopyToParams = {
     position?: ppqn,
@@ -13,6 +25,9 @@ type CopyToParams = {
     pitch?: int,
     playCount?: int,
     playCurve?: bipolar,
+    velocity?: unitValue,
+    split?: boolean,
+    groups?: NoteEventFeatures.GroupMapping,
     events?: Field<Pointers.NoteEvents>
 }
 
@@ -21,16 +36,23 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
 
     readonly #context: BoxAdaptersContext
     readonly #box: NoteEventBox
-
-    readonly #subscription: Subscription
+    readonly #terminator: Terminator
+    readonly #featureWatch: Terminator
 
     #isSelected: boolean = false
 
     constructor(context: BoxAdaptersContext, box: NoteEventBox) {
         this.#context = context
         this.#box = box
-
-        this.#subscription = this.#box.subscribe(Propagation.Children, (update: Update) => {
+        this.#terminator = new Terminator()
+        this.#featureWatch = this.#terminator.own(new Terminator())
+        const watcher = {onAdded: () => this.#watchFeatures(true), onRemoved: () => this.#watchFeatures(true)}
+        this.#terminator.ownAll(
+            this.#box.random.pointerHub.subscribe(watcher),
+            this.#box.split.pointerHub.subscribe(watcher))
+        this.#watchFeatures(false)
+        this.#terminator.own(this.#box.group.subscribe(() => this.#watchFeatures(true)))
+        this.#terminator.own(this.#box.subscribe(Propagation.Children, (update: Update) => {
             if (this.collection.isEmpty()) {return}
             if (update.type === "primitive" || update.type === "pointer") {
                 const collection = this.collection.unwrap()
@@ -43,7 +65,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
                     collection.onEventPropertyChanged()
                 }
             }
-        })
+        }))
     }
 
     onSelected(): void {
@@ -55,7 +77,19 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
         this.collection.ifSome(region => region.onEventPropertyChanged())
     }
 
-    terminate(): void {this.#subscription.terminate()}
+    terminate(): void {this.#terminator.terminate()}
+
+    #watchFeatures(notify: boolean): void {
+        this.#featureWatch.terminate()
+        const changed = () => this.collection.ifSome(collection => collection.onEventPropertyChanged())
+        NoteEventFeatures.chanceBox(this.#box).ifSome(chance => this.#featureWatch.own(
+            chance.subscribe(Propagation.Children, changed)))
+        NoteEventFeatures.groupBox(this.#box).ifSome(group => this.#featureWatch.own(
+            group.subscribe(Propagation.Children, changed)))
+        NoteEventFeatures.repeatBox(this.#box).ifSome(repeat => this.#featureWatch.own(
+            repeat.subscribe(Propagation.Children, changed)))
+        if (notify) {changed()}
+    }
 
     get box(): NoteEventBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
@@ -66,9 +100,12 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     get velocity(): float {return this.#box.velocity.getValue()} // 0.0...1.0
     get pitch(): int {return this.#box.pitch.getValue()} // 0...127
     get cent(): number {return this.#box.cent.getValue()} // -50.0...+50.0
-    get chance(): int {return this.#box.chance.getValue()} // 0...100%
-    get playCount(): int {return this.#box.playCount.getValue()} // 1...16
-    get playCurve(): bipolar {return this.#box.playCurve.getValue()}
+    get chance(): int {return NoteEventFeatures.readChance(this.#box)}
+    get group(): Option<NoteEventGroupBox> {return NoteEventFeatures.groupBox(this.#box)}
+    get playCount(): int {return NoteEventFeatures.readPlayCount(this.#box)}
+    get playCurve(): bipolar {return NoteEventFeatures.readPlayCurve(this.#box)}
+    get repeatLength(): unitValue {return NoteEventFeatures.readRepeatLength(this.#box)}
+    get velocityFade(): bipolar {return NoteEventFeatures.readVelocityFade(this.#box)}
     get isSelected(): boolean {return this.#isSelected}
     get collection(): Option<NoteEventCollectionBoxAdapter> {
         return this.#box.events.targetVertex
@@ -92,36 +129,56 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     }
 
     copyTo(options?: CopyToParams): NoteEventBoxAdapter {
-        return this.#context.boxAdapters.adapterFor(NoteEventBox.create(this.#context.boxGraph, UUID.generate(), box => {
+        const copy = NoteEventBox.create(this.#context.boxGraph, UUID.generate(), box => {
             box.position.setValue(options?.position ?? this.position)
             box.duration.setValue(options?.duration ?? this.duration)
             box.pitch.setValue(options?.pitch ?? this.pitch)
-            box.playCount.setValue(options?.playCount ?? this.playCount)
-            box.playCurve.setValue(options?.playCurve ?? this.playCurve)
             box.events.refer(options?.events ?? this.collection.unwrap("collection").box.events)
-            box.velocity.setValue(this.velocity)
+            box.velocity.setValue(options?.velocity ?? this.velocity)
             box.cent.setValue(this.cent)
-            box.chance.setValue(this.chance)
-        }), NoteEventBoxAdapter)
+        })
+        NoteEventFeatures.copy(this.#box, copy, {
+            split: options?.split ?? true,
+            groups: options?.groups ?? NoteEventFeatures.createGroupMapping()
+        })
+        if (isDefined(options?.playCount)) {NoteEventFeatures.writePlayCount(copy, options.playCount)}
+        if (isDefined(options?.playCurve)) {NoteEventFeatures.writePlayCurve(copy, options.playCurve)}
+        return this.#context.boxAdapters.adapterFor(copy, NoteEventBoxAdapter)
     }
 
     computeCurveValue(ratio: unitValue): unitValue {return NoteEvent.curveFunc(ratio, this.playCurve)}
+    parts(): ReadonlyArray<NoteEvent> {
+        const {position, duration, pitch, cent, velocity, playCount, repeatLength, velocityFade} = this
+        if (playCount <= 1) {return [this.copyAsNoteEvent()]}
+        return Arrays.create((index) => {
+            const a = Math.floor(this.computeCurveValue(index / playCount) * duration)
+            const b = Math.floor(this.computeCurveValue((index + 1) / playCount) * duration)
+            return {
+                type: "note-event", position: Math.floor(position + a),
+                duration: Math.max(1, Math.floor((b - a) * repeatLength)), pitch, cent,
+                velocity: velocity * NoteEventFeatures.velocityGain(velocityFade, index, playCount)
+            }
+        }, playCount)
+    }
     canConsolidate(): boolean {return this.playCount > 1}
     consolidate(): ReadonlyArray<NoteEventBoxAdapter> {
-        const playCount = this.playCount
+        const {chance, group: sourceGroup} = this
+        const playOne = sourceGroup.mapOr(group => group.mode.getValue() === NoteEventFeatures.GroupMode.PlayOne, false)
+        const groups = NoteEventFeatures.createGroupMapping()
+        sourceGroup.ifSome(group => {
+            if (!playOne || group.pointerHub.incoming().length === 1) {
+                groups.add({source: group.address.uuid, target: group})
+            }
+        })
         const events = this.collection.unwrap("collection").box.events
-        const adapters = Arrays.create((index) => {
-            const a = Math.floor(this.computeCurveValue(index / playCount) * this.duration)
-            const b = Math.floor(this.computeCurveValue((index + 1) / playCount) * this.duration)
-            return this.copyTo({
-                position: Math.floor(this.position + a),
-                duration: Math.max(1, b - a),
-                playCount: 1,
-                playCurve: 0,
-                events
-            })
-        }, playCount)
+        const adapters = this.parts().map(({position, duration, velocity}) =>
+            this.copyTo({position, duration, velocity, split: false, groups, events}))
         this.#box.delete()
+        if (playOne) {
+            adapters[0].group.ifSome(group => group.mode.setValue(NoteEventFeatures.GroupMode.PlayAll))
+        } else if (sourceGroup.isEmpty() && chance < 100) {
+            NoteEventFeatures.group(adapters.map(adapter => adapter.box), NoteEventFeatures.GroupMode.PlayAll)
+        }
         return adapters
     }
 }

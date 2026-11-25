@@ -1,0 +1,19 @@
+component
+  display: flex
+  flex-direction: row
+  align-items: center
+  align-self: start
+  column-gap: .75em
+  min-height: 1.5em
+
+  > .scale-menu
+    min-width: 0
+
+  > .follow-key
+    font-size: 0.75em
+
+  &.following > :not(.follow-key)
+    opacity: 0.3
+
+  &.following > :not(.follow-key), &.following > :not(.follow-key) *
+    pointer-events: none

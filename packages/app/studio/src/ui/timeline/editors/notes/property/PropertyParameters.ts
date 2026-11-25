@@ -1,13 +1,11 @@
-import {PrimitiveField} from "@opendaw/lib-box"
 import {DefaultParameter, int, StringMapping, ValueMapping} from "@opendaw/lib-std"
 import {NoteEventBox} from "@opendaw/studio-boxes"
+import {NoteEventFeatures} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 
-export type OnlyPrimitives<T> = { [K in keyof T as T[K] extends PrimitiveField<number> ? K : never]: T[K] }
-
-export type NotePropertyParameter = {
-    parameter: DefaultParameter<number>
-    fieldName: keyof OnlyPrimitives<NoteEventBox>
+export interface NotePropertyParameter {
+    readonly parameter: DefaultParameter<number>
+    write(box: NoteEventBox, value: number): void
 }
 
 export const PropertyParameters = {
@@ -17,7 +15,7 @@ export const PropertyParameters = {
             StringMapping.numeric(),
             "Position",
             0),
-        fieldName: "position"
+        write: (box: NoteEventBox, value: number) => box.position.setValue(value)
     },
     duration: {
         parameter: new DefaultParameter<int>(
@@ -25,7 +23,7 @@ export const PropertyParameters = {
             StringMapping.numeric(),
             "Duration",
             PPQN.SemiQuaver),
-        fieldName: "duration"
+        write: (box: NoteEventBox, value: number) => box.duration.setValue(value)
     },
     pitch: {
         parameter: new DefaultParameter<int>(
@@ -33,7 +31,7 @@ export const PropertyParameters = {
             StringMapping.numeric(),
             "Pitch",
             60),
-        fieldName: "pitch"
+        write: (box: NoteEventBox, value: number) => box.pitch.setValue(value)
     },
     velocity: {
         parameter: new DefaultParameter<number>(
@@ -41,7 +39,7 @@ export const PropertyParameters = {
             StringMapping.percent(),
             "Velocity",
             0.8),
-        fieldName: "velocity"
+        write: (box: NoteEventBox, value: number) => box.velocity.setValue(value)
     },
     // TODO FineTune should increase or decrease pitch when overflowing (100cents)
     cent: {
@@ -54,7 +52,7 @@ export const PropertyParameters = {
             }),
             "Fine Tune",
             0.0),
-        fieldName: "cent"
+        write: (box: NoteEventBox, value: number) => box.cent.setValue(value)
     },
     chance: {
         parameter: new DefaultParameter<number>(
@@ -64,7 +62,7 @@ export const PropertyParameters = {
             }),
             "Chance",
             100),
-        fieldName: "chance"
+        write: (box: NoteEventBox, value: number) => NoteEventFeatures.writeChance(box, value)
     },
     playCount: {
         parameter: new DefaultParameter<int>(
@@ -72,12 +70,26 @@ export const PropertyParameters = {
             StringMapping.numeric({fractionDigits: 0}),
             "Play Count",
             1),
-        fieldName: "playCount"
+        write: (box: NoteEventBox, value: number) => NoteEventFeatures.writePlayCount(box, value)
     }, playCurve: {
         parameter: new DefaultParameter<int>(
             ValueMapping.bipolar(),
             StringMapping.percent({fractionDigits: 0, bipolar: false}),
             "Play Curve", 0.0),
-        fieldName: "playCurve"
+        write: (box: NoteEventBox, value: number) => NoteEventFeatures.writePlayCurve(box, value)
+    },
+    repeatLength: {
+        parameter: new DefaultParameter<number>(
+            ValueMapping.unipolar(),
+            StringMapping.percent({fractionDigits: 0}),
+            "Length", 1.0),
+        write: (box: NoteEventBox, value: number) => NoteEventFeatures.writeRepeatLength(box, value)
+    },
+    velocityFade: {
+        parameter: new DefaultParameter<number>(
+            ValueMapping.bipolar(),
+            StringMapping.percent({fractionDigits: 0, bipolar: false}),
+            "Velocity Fade", 0.0),
+        write: (box: NoteEventBox, value: number) => NoteEventFeatures.writeVelocityFade(box, value)
     }
 } as const satisfies Record<string, NotePropertyParameter>

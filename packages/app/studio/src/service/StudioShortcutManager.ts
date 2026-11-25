@@ -29,6 +29,7 @@ import {RouteLocation} from "@opendaw/lib-jsx"
 import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
 import {ShortcutStorage} from "@/service/ShortcutStorage"
 import {TimeSelectionShortcuts, TimeSelectionShortcutsFactory} from "@/ui/shortcuts/TimeSelectionShortcuts"
+import {EuclidShortcuts, EuclidShortcutsFactory} from "@/ui/shortcuts/EuclidShortcuts"
 
 export namespace StudioShortcutManager {
     export type ShortcutsMap = Record<string, ShortcutDefinitions>
@@ -42,7 +43,8 @@ export namespace StudioShortcutManager {
         "content-editor": {factory: ContentEditorShortcutsFactory, workingDefinition: ContentEditorShortcuts},
         "device-panel": {factory: DevicePanelShortcutsFactory, workingDefinition: DevicePanelShortcuts},
         "software-midi": {factory: SoftwareMIDIShortcutsFactory, workingDefinition: SoftwareMIDIShortcuts},
-        "piano-panel": {factory: PianoPanelShortcutsFactory, workingDefinition: PianoPanelShortcuts}
+        "piano-panel": {factory: PianoPanelShortcutsFactory, workingDefinition: PianoPanelShortcuts},
+        "euclid": {factory: EuclidShortcutsFactory, workingDefinition: EuclidShortcuts}
     } as const satisfies Record<string, { factory: ShortcutDefinitions, workingDefinition: ShortcutDefinitions }>
 
     export const toJSONString = (source: ShortcutsMap): Option<string> => {

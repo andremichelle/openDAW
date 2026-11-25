@@ -53,7 +53,7 @@ export const PatternGrid = ({lifecycle, editing, adapter, stepRange, receiver}: 
             render()
             inner.ownAll(
                 Events.subscribe(cell, "pointerdown", (event: PointerEvent) => {
-                    if (event.button !== 0) {return}
+                    if (!Events.isPrimaryButton(event)) {return}
                     const startY = event.clientY
                     const startNote = readStep(absIndex).note
                     let lastNote = startNote

@@ -91,7 +91,7 @@ export const StepGrid = ({lifecycle, editing, adapter, stepRange, lane, receiver
         )
         const laneArea: HTMLElement = <div className="lane-area">{laneCells}</div>
         inner.own(Events.subscribe(laneArea, "pointerdown", (event: PointerEvent) => {
-            if (event.button !== 0) {return}
+            if (!Events.isPrimaryButton(event)) {return}
             let mark = true
             const paint = (pointer: PointerEvent) => {
                 const column = laneCells.findIndex(cell => {

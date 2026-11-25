@@ -12,6 +12,7 @@ import {
     MIDIOutputParameterBox,
     ModulationBox,
     NoteEventBox,
+    NoteEventGroupBox,
     RandomModulatorBox,
     StepsModulatorBox,
     TrackBox,
@@ -33,7 +34,7 @@ import {GrooveImpls} from "./Grooves"
 import {ModulationImpl, ModulatorImpls} from "./Modulators"
 import {TrackImpls} from "./timeline/Tracks"
 import {MarkerImpl} from "./timeline/Markers"
-import {NoteEventImpl, ValueEventImpl} from "./timeline/Events"
+import {NoteEventImpl, NoteGroupImpl, ValueEventImpl} from "./timeline/Events"
 
 export namespace Facades {
     const pointerNamed = (box: Box, name: string): Optional<PointerField> =>
@@ -84,6 +85,7 @@ export namespace Facades {
         if (box instanceof TrackBox) {return TrackImpls.wrap(context, box)}
         if (box instanceof MarkerBox) {return MarkerImpl.wrap(context, box)}
         if (box instanceof NoteEventBox) {return NoteEventImpl.wrap(context, box)}
+        if (box instanceof NoteEventGroupBox) {return NoteGroupImpl.wrap(context, box)}
         if (box instanceof ValueEventBox) {return ValueEventImpl.wrap(context, box)}
         return null
     }

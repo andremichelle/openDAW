@@ -13,7 +13,7 @@ import {
 } from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
-import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
+import {NoteEventBoxAdapter, NoteEventFeatures} from "@opendaw/studio-adapters"
 import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
@@ -153,15 +153,18 @@ export class NoteMoveModifier implements NoteModifier {
                 if (this.#repeat && this.#deltaPosition !== 0) {
                     const numberOfCopies = 1 // TODO Open a dialog and ask for number of copies
                     for (let i = 0; i < numberOfCopies; i++) {
+                        const groups = NoteEventFeatures.createGroupMapping()
                         result.map(({adapter, position}) => adapter.copyTo({
                             position: position + this.#deltaPosition * i,
                             pitch: this.#selectedModifyStrategy.readPitch(adapter),
+                            groups,
                             events
                         }))
                     }
                 } else {
+                    const groups = NoteEventFeatures.createGroupMapping()
                     this.#selection.select(...(result
-                        .map(({adapter, position, pitch}) => adapter.copyTo({position, pitch, events}))))
+                        .map(({adapter, position, pitch}) => adapter.copyTo({position, pitch, groups, events}))))
                 }
             } else {
                 result.forEach(({adapter: {box}, position, pitch}) => {

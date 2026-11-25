@@ -1,5 +1,6 @@
 import {NoteEvent, ppqn} from "@opendaw/lib-dsp"
-import {int} from "@opendaw/lib-std"
+import {int, Option} from "@opendaw/lib-std"
+import {NoteEventGroupBox} from "@opendaw/studio-boxes"
 
 export type UINoteEvent = NoteEvent & {
     isSelected: boolean
@@ -7,4 +8,7 @@ export type UINoteEvent = NoteEvent & {
     chance: number
     playCount: int
     playCurve: number
+    repeatLength: number
+    velocityFade: number
+    group: Option<NoteEventGroupBox>
 }

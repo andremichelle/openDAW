@@ -158,9 +158,10 @@ impl Pattern {
 
     /// Emit this block's note events. Mirrors a note sequencer: release what has ended first, so a
     /// stop or a loop wrap never leaves the monophonic voice gated with no note left to release it.
-    /// The steps in the STRAIGHT range sound where `warp` moves them, kept inside `[from, to]`.
-    pub fn generate<W: Fn(f64) -> f64>(&mut self, from: f64, to: f64, straight: (f64, f64), warp: W,
-                                       flags: BlockFlags, out: &mut [EventRecord]) -> usize {
+    /// The steps in the STRAIGHT range sound where `warp` moves them, kept inside `[from, to]`. `select` names
+    /// the pattern automated at a step's straight position, so a switch belongs to its step wherever it sounds.
+    pub fn generate<W: Fn(f64) -> f64, S: Fn(f64) -> Option<usize>>(&mut self, from: f64, to: f64, straight: (f64, f64),
+                                       warp: W, select: S, flags: BlockFlags, out: &mut [EventRecord]) -> usize {
         let (straight_from, straight_to) = straight;
         let mut count = 0;
         let read = flags.has(BlockFlags::TRANSPORTING | BlockFlags::PLAYING);
@@ -196,6 +197,9 @@ impl Pattern {
             if straight_position < 0.0 && straight_position < from {continue}
             if index.rem_euclid(steps_per_bar) == 0 {
                 self.commit_pending_index();
+            }
+            if let Some(selected) = select(straight_position) {
+                self.set_index(selected);
             }
             let step = self.patterns[self.index][(index.rem_euclid(self.lengths[self.index] as i64)) as usize];
             if !step.gate || count >= out.len() {continue}
@@ -240,7 +244,7 @@ mod tests {
     fn collect_with(pattern: &mut Pattern, from: f64, to: f64, flags: BlockFlags) -> Vec<EventRecord> {
         let mut out = [EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0,
                                     velocity: 0.0, cent: 0.0, duration: 0.0}; 32];
-        let count = pattern.generate(from, to, (from, to), |position| position, flags, &mut out);
+        let count = pattern.generate(from, to, (from, to), |position| position, |_| None, flags, &mut out);
         out[..count].to_vec()
     }
 
@@ -276,7 +280,7 @@ mod tests {
     fn late(pattern: &mut Pattern, from: f64, to: f64) -> Vec<EventRecord> {
         let mut out = [EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0,
                                     velocity: 0.0, cent: 0.0, duration: 0.0}; 32];
-        let count = pattern.generate(from, to, (from - 60.0, to - 60.0), |position| position + 60.0, playing(), &mut out);
+        let count = pattern.generate(from, to, (from - 60.0, to - 60.0), |position| position + 60.0, |_| None, playing(), &mut out);
         out[..count].to_vec()
     }
 
@@ -304,7 +308,7 @@ mod tests {
         let mut pattern = pattern_with(&[gated(36, false, false), gated(43, false, false)], 2);
         let mut out = [EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0,
                                     velocity: 0.0, cent: 0.0, duration: 0.0}; 8];
-        let count = pattern.generate(0.0, 400.0, (-300.0, 100.0), |position| position + 300.0, playing(), &mut out);
+        let count = pattern.generate(0.0, 400.0, (-300.0, 100.0), |position| position + 300.0, |_| None, playing(), &mut out);
         assert_eq!(starts(&out[..count]), vec![(300.0, 36)], "step -1 at -240 would sound at 60");
     }
 

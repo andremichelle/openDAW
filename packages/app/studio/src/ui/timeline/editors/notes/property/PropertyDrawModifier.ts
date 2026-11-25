@@ -1,3 +1,4 @@
+import {NoteGrouping} from "@/ui/timeline/editors/notes/NoteGrouping.ts"
 import {clamp, Editing, Notifier, Observer, Option, Selection, Terminable, unitValue, ValueAxis} from "@opendaw/lib-std"
 import {Line, NoteModifyStrategy} from "../NoteModifyStrategies.ts"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
@@ -101,9 +102,12 @@ export class PropertyDrawModifier implements NoteModifier, NoteModifyStrategy {
     }
 
     approve(): void {
-        const result: ReadonlyArray<{ adapter: NoteEventBoxAdapter, value: number }> =
-            this.#reader.content.events.asArray()
-                .map(adapter => ({adapter, value: this.#modifyProperty(this.#property, adapter)}))
+        const events = this.#reader.content.events
+        const leads = NoteGrouping.leadsIn(this.#property, events)
+        const result: ReadonlyArray<{ adapter: NoteEventBoxAdapter, value: number }> = events.asArray()
+            .filter(adapter => NoteGrouping.showsMarker(leads, adapter))
+            .map(adapter => ({adapter, value: this.#modifyProperty(this.#property, adapter)}))
+            .filter(({adapter, value}) => value !== this.#property.readRawValue(adapter))
         this.#editing.modify(() => result.forEach(({adapter: {box}, value}) =>
             this.#property.writeValue(box, value)))
     }

@@ -3268,17 +3268,48 @@ export interface NoteEvent {
     playCount: int
     /** Repeat timing curve (-1.0 to 1.0) */
     playCurve: bipolar
-    /** Probability in percent (0 to 100) */
+    /** Length of each repeat (0.0 to 1.0, 1.0 = the full repeat), only with a play count above 1 */
+    repeatLength: unitValue
+    /** Velocity ramp over the repeats (-1.0 fades out, 1.0 fades in, 0.0 = none), only with a play count above 1 */
+    velocityFade: bipolar
+    /** Probability in percent (0 to 100). For a grouped note this is the chance of its group */
     chance: int
+    /** The chance group of the note, or null */
+    readonly group: Nullable<NoteGroup>
+    /** Take the note out of its group, it plays with chance 100 again */
+    leaveGroup(): void
     /** Remove the note */
     remove(): void
+}
+
+/**
+ * How a {@link NoteGroup} plays: every note or none, or exactly one of them
+ * @group Notes
+ */
+export type NoteGroupMode = "play-all" | "play-one"
+
+/**
+ * Notes deciding their chance together, created with {@link NoteEventOwner.groupEvents}
+ * @group Notes
+ */
+export interface NoteGroup {
+    /** Unique id */
+    readonly uuid: string
+    /** Probability in percent (0 to 100) that the group plays in a pass */
+    chance: int
+    /** Play every note or exactly one of them */
+    mode: NoteGroupMode
+    /** The notes of the group */
+    readonly events: ReadonlyArray<NoteEvent>
+    /** Dissolve the group, its notes play with chance 100 again */
+    ungroup(): void
 }
 
 /**
  * Settings accepted by {@link NoteEventOwner.addEvent}
  * @group Notes
  */
-export type NoteEventProps = Partial<Pick<NoteEvent, "position" | "duration" | "pitch" | "velocity" | "cents" | "playCount" | "playCurve" | "chance">>
+export type NoteEventProps = Partial<Pick<NoteEvent, "position" | "duration" | "pitch" | "velocity" | "cents" | "playCount" | "playCurve" | "repeatLength" | "velocityFade" | "chance">>
 
 /**
  * Common surface of note regions and clips
@@ -3297,6 +3328,15 @@ export interface NoteEventOwner {
      * ```
      */
     addEvents(events: ReadonlyArray<NoteEventProps>): ReadonlyArray<NoteEvent>
+    /**
+     * Group notes of this region or clip, so they decide their chance together. Notes leave their previous group
+     * @example
+     * ```ts
+     * const chord = region.addEvents([60, 64, 67].map(pitch => ({pitch, duration: PPQN.Quarter})))
+     * region.groupEvents(chord, "play-all").chance = 50
+     * ```
+     */
+    groupEvents(events: ReadonlyArray<NoteEvent>, mode?: NoteGroupMode): NoteGroup
     /** Remove all notes */
     clearEvents(): void
 }
@@ -4132,6 +4172,8 @@ export interface Project {
     timeSignature: TimeSignature
     /** Tuning reference in Hz (400 to 480, default 440) */
     baseFrequency: float
+    /** Seed of every note chance decision (0 to 999999, default 0). Another seed gives another variation */
+    seed: int
     /** Project length in PPQN */
     duration: ppqn
     /** Loop range */

@@ -6,6 +6,7 @@ import {
     isNotNull,
     isNull,
     Lifecycle,
+    MutableObservableOption,
     MutableObservableValue,
     Nullable,
     Option,
@@ -36,7 +37,7 @@ import {Config} from "@/ui/timeline/Config.ts"
 import {NoteMoveModifier} from "@/ui/timeline/editors/notes/NoteMoveModifier.ts"
 import {NoteDurationModifier} from "@/ui/timeline/editors/notes/NoteDurationModifier.ts"
 import {installContextMenu} from "@/ui/timeline/editors/notes/pitch/PitchContextMenu.ts"
-import {NoteEventBox} from "@opendaw/studio-boxes"
+import {NoteEventBox, NoteEventGroupBox} from "@opendaw/studio-boxes"
 import {NoteCreateModifier} from "@/ui/timeline/editors/notes/NoteCreateModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {CssUtils, Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
@@ -77,8 +78,9 @@ export const PitchEditor = ({
     const canvas: HTMLCanvasElement = <canvas tabIndex={-1}/>
     const capturing = createPitchEventCapturing(canvas, positioner, range, reader)
     const locator = createPitchSelectionLocator(reader, range, positioner.valueAxis, capturing)
+    const hoverGroup = lifecycle.own(new MutableObservableOption<NoteEventGroupBox>())
     const pitchPainter = createNotePitchPainter(
-        {canvas, modifyContext, positioner, scale, range, snapping, reader})
+        {canvas, modifyContext, positioner, scale, range, snapping, reader, hoverGroup})
     const renderer = lifecycle.own(new CanvasPainter(canvas, painter => {
         if (isNotNull(previewNote)) {
             const position = previewNote.position
@@ -303,13 +305,18 @@ export const PitchEditor = ({
         scale.subscribe(renderer.requestUpdate),
         reader.subscribeChange(renderer.requestUpdate),
         modifyContext.subscribeUpdate(renderer.requestUpdate),
+        hoverGroup.subscribe(renderer.requestUpdate),
         Events.subscribe(canvas, "pointermove", event => {
             canvas.focus({preventScroll: true})
+            const target = capturing.captureEvent(event)
+            hoverGroup.wrapOption(isNotNull(target) && target.type !== "loop-duration"
+                ? target.event.group : Option.None)
             if (event.altKey && event.buttons === 0) {
                 updatePreview()
             }
         }),
         Events.subscribe(canvas, "pointerleave", () => {
+            hoverGroup.clear()
             previewNote = null
             renderer.requestUpdate()
         }),

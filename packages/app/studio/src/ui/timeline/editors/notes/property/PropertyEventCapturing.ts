@@ -5,6 +5,7 @@ import {PropertyAccessor} from "@/ui/timeline/editors/notes/property/PropertyAcc
 import {NoteModifyStrategy} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Capturing, TimelineRange} from "@opendaw/studio-core"
+import {NoteGrouping} from "@/ui/timeline/editors/notes/NoteGrouping.ts"
 
 export const createPropertyCapturing = (valueAxis: ValueAxis,
                                         range: TimelineRange,
@@ -16,8 +17,10 @@ export const createPropertyCapturing = (valueAxis: ValueAxis,
         const propertyAccessor = propertyOwner.getValue()
         const iterator = owner.content.events
             .iterateRange(local - range.unitsPerPixel * EventRadius, local + range.unitsPerPixel * EventRadius)
+        const leads = NoteGrouping.leadsIn(propertyAccessor, owner.content.events)
         let closest: Nullable<{ event: NoteEventBoxAdapter, distance: number }> = null
         for (const event of iterator) {
+            if (!NoteGrouping.showsMarker(leads, event)) {continue}
             const value = propertyAccessor.valueMapping.x(propertyAccessor.readValue(NoteModifyStrategy.Identity, event))
             const dx = x - range.unitToX(event.position + offset) - 1 // value node is rendered one pixel off
             const dy = y - valueAxis.valueToAxis(value)

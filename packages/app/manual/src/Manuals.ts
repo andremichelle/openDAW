@@ -61,6 +61,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Mastering", path: "/manuals/mastering"},
             {type: "page", label: "Modulation", path: "/manuals/modulation"},
             {type: "page", label: "Nextcloud", path: "/manuals/nextcloud"},
+            {type: "page", label: "Note Editor", path: "/manuals/note-editor"},
             {type: "page", label: "Open Source", path: "/manuals/open-source"},
             {type: "page", label: "Permissions", path: "/manuals/permissions"},
             {type: "page", label: "Presets", path: "/manuals/presets"},

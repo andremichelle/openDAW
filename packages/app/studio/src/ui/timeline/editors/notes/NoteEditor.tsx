@@ -20,7 +20,7 @@ import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {PianoRoll} from "@/ui/timeline/editors/notes/pitch/PianoRoll.tsx"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
-import {PitchEditorHeader} from "@/ui/timeline/editors/notes/pitch/PitchEditorHeader.tsx"
+import {NoteEditorTab, PitchEditorHeader} from "@/ui/timeline/editors/notes/pitch/PitchEditorHeader.tsx"
 import {FilteredSelection, NoteEventBoxAdapter, NoteSignal, NoteStreamReceiver, TrackType} from "@opendaw/studio-adapters"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {PropertyEditor} from "./property/PropertyEditor.tsx"
@@ -33,6 +33,8 @@ import {NotePropertyVelocity, PropertyAccessor} from "@/ui/timeline/editors/note
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
+import {NoteGrouping} from "@/ui/timeline/editors/notes/NoteGrouping.ts"
+import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {NoteDrawDefaults} from "@/ui/timeline/editors/notes/NoteDrawDefaults.ts"
 
 const className = Html.adoptStyleSheet(css, "NoteEditor")
@@ -47,7 +49,14 @@ type Construct = {
 }
 
 const scale = new ScaleConfig()
+const ownScale = new ScaleConfig()
 const followKey = new DefaultObservableValue(false)
+followKey.subscribe(owner => {
+    const [from, to] = owner.getValue() ? [scale, ownScale] : [ownScale, scale]
+    to.key = from.key
+    to.setBits(from.bits)
+})
+const tab = new DefaultObservableValue<NoteEditorTab>("basic")
 const pitchPositioner = new PitchPositioner()
 
 export const NoteEditor =
@@ -135,7 +144,9 @@ export const NoteEditor =
                                    editing={editing}
                                    modifyContext={modifyContext}
                                    scale={scale}
-                                   followKey={followKey}/>
+                                   followKey={followKey}
+                                   tab={tab}
+                                   seed={EditWrapper.forValue(editing, project.timelineBox.seed)}/>
                 <PianoRoll lifecycle={lifecycle}
                            positioner={pitchPositioner}
                            scale={scale}
@@ -235,14 +246,22 @@ export const NoteEditor =
             shortcuts,
             shortcuts.register(NoteEditorShortcuts["toggle-step-recording"].shortcut,
                 () => stepRecording.setValue(!stepRecording.getValue())),
+            shortcuts.register(NoteEditorShortcuts["group-notes"].shortcut,
+                () => {NoteGrouping.group(editing, selection, NoteGrouping.lastMode.getValue())}),
+            shortcuts.register(NoteEditorShortcuts["ungroup-notes"].shortcut,
+                () => {NoteGrouping.ungroup(editing, selection)}),
             shortcuts.register(NoteEditorShortcuts["duplicate-notes"].shortcut, () => {
                 const selected = selection.selected()
                 if (selected.length === 0) {return false}
-                const copies = editing.modify(() => project.api.duplicateNotes(selected)).unwrap("duplicateNotes")
-                if (copies.length === 0) {return false}
-                selection.deselectAll()
-                copies.forEach(adapter => selection.select(adapter))
-                return true
+                const copies = editing.modify(() => {
+                    const duplicates = project.api.duplicateNotes(selected)
+                    if (duplicates.length > 0) {
+                        selection.deselectAll()
+                        duplicates.forEach(adapter => selection.select(adapter))
+                    }
+                    return duplicates
+                }).unwrap("duplicateNotes")
+                return copies.length > 0
             }),
             stepRecording.catchupAndSubscribe(owner => document.querySelectorAll("[data-component='cursor']")
                 .forEach(cursor => cursor.classList.toggle("step-recording", owner.getValue()))),

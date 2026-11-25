@@ -1,5 +1,5 @@
 import {asDefined, Client, Exec, isDefined, Lifecycle, Notifier, Nullable, Option, Optional, Procedure, Subscription, UUID, Terminable} from "@opendaw/lib-std"
-import {AnimationFrame, Browser, Dragging, Events, Keyboard} from "@opendaw/lib-dom"
+import {AnimationFrame, Dragging, Events, Keyboard} from "@opendaw/lib-dom"
 import {AudioUnitGroups, Devices, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
 import {ContextMenu, MenuItem, Project} from "@opendaw/studio-core"
@@ -168,7 +168,7 @@ export namespace TrackGrouping {
                 dragged = false
                 onRelease = null
                 if (event.target instanceof Element && event.target.closest("button,input,select,svg.collapse-automation,[data-mixer-devices]")) {return}
-                if (event.button === 2 || Browser.isMacOS() && event.ctrlKey) {
+                if (Events.isContextButton(event)) {
                     selectForMenu(project, unit)
                 } else if (event.button === 0) {
                     onRelease = pressTrack(project, unit, trackPressOf(event))

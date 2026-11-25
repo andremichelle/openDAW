@@ -17,6 +17,7 @@ import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
 import {BoxAdapter} from "../../BoxAdapter"
 import {NoteEventBoxAdapter} from "../event/NoteEventBoxAdapter"
+import {NoteEventFeatures} from "../event/NoteEventFeatures"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 
 type CreateEventParams = {
@@ -74,22 +75,24 @@ export class NoteEventCollectionBoxAdapter implements BoxAdapter, SelectableLoca
     copy(): NoteEventCollectionBoxAdapter {
         const graph = this.#context.boxGraph
         const boxCopy = NoteEventCollectionBox.create(graph, UUID.generate())
-        this.#events.asArray().forEach(source => source.copyTo({events: boxCopy.events}))
+        const groups = NoteEventFeatures.createGroupMapping()
+        this.#events.asArray().forEach(source => source.copyTo({events: boxCopy.events, groups}))
         return this.#context.boxAdapters.adapterFor(boxCopy, NoteEventCollectionBoxAdapter)
     }
 
     createEvent(
         {position, duration, velocity, pitch, chance, playCount, cent}: CreateEventParams): NoteEventBoxAdapter {
-        return this.#context.boxAdapters.adapterFor(NoteEventBox.create(this.#context.boxGraph, UUID.generate(), box => {
+        const note = NoteEventBox.create(this.#context.boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
             box.duration.setValue(duration)
             box.velocity.setValue(velocity)
             box.pitch.setValue(pitch)
-            box.chance.setValue(chance)
-            box.playCount.setValue(playCount)
             box.cent.setValue(cent)
             box.events.refer(this.#box.events)
-        }), NoteEventBoxAdapter)
+        })
+        if (chance !== 100) {NoteEventFeatures.writeChance(note, chance)}
+        if (playCount !== 1) {NoteEventFeatures.writePlayCount(note, playCount)}
+        return this.#context.boxAdapters.adapterFor(note, NoteEventBoxAdapter)
     }
 
     subscribeChange(observer: Observer<this>): Subscription {return this.#changeNotifier.subscribe(observer)}

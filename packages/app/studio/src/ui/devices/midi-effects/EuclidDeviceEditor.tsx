@@ -4,7 +4,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
+import {deferNextFrame, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {Float32Field, Int32Field} from "@opendaw/lib-box"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {
@@ -28,6 +28,7 @@ import {EuclidCircle} from "@/ui/devices/midi-effects/Euclid/EuclidCircle"
 import {EuclidNotes} from "@/ui/devices/midi-effects/Euclid/EuclidNotes"
 import {PatternClipboard} from "@/ui/devices/PatternClipboard"
 import {PatternSwitch} from "@/ui/devices/PatternSwitch"
+import {EuclidShortcuts} from "@/ui/shortcuts/EuclidShortcuts"
 
 const className = Html.adoptStyleSheet(css, "EuclidDeviceEditor")
 
@@ -217,11 +218,13 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                 const element: HTMLElement = <span className={Html.buildClassList("toggle", label === "S" && "solo", active && "active")}>
                     {label}
                 </span>
-                rows.own(Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-                    if (event.button !== 0) {return}
-                    event.stopPropagation()
-                    editing.modify(flip)
-                }))
+                rows.ownAll(
+                    Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+                        if (!Events.isPrimaryButton(event)) {return}
+                        event.stopPropagation()
+                        editing.modify(flip)
+                    }),
+                    ContextMenu.subscribe(element, collector => collector.stopPropagation()))
                 return element
             }
             const dot: HTMLElement = <span className="dot"/>
@@ -240,7 +243,7 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                 Events.subscribe(row, "pointerdown", (event: PointerEvent) => {
                     selected = index
                     row.focus()
-                    if (event.button === 0) {
+                    if (Events.isPrimaryButton(event)) {
                         dragging = Option.wrap(index)
                         list.setPointerCapture(event.pointerId)
                     }
@@ -250,8 +253,10 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                     MenuItem.default({label: "Copy lane"}).setTriggerProcedure(() => ClipboardManager.write(copyLane(each))),
                     MenuItem.default({label: "Paste lane", selectable: PatternClipboard.pastable(LaneFormat)})
                         .setTriggerProcedure(() => PatternClipboard.pasteFromMenu(LaneFormat, each, values => applyLane(each, values))),
-                    MenuItem.default({label: "Remove lane", selectable: all.length > 1, separatorBefore: true})
-                        .setTriggerProcedure(() => editing.modify(() => Euclid.removeLane(box, each)))))
+                    MenuItem.default({
+                        label: "Delete lane", separatorBefore: true,
+                        shortcut: EuclidShortcuts["delete-lane"].shortcut.format()
+                    }).setTriggerProcedure(() => deleteLane(each))))
             )
             return [row, dot] as const
         })
@@ -313,6 +318,15 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         selected = lanes().length - 1
         reveal = true
     })}
+    const deleteLane = (lane: EuclidLaneBox): void => {
+        const index = lanes().indexOf(lane)
+        if (index < 0) {return}
+        const focused = rowElements.some(row => row === document.activeElement)
+        editing.modify(() => Euclid.removeLane(box, lane))
+        selected = Math.max(0, Math.min(index, lanes().length - 1))
+        changed.notify()
+        if (focused) {rowElements[selected]?.focus()}
+    }
     const copyLane = (lane: EuclidLaneBox): ClipboardEntry => {
         const rhythm = Euclid.rhythmOf(lane, edited)
         return PatternClipboard.encode(LaneFormat, RhythmKeys.map(key => rhythm[key].getValue()))
@@ -337,6 +351,12 @@ export const EuclidDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
         paste: (entry: ClipboardEntry) => focusedLane()
             .ifSome(each => PatternClipboard.decode(LaneFormat, entry).ifSome(values => applyLane(each, values)))
     }))
+    const shortcuts = lifecycle.own(ShortcutManager.get().createContext(list, "Euclid Lanes", 1))
+    lifecycle.own(shortcuts.register(EuclidShortcuts["delete-lane"].shortcut,
+        () => focusedLane().mapOr(each => {
+            deleteLane(each)
+            return true
+        }, false)))
     const copyPattern = (pattern: int): ClipboardEntry => PatternClipboard.encode(PatternFormat, {
         rhythms: lanes().map(each => {
             const rhythm = Euclid.rhythmOf(each, pattern)

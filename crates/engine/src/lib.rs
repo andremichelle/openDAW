@@ -1437,6 +1437,22 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
     update_parameters(position, out)
 }
 
+/// Host import a generating device calls for an automated parameter at a straight grid `position` the update
+/// clock has not reached: writes one `ParamChange` (the modulation as last handed out) and returns 1, or
+/// returns 0 when only the clock can resolve it (not automated, paused, lagged, under manual control, a clip).
+/// Pure, the diff state of `host_update_parameters` stays untouched.
+#[no_mangle]
+pub extern "C" fn host_parameter_at(id: u32, position: f64, out_ptr: u32) -> u32 {
+    let pull = unsafe { PULL.get() };
+    if !quantum_transporting() || pull.automation_lag > 0 {
+        return 0;
+    }
+    let Some(param) = pull.params.iter().find(|param| param.id == id) else { return 0 };
+    let Some((value, kind)) = param.automation_at(position) else { return 0 };
+    unsafe { *(out_ptr as usize as *mut ParamChange) = ParamChange {id, kind, value, modulation: param.last_modulation.get()}; }
+    1
+}
+
 fn update_parameters(position: f64, out: &mut [ParamChange]) -> u32 {
     let pull = unsafe { PULL.get() };
     let mut count = 0;
@@ -1713,6 +1729,8 @@ struct Engine {
     // The `playback.truncateNotesAtRegionEnd` preference (TS reads it live per block), shared with
     // every note sequencer via `bind_truncate_preference`.
     pub(crate) truncate_pref: Rc<Cell<bool>>,
+    // `TimelineBox.seed`, shared with every note sequencer via `bind_seed` (the chance decisions).
+    pub(crate) note_seed: Rc<Cell<u32>>,
     // Armed by a unit's SOLO field edit (and by any reconcile that changed routing): the next
     // reconcile pass re-resolves solo into per-strip forced_silent flags (TS Mixer.updateSolo).
     solo_dirty: Rc<Cell<bool>>,
@@ -1807,6 +1825,7 @@ impl Engine {
             clip_sequencer: Rc::new(RefCell::new(engine_env::clip_sequencer::ClipSequencer::new())),
             clip_read: engine_env::note_sequencer::ClipRead::Advance,
             truncate_pref: Rc::new(Cell::new(false)),
+            note_seed: Rc::new(Cell::new(0)),
             solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
             dirty_units: Rc::new(RefCell::new(Vec::new())),
@@ -2491,6 +2510,13 @@ impl Engine {
         self.graph.catchup_and_subscribe(Address::of(uuid, vec![31]), move |value| {
             if let Some(value) = value.as_float32() {
                 bpm.bpm.set(value)
+            }
+        });
+        // WASM CONTRACT: TimelineBox.seed = field key 32 (Int32, default 0), the seed of the chance decisions.
+        let seed = self.note_seed.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![32]), move |value| {
+            if let Some(value) = value.as_int32() {
+                seed.set(value as u32)
             }
         });
         // tempo automation on/off: TimelineBox.tempoTrack (22).enabled (20).

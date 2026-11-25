@@ -133,7 +133,11 @@ impl abi::Instrument for Device {
                        out: &mut [EventRecord]) -> usize {
         let straight = state.groove.straight(from, to, flags.discontinuous());
         let groove = state.groove;
-        let count = state.pattern.generate(from, to, straight, |position| groove.warp(position), flags, out);
+        let pattern_id = state.ids[param::PATTERN_INDEX];
+        let select = |position: f64| abi::parameter_at(pattern_id, position)
+            .filter(|value| matches!(value, ParamValue::Unit(_) | ParamValue::Modulated {..}))
+            .map(|value| int_value(value, &PATTERN_MAPPING).max(0) as usize);
+        let count = state.pattern.generate(from, to, straight, |position| groove.warp(position), select, flags, out);
         let slot = abi::broadcast_ptr(state.step_broadcast);
         if slot != 0 {
             unsafe {*(slot as *mut i32) = state.pattern.step();}

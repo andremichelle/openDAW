@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
 import {asInstanceOf, isDefined, isInstanceOf, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {IndexedBox} from "@opendaw/lib-box"
-import {AudioUnitBoxAdapter, InstrumentFactories, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, InstrumentFactories, NoteEventFeatures, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {
     AudioUnitBox,
     CompressorDeviceBox,
@@ -116,6 +116,27 @@ describe("PlayfieldPadToUnit", () => {
         expect(pitches(movedCollection)).toEqual([62, 62])
     })
 
+    it("gives the moved notes a group of their own when their group keeps members on the Playfield", async () => {
+        const {project, collection, cellBox} = await setup()
+        const group = project.editing.modify(() => {
+            const notes = collection.events.pointerHub.incoming().map(({box}) => asInstanceOf(box, NoteEventBox))
+            const group = NoteEventFeatures.group(notes, NoteEventFeatures.GroupMode.PlayOne).unwrap("group")
+            group.chance.setValue(40)
+            return group
+        }).unwrap()
+        const unit = project.editing.modify(() => project.api.movePadToUnit(cellBox).result()).unwrap()
+        const remaining = collection.events.pointerHub.incoming().map(({box}) => asInstanceOf(box, NoteEventBox))
+        expect(remaining.map(note => NoteEventFeatures.groupBox(note).unwrap("group"))).toEqual([group])
+        const noteTrack = IndexedBox.collectIndexedBoxes(unit.tracks)
+            .map(box => asInstanceOf(box, TrackBox)).find(track => track.type.getValue() === TrackType.Notes)
+        const moved = asInstanceOf(noteTrack?.regions.pointerHub.incoming()[0].box, NoteRegionBox)
+        const movedNotes = asInstanceOf(moved.events.targetVertex.unwrap().box, NoteEventCollectionBox)
+            .events.pointerHub.incoming().map(({box}) => asInstanceOf(box, NoteEventBox))
+        const own = NoteEventFeatures.groupBox(movedNotes[0]).unwrap("own group")
+        expect(own).not.toBe(group)
+        movedNotes.forEach(note => expect(NoteEventFeatures.groupBox(note).unwrap("group")).toBe(own))
+        expect([own.chance.getValue(), own.mode.getValue()]).toEqual([40, NoteEventFeatures.GroupMode.PlayOne])
+    })
     it("places the new unit where a drop names it", async () => {
         const {project, cellBox} = await setup()
         const {api, editing} = project

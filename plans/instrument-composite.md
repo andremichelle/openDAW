@@ -142,6 +142,8 @@ instrument is a CELL composite, and only there:
 
 ### Chance: no change, one documented limit
 
+Superseded by plans/note-editor-tabs.md: chance is now a hash of the seed, the note and its position, so every layer decides alike and the limit below is gone.
+
 The sequential seeded stream stays everywhere, cells included. Every sequencer has the same seed, so layers
 agree as long as they pull identical windows, which is how Playfield slots agree today. One layer equals the
 bare instrument exactly, chance notes included. Only exception: a unit-level Zeitgeist over launched clips,

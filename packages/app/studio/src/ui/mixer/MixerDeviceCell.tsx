@@ -1,7 +1,7 @@
 import css from "./MixerDeviceCell.sass?inline"
 import {Lifecycle, ObservableValue, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Browser, Events, Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {AudioUnitBoxAdapter, EffectDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
@@ -58,7 +58,7 @@ export const MixerDeviceCell = ({lifecycle, service, unit, adapter, frozen}: Con
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
             dragged = false
             pendingNavigate = false
-            if (event.button !== 0 || (Browser.isMacOS() && event.ctrlKey)) {return}
+            if (!Events.isPrimaryButton(event)) {return}
             if (event.shiftKey || event.metaKey || event.ctrlKey) {
                 const host = adapter.deviceHost()
                 deviceSelection.selected()

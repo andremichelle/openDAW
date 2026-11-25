@@ -13,7 +13,11 @@ use engine_env::note_region::NoteRegion;
 use engine_env::note_content_source::{NoteContentSource, NoteTrackAccess};
 use engine_env::note_sequencer::NoteSequencer;
 use value::event::EventCollection;
-use value::note::NoteEvent;
+use std::cell::Cell;
+use engine_env::host_random::hash_unit;
+use value::note::{NoteEvent, NoteGroup};
+
+const PINNED: [f64; 2] = [0.09899374104691572, 0.7709830454521617];
 
 const TRACK: [u8; 16] = [1; 16];
 const GROOVE: [u8; 16] = [7; 16];
@@ -127,41 +131,292 @@ fn the_chance_roll_stream_matches_the_ts_sequencer_seed() {
 }
 
 #[test]
-fn chance_gates_notes_on_the_seeded_stream() {
-    // chance 60 with the 0xFFF_F123 stream: roll 74.66 SKIPS the first pass, roll 48.38 PLAYS the second.
-    // (The exact scenario of the Open Up vocal: TS skipped the first pass, the old WASM always played.)
-    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
-    let mut note = NoteEvent::new(10.0, 20.0, 60, 0.0, 1.0);
-    note.chance = 60.0;
-    let mut sequencer = sequencer(region, &[note]);
-    let first = pull(&mut sequencer, 0.0, 100.0);
-    assert!(!first.iter().any(|event| matches!(event, Event::NoteStart {..})),
-        "first pass: roll 74.66 > 60 skips the note: {first:?}");
-    let second = pull(&mut sequencer, 100.0, 200.0);
-    assert!(second.iter().any(|event| matches!(event, Event::NoteStart {position, ..} if *position == 110.0)),
-        "second pass: roll 48.38 <= 60 plays the loop repeat: {second:?}");
+fn chance_100_always_plays_and_chance_0_never_plays() {
+    let region = NoteRegion {position: 0.0, duration: 10000.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
+    let mut always = NoteEvent::new(10.0, 10.0, 60, 0.0, 1.0);
+    always.key = 1;
+    let mut never = NoteEvent::new(50.0, 10.0, 62, 0.0, 1.0);
+    never.key = 2;
+    never.chance = 0.0;
+    let events = pull(&mut sequencer(region, &[always, never]), 0.0, 10000.0);
+    assert_eq!(starts_of(&events, 60).len(), 100, "chance 100 plays in every pass");
+    assert!(starts_of(&events, 62).is_empty(), "chance 0 never plays");
 }
 
 #[test]
-fn chance_100_notes_never_roll_and_always_play() {
-    // A chance-100 note must NOT advance the RNG stream (TS short-circuits `chance < 100.0`).
-    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
-    let mut gated = NoteEvent::new(50.0, 10.0, 62, 0.0, 1.0);
-    gated.chance = 70.0;
-    let plain = NoteEvent::new(10.0, 10.0, 60, 0.0, 1.0);
-    let mut sequencer = sequencer(region, &[plain, gated]);
+fn chance_ignores_block_size_and_playback_start() {
+    let (region, notes) = chance_region();
+    let whole = kept_positions(&mut sequencer(region, &notes), 0.0);
+    let (region, notes) = chance_region();
+    let blocks = pull(&mut sequencer(region, &notes), 0.0, 9600.0).iter().filter_map(|event| match event {
+        Event::NoteStart {position, ..} => Some(*position),
+        _ => None
+    }).collect::<Vec<_>>();
+    assert!(whole.len() > 20 && whole.len() < 76, "chance 50 keeps about half: {}", whole.len());
+    assert_eq!(whole, blocks, "64 pulse blocks and one block keep the same notes");
+    let (region, notes) = chance_region();
+    let later = pull(&mut sequencer(region, &notes), 4800.0, 9600.0).iter().filter_map(|event| match event {
+        Event::NoteStart {position, ..} => Some(*position),
+        _ => None
+    }).collect::<Vec<_>>();
+    let tail: Vec<f64> = whole.iter().copied().filter(|position| *position >= 4800.0).collect();
+    assert_eq!(later, tail, "starting playback later keeps the same notes");
+}
+
+#[test]
+fn the_seed_changes_the_pattern() {
+    let (region, notes) = chance_region();
+    let zero = kept_positions(&mut sequencer(region, &notes), 0.0);
+    let (region, notes) = chance_region();
+    let mut seeded = sequencer(region, &notes);
+    seeded.bind_seed(Rc::new(Cell::new(4711)));
+    let other = kept_positions(&mut seeded, 0.0);
+    assert_ne!(zero, other);
+}
+
+fn starts_of(events: &[Event], key: u8) -> Vec<f64> {
+    events.iter().filter_map(|event| match event {
+        Event::NoteStart {position, pitch, ..} if *pitch == key => Some(*position),
+        _ => None
+    }).collect()
+}
+
+fn group(chance: f32, play_one: bool) -> NoteGroup {
+    NoteGroup {key: 99, chance, play_one}
+}
+
+fn grouped_notes(play_one: bool, chance: f32) -> Vec<NoteEvent> {
+    // a chord on the downbeat and a member on the offbeat, all in one group
+    [(0.0, 60), (0.0, 64), (50.0, 67)].iter().enumerate().map(|(rank, (position, pitch))| {
+        let mut note = NoteEvent::new(*position, 10.0, *pitch, 0.0, 1.0);
+        note.key = rank as u64 + 10;
+        note.group = Some(group(chance, play_one));
+        note
+    }).collect()
+}
+
+#[test]
+fn play_all_plays_every_member_or_none_in_each_pass() {
+    let region = NoteRegion {position: 0.0, duration: 20000.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
+    let events = pull(&mut sequencer(region, &grouped_notes(false, 50.0)), 0.0, 20000.0);
+    let mut played = 0;
+    for pass in 0..200 {
+        let from = pass as f64 * 100.0;
+        let count = [60, 64, 67].iter()
+            .filter(|pitch| starts_of(&events, **pitch).iter().any(|position| *position >= from && *position < from + 100.0))
+            .count();
+        assert!(count == 0 || count == 3, "pass {pass}: {count} of 3 members played");
+        if count == 3 {played += 1}
+    }
+    assert!(played > 60 && played < 140, "chance 50 plays about half of the passes: {played}");
+}
+
+#[test]
+fn play_one_plays_exactly_one_member_in_each_pass() {
+    let region = NoteRegion {position: 0.0, duration: 20000.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
+    let events = pull(&mut sequencer(region, &grouped_notes(true, 100.0)), 0.0, 20000.0);
+    let mut picked = [0; 3];
+    for pass in 0..200 {
+        let from = pass as f64 * 100.0;
+        let members: Vec<usize> = [60, 64, 67].iter().enumerate()
+            .filter(|(_, pitch)| starts_of(&events, **pitch).iter().any(|position| *position >= from && *position < from + 100.0))
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(members.len(), 1, "pass {pass}: {members:?}");
+        picked[members[0]] += 1;
+    }
+    assert!(picked.iter().all(|count| *count > 30), "every member gets picked: {picked:?}");
+}
+
+#[test]
+fn play_one_only_picks_members_the_pass_plays() {
+    let region = NoteRegion {position: 0.0, duration: 20000.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
+    let notes: Vec<NoteEvent> = [(0.0, 60), (50.0, 64), (150.0, 67)].iter().enumerate().map(|(index, (position, pitch))| {
+        let mut note = NoteEvent::new(*position, 10.0, *pitch, 0.0, 1.0);
+        note.key = index as u64 + 10;
+        note.group = Some(group(100.0, true));
+        note
+    }).collect();
+    let events = pull(&mut sequencer(region, &notes), 0.0, 20000.0);
+    for pass in 0..200 {
+        let from = pass as f64 * 100.0;
+        let count = [60, 64].iter()
+            .filter(|pitch| starts_of(&events, **pitch).iter().any(|position| *position >= from && *position < from + 100.0))
+            .count();
+        assert_eq!(count, 1, "pass {pass}: the member beyond the loop never wins");
+    }
+}
+
+#[test]
+fn play_one_never_picks_a_member_the_region_trims_away() {
+    let notes: Vec<NoteEvent> = [(0.0, 60), (50.0, 64)].iter().enumerate().map(|(index, (position, pitch))| {
+        let mut note = NoteEvent::new(*position, 10.0, *pitch, 0.0, 1.0);
+        note.key = index as u64 + 10;
+        note.group = Some(group(100.0, true));
+        note
+    }).collect();
+    for seed in 0..40 {
+        // the end is trimmed: only the member at 0 sounds
+        let region = NoteRegion {position: 0.0, duration: 40.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
+        let mut trimmed_end = sequencer(region, &notes);
+        trimmed_end.bind_seed(Rc::new(Cell::new(seed)));
+        let events = pull(&mut trimmed_end, 0.0, 100.0);
+        assert_eq!(starts_of(&events, 60).len(), 1, "seed {seed}: the end trim leaves one member, it plays");
+        // the start is trimmed: the first pass holds only the member at 50, the second only the member at 0
+        let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 30.0, loop_duration: 100.0, mute: false, groove: None};
+        let mut trimmed_start = sequencer(region, &notes);
+        trimmed_start.bind_seed(Rc::new(Cell::new(seed)));
+        let events = pull(&mut trimmed_start, 0.0, 100.0);
+        assert_eq!(starts_of(&events, 64), vec![20.0], "seed {seed}: the first pass plays its only member");
+        assert_eq!(starts_of(&events, 60), vec![70.0], "seed {seed}: the second pass plays its only member");
+    }
+}
+
+// the two halves of a region cut at 50, sharing one collection and one loop pass
+struct CutHalves {
+    notes: EventCollection<NoteEvent>
+}
+
+impl NoteTrackAccess for CutHalves {
+    fn for_each_region(&self, from: f64, to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
+        for region in [
+            NoteRegion {position: 0.0, duration: 50.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None},
+            NoteRegion {position: 50.0, duration: 50.0, loop_offset: 50.0, loop_duration: 100.0, mute: false, groove: None}
+        ] {
+            if region.position < to && region.complete() > from {
+                visit(&region, &self.notes)
+            }
+        }
+    }
+    fn clip_info(&self, _clip: &[u8; 16]) -> Option<(f64, bool)> {
+        None
+    }
+    fn clip_events(&self, _clip: &[u8; 16], _visit: &mut dyn FnMut(&EventCollection<NoteEvent>)) {}
+    fn warp(&self, _groove: &[u8; 16], position: f64) -> f64 {position}
+    fn unwarp(&self, _groove: &[u8; 16], position: f64) -> f64 {position}
+}
+
+impl NoteContentSource for CutHalves {
+    fn for_each_track(&self, visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {
+        visit(&TRACK, self)
+    }
+}
+
+#[test]
+fn play_one_picks_per_half_when_a_cut_region_shares_its_collection() {
+    let mut collection = EventCollection::new();
+    for (index, (position, pitch)) in [(10.0, 60), (60.0, 64)].iter().enumerate() {
+        let mut note = NoteEvent::new(*position, 10.0, *pitch, 0.0, 1.0);
+        note.key = index as u64 + 10;
+        note.group = Some(group(100.0, true));
+        collection.add(note);
+    }
+    let mut sequencer = NoteSequencer::new(Box::new(CutHalves {notes: collection}), Rc::new(RefCell::new(ClipSequencer::new())));
     let events = pull(&mut sequencer, 0.0, 100.0);
-    assert!(events.iter().any(|event| matches!(event, Event::NoteStart {pitch: 60, ..})), "the plain note always plays");
-    assert!(!events.iter().any(|event| matches!(event, Event::NoteStart {pitch: 62, ..})),
-        "the gated note consumed the FIRST roll (74.66 > 70 skips): the plain note did not shift the stream");
+    assert_eq!(starts_of(&events, 60), vec![10.0], "the left half plays its only member");
+    assert_eq!(starts_of(&events, 64), vec![60.0], "the right half plays its only member, also in the same block");
+}
+
+#[test]
+fn play_one_keeps_a_ratchet_member_that_starts_before_the_region_but_repeats_inside() {
+    let mut ratchet = NoteEvent::new(0.0, 100.0, 60, 0.0, 1.0);
+    ratchet.key = 10;
+    ratchet.play_count = 4;
+    ratchet.group = Some(group(100.0, true));
+    let mut other = NoteEvent::new(80.0, 10.0, 64, 0.0, 1.0);
+    other.key = 11;
+    other.group = Some(group(100.0, true));
+    let mut ratchet_wins = 0;
+    for seed in 0..40 {
+        let region = NoteRegion {position: 30.0, duration: 70.0, loop_offset: 30.0, loop_duration: 100.0, mute: false, groove: None};
+        let mut trimmed = sequencer(region, &[ratchet, other]);
+        trimmed.bind_seed(Rc::new(Cell::new(seed)));
+        let events = pull(&mut trimmed, 0.0, 100.0);
+        let (parts, single) = (starts_of(&events, 60), starts_of(&events, 64));
+        assert!(parts.is_empty() != single.is_empty(), "seed {seed}: exactly one member plays: {parts:?} {single:?}");
+        if !parts.is_empty() {
+            assert_eq!(parts, vec![50.0, 75.0], "seed {seed}: the repeats inside the region play");
+            ratchet_wins += 1;
+        }
+    }
+    assert!(ratchet_wins > 5 && ratchet_wins < 35, "both members win sometimes: {ratchet_wins}");
+}
+
+#[test]
+fn play_one_never_picks_a_ratchet_whose_parts_all_start_before_the_region() {
+    let mut ratchet = NoteEvent::new(0.0, 100.0, 60, 0.0, 1.0);
+    ratchet.key = 10;
+    ratchet.play_count = 4;
+    ratchet.group = Some(group(100.0, true));
+    let mut other = NoteEvent::new(85.0, 10.0, 64, 0.0, 1.0);
+    other.key = 11;
+    other.group = Some(group(100.0, true));
+    for seed in 0..40 {
+        // the parts start at 0, 25, 50 and 75, the region starts at 80
+        let region = NoteRegion {position: 80.0, duration: 20.0, loop_offset: 80.0, loop_duration: 100.0, mute: false, groove: None};
+        let mut trimmed = sequencer(region, &[ratchet, other]);
+        trimmed.bind_seed(Rc::new(Cell::new(seed)));
+        let events = pull(&mut trimmed, 0.0, 100.0);
+        assert_eq!(starts_of(&events, 64), vec![85.0], "seed {seed}: the only member with a part inside plays");
+    }
+}
+
+#[test]
+fn play_one_decides_like_the_sequencer_plays_when_a_region_starts_on_a_part() {
+    for curve in [0.0f32, -3.0, 1.0] {
+        let mut ratchet = NoteEvent::new(0.0, 240.0, 60, 0.0, 1.0);
+        ratchet.key = 10;
+        ratchet.play_count = 3;
+        ratchet.play_curve = curve;
+        ratchet.group = Some(group(100.0, true));
+        let mut other = NoteEvent::new(200.0, 10.0, 64, 0.0, 1.0);
+        other.key = 11;
+        other.group = Some(group(100.0, true));
+        let start = value::note::curve_func(1.0 / 3.0, curve as f64) * 240.0;
+        for seed in 0..40 {
+            let region = NoteRegion {position: start, duration: 240.0 - start, loop_offset: start, loop_duration: 240.0, mute: false, groove: None};
+            let mut trimmed = sequencer(region, &[ratchet, other]);
+            trimmed.bind_seed(Rc::new(Cell::new(seed)));
+            let mut events = Vec::new();
+            let mut from = 0.0;
+            while from < 240.0 {
+                events.extend(pull(&mut trimmed, from, from + 32.0));
+                from += 32.0;
+            }
+            let (parts, single) = (starts_of(&events, 60), starts_of(&events, 64));
+            assert!(parts.is_empty() != single.is_empty(), "curve {curve}, seed {seed}: exactly one member plays: {parts:?} {single:?}");
+        }
+    }
+}
+
+#[test]
+fn repeat_length_and_velocity_fade_shape_the_parts() {
+    let region = NoteRegion {position: 0.0, duration: 960.0, loop_offset: 0.0, loop_duration: 960.0, mute: false, groove: None};
+    let mut note = NoteEvent::new(0.0, 160.0, 60, 0.0, 0.9);
+    note.play_count = 4;
+    note.repeat_length = 0.5;
+    note.velocity_fade = -1.0;
+    let parts: Vec<(f64, f64, f32)> = pull(&mut sequencer(region, &[note]), 0.0, 960.0).iter().filter_map(|event| match event {
+        Event::NoteStart {position, duration, velocity, ..} => Some((*position, *duration, *velocity)),
+        _ => None
+    }).collect();
+    assert_eq!(parts.iter().map(|(position, _, _)| *position).collect::<Vec<_>>(), vec![0.0, 40.0, 80.0, 120.0]);
+    assert!(parts.iter().all(|(_, duration, _)| *duration == 20.0), "half of each 40 pulse part: {parts:?}");
+    let velocities: Vec<f32> = parts.iter().map(|(_, _, velocity)| *velocity).collect();
+    let expected = [0.9, 0.6, 0.3, 0.0];
+    velocities.iter().zip(expected).for_each(|(got, want)| assert!((got - want).abs() < 1e-6, "{velocities:?}"));
+}
+
+#[test]
+fn the_hash_is_pinned() {
+    // Changing these values changes which notes play in every project.
+    assert_eq!(hash_unit(0, 0.0, 0, 0), PINNED[0]);
+    assert_eq!(hash_unit(4711, 960.0, 12345, 1), PINNED[1]);
 }
 
 #[test]
 fn play_count_ratchets_the_note_linearly() {
-    // playCount 4, curve 0 (linear): a 40-pulse note at 10 ratchets every 10 pulses. The window start (0)
-    // lands EXACTLY on the pre-note grid point (index -1), which TS's `searchPosition >= searchStart`
-    // includes — so the faithful result is FIVE repeats starting at 0 (the grid-aligned phantom), 10, 20,
-    // 30, 40, each 10 long.
+    // playCount 4, curve 0 (linear): a 40-pulse note at 10 ratchets every 10 pulses, nothing plays before the note
     let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
     let mut note = NoteEvent::new(10.0, 40.0, 60, 0.0, 1.0);
     note.play_count = 4;
@@ -171,11 +426,27 @@ fn play_count_ratchets_the_note_linearly() {
         Event::NoteStart {position, duration, ..} => Some((*position, *duration)),
         _ => None
     }).collect();
-    assert_eq!(starts.len(), 5, "five repeats incl the grid-aligned pre-note (TS-faithful): {starts:?}");
+    assert_eq!(starts.len(), 4, "four repeats, none before the note: {starts:?}");
     for (index, (position, duration)) in starts.iter().enumerate() {
-        assert!((position - index as f64 * 10.0).abs() < 1.0e-9, "repeat {index} at {position}");
+        assert!((position - (10.0 + index as f64 * 10.0)).abs() < 1.0e-9, "repeat {index} at {position}");
         assert!((duration - 10.0).abs() < 1.0e-9, "repeat {index} duration {duration}");
     }
+}
+
+#[test]
+fn a_negative_curve_plays_every_part_also_when_a_block_starts_before_the_note() {
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 200.0, mute: false, groove: None};
+    let mut note = NoteEvent::new(10.0, 100.0, 60, 0.0, 1.0);
+    note.play_count = 4;
+    note.play_curve = -1.0;
+    let mut sequencer = sequencer(region, &[note]);
+    let mut events = Vec::new();
+    let mut from = 0.0;
+    while from < 200.0 {
+        events.extend(pull(&mut sequencer, from, from + 32.0));
+        from += 32.0;
+    }
+    assert_eq!(starts_of(&events, 60), vec![10.0, 16.25, 35.0, 66.25]);
 }
 
 #[test]
@@ -279,7 +550,7 @@ fn kept_positions(sequencer: &mut NoteSequencer, shift: f64) -> Vec<f64> {
 
 #[test]
 fn layers_pulling_identical_windows_resolve_chance_identically() {
-    // Composite layers each own a sequencer with the SAME seed: identical windows, identical keep / drop.
+    // Composite layers each own a sequencer with the SAME seed: identical keep / drop.
     let (region, notes) = chance_region();
     let first = kept_positions(&mut sequencer(region, &notes), 0.0);
     let (region, notes) = chance_region();
@@ -289,15 +560,15 @@ fn layers_pulling_identical_windows_resolve_chance_identically() {
 }
 
 #[test]
-fn known_limit_a_layer_with_shifted_windows_may_resolve_chance_differently() {
-    // DOCUMENTS a limit, not a wish: the roll stream is sequential, so a layer whose windows are shifted (its
-    // own Zeitgeist) consumes it in another order. If this ever starts to match, the limit is gone: update
-    // plans/instrument-composite.md and the manual page.
+fn a_layer_with_shifted_windows_resolves_chance_identically() {
+    // The decision hashes the note and its position, so a layer whose windows are shifted (its own
+    // Zeitgeist) keeps and drops the same notes as its siblings.
     let (region, notes) = chance_region();
     let straight = kept_positions(&mut sequencer(region, &notes), 0.0);
     let (region, notes) = chance_region();
     let shifted = kept_positions(&mut sequencer(region, &notes), 45.0);
-    assert_ne!(straight, shifted);
+    let covered: Vec<f64> = straight.into_iter().filter(|position| *position >= 45.0).collect();
+    assert_eq!(covered, shifted, "the shifted windows start at 45");
 }
 
 fn starts(events: &[Event]) -> Vec<(f64, f64)> {
