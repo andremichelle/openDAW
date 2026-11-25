@@ -17,8 +17,8 @@ export const migrateMIDIOutputDeviceBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, de
                 box.root.refer(outputMidiDevices)
             }).device
         )
-        deviceBox.deprecatedDevice.id.setValue("")
-        deviceBox.deprecatedDevice.label.setValue("")
+        deviceBox.deprecatedDevice.id.writeDeprecated("")
+        deviceBox.deprecatedDevice.label.writeDeprecated("")
         boxGraph.endTransaction()
     }
 }

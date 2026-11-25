@@ -132,7 +132,6 @@ export namespace PlayfieldPadToUnit {
                         region.duration.setValue(box.duration.getValue())
                         region.loopOffset.setValue(box.loopOffset.getValue())
                         region.loopDuration.setValue(box.loopDuration.getValue())
-                        region.eventOffset.setValue(box.eventOffset.getValue())
                         region.mute.setValue(box.mute.getValue())
                         region.label.setValue(box.label.getValue())
                         region.hue.setValue(box.hue.getValue())

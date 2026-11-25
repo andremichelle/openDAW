@@ -199,7 +199,6 @@ export class ValueEvents {
                 box.events.refer(this.#collection.events)
                 box.position.setValue(position)
                 box.index.setValue(sharing.length)
-                box.slope.setValue(NaN)
             })
             const event = ValueEventImpl.wrap(this.#context, box)
             const rest = Props.without(props, "position")

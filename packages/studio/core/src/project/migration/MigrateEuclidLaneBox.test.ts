@@ -16,8 +16,8 @@ describe("migrateEuclidLaneBox", () => {
         })
         const device = EuclidDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.midiEffects))
         const lane = Euclid.createLane(boxGraph, device, 36)
-        lane.mute.setValue(mute)
-        lane.solo.setValue(solo)
+        lane.mute.writeDeprecated(mute)
+        lane.solo.writeDeprecated(solo)
         boxGraph.endTransaction()
         return {boxGraph, lane}
     }

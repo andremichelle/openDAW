@@ -91,7 +91,6 @@ const countSteps = async (layers: ReadonlyArray<string>, arp: boolean = true, au
                 box.position.setValue(0)
                 box.value.setValue(automatedRate)
                 box.index.setValue(0)
-                box.slope.setValue(NaN)
                 box.events.refer(rateEvents.events)
                 InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
             })

@@ -92,7 +92,6 @@ describe("modulator parameter automation", () => {
                     box.position.setValue(position)
                     box.value.setValue(value)
                     box.index.setValue(order)
-                    box.slope.setValue(NaN)
                     box.events.refer(collection.events)
                     InterpolationFieldAdapter.write(box.interpolation, Interpolation.Linear)
                 })

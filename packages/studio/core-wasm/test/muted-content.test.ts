@@ -91,12 +91,12 @@ const build = (): Built => {
     // region's INCOMING value (TS `optAt(0)` reads it WITHOUT the mute filter) = 0 = silence.
     const ampEvents = ValueEventCollectionBox.create(source, UUID.generate())
     ValueEventBox.create(source, UUID.generate(), box => {
-        box.position.setValue(0); box.value.setValue(0); box.slope.setValue(NaN); box.index.setValue(0)
+        box.position.setValue(0); box.value.setValue(0); box.index.setValue(0)
         box.events.refer(ampEvents.events)
         InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
     })
     ValueEventBox.create(source, UUID.generate(), box => {
-        box.position.setValue(960); box.value.setValue(AMP_UNIT); box.slope.setValue(NaN); box.index.setValue(0)
+        box.position.setValue(960); box.value.setValue(AMP_UNIT); box.index.setValue(0)
         box.events.refer(ampEvents.events)
         InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
     })
@@ -108,7 +108,7 @@ const build = (): Built => {
     // timeline; muted it must resolve to the FIELD's storage value (AMP_MIN = silence).
     const clipAmpEvents = ValueEventCollectionBox.create(source, UUID.generate())
     ValueEventBox.create(source, UUID.generate(), box => {
-        box.position.setValue(0); box.value.setValue(AMP_UNIT); box.slope.setValue(NaN); box.index.setValue(0)
+        box.position.setValue(0); box.value.setValue(AMP_UNIT); box.index.setValue(0)
         box.events.refer(clipAmpEvents.events)
         InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
     })

@@ -37,7 +37,7 @@ export const migrateAudioClipBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: Audi
         AudioContentHelpers.addDefaultWarpMarkers(boxGraph, pitchBox, box.duration.getValue(), fileDuration)
         box.timeBase.setValue(TimeBase.Musical)
         box.playMode.refer(pitchBox)
-        box.playback.setValue("")
+        box.playback.writeDeprecated("")
         boxGraph.endTransaction()
     }
 }

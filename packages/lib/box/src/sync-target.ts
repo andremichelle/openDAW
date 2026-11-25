@@ -15,9 +15,13 @@ export const applyUpdateTasks = <M>(graph: BoxGraph<M>, updates: ReadonlyArray<U
         if (type === "new") {
             graph.createBox(update.name, update.uuid, box => box.read(new ByteArrayInput(update.buffer)))
         } else if (type === "update-primitive") {
-            (graph.findVertex(Address.reconstruct(update.address))
-                .unwrap(() => `Could not find primitive field ${update.address}`) as PrimitiveField)
-                .setValue(update.value as PrimitiveValues)
+            const field = graph.findVertex(Address.reconstruct(update.address))
+                .unwrap(() => `Could not find primitive field ${update.address}`) as PrimitiveField
+            if (field.isUnsaved) {
+                field.writeDeprecated(update.value as PrimitiveValues)
+            } else {
+                field.setValue(update.value as PrimitiveValues)
+            }
         } else if (type === "update-bytes") {
             const field = graph.findVertex(Address.reconstruct(update.address))
                 .unwrap(() => `Could not find bytes field ${update.address}`)

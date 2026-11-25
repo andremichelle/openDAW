@@ -67,7 +67,6 @@ export class TempoTrackImpl implements TempoTrack {
                 box.position.setValue(position)
                 box.index.setValue(0)
                 box.value.setValue(this.#timelineBox.bpm.getValue())
-                box.slope.setValue(NaN)
             })
             const rest = Props.without(props, "position")
             return Props.apply(TempoEventImpl.wrap(this.#context, box), rest)

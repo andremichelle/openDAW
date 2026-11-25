@@ -45,7 +45,6 @@ const valueEvents = (source: BoxGraph, collection: ValueEventCollectionBox,
             box.position.setValue(position)
             box.value.setValue(value)
             box.index.setValue(index)
-            box.slope.setValue(NaN)
             box.events.refer(collection.events)
             InterpolationFieldAdapter.write(box.interpolation, interpolation)
         }))

@@ -5,7 +5,7 @@ export const migrateVaporisateurDeviceBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, 
     if (box.version.getValue() === 0) {
         console.debug("Migrate 'VaporisateurDeviceBox to zero db")
         boxGraph.beginTransaction()
-        box.volume.setValue(box.volume.getValue() - 15.0)
+        box.volume.writeDeprecated(box.volume.getValue() - 15.0)
         box.version.setValue(1)
         boxGraph.endTransaction()
     }

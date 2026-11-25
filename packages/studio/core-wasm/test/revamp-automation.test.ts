@@ -89,7 +89,6 @@ describe("revamp automation", () => {
             box.position.setValue(0)
             box.value.setValue(lowUnit)
             box.index.setValue(0)
-            box.slope.setValue(NaN)
             box.events.refer(freqEvents.events)
             InterpolationFieldAdapter.write(box.interpolation, Interpolation.Linear) // ramp to the next event
         })
@@ -97,7 +96,6 @@ describe("revamp automation", () => {
             box.position.setValue(SWEEP)
             box.value.setValue(highUnit)
             box.index.setValue(1)
-            box.slope.setValue(NaN)
             box.events.refer(freqEvents.events)
             InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
         })

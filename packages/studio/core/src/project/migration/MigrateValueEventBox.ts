@@ -8,13 +8,13 @@ export const migrateValueEventBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, eventBox
     if (slope === 0.0) {
         console.debug("Migrate 'ValueEventBox'")
         boxGraph.beginTransaction()
-        eventBox.slope.setValue(NaN)
+        eventBox.slope.writeDeprecated(NaN)
         boxGraph.endTransaction()
     } else if (eventBox.interpolation.getValue() === 1) {
         if (slope === 0.5) {
             console.debug("Migrate 'ValueEventBox' to linear")
             boxGraph.beginTransaction()
-            eventBox.slope.setValue(NaN)
+            eventBox.slope.writeDeprecated(NaN)
             boxGraph.endTransaction()
         } else {
             console.debug("Migrate 'ValueEventBox' to new ValueEventCurveBox")
@@ -23,7 +23,7 @@ export const migrateValueEventBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, eventBox
                 box.event.refer(eventBox.interpolation)
                 box.slope.setValue(slope)
             })
-            eventBox.slope.setValue(NaN)
+            eventBox.slope.writeDeprecated(NaN)
             boxGraph.endTransaction()
         }
     }

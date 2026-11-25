@@ -21,7 +21,7 @@ import {
     Subscription
 } from "@opendaw/lib-std"
 import {Propagation} from "./dispatchers"
-import {VertexVisitor} from "./vertex"
+import {Vertex, VertexVisitor} from "./vertex"
 import {Constraints} from "./constraints"
 
 export type PrimitiveValues = float | int | string | boolean | Readonly<Int8Array>
@@ -76,6 +76,7 @@ export abstract class PrimitiveField<
     P extends PointerTypes = UnreferenceableType
 > extends Field<P, never> implements MutableObservableValue<V> {
     readonly #type: PrimitiveType
+    readonly #unsaved: boolean
 
     #initValue: V
     #value: V
@@ -84,8 +85,13 @@ export abstract class PrimitiveField<
         super(field)
 
         this.#type = type
+        this.#unsaved = PrimitiveField.#isDeprecated(this)
         this.#initValue = value
         this.#value = this.#initValue
+    }
+
+    static #isDeprecated(vertex: Vertex): boolean {
+        return vertex.isField() && (vertex.deprecated || PrimitiveField.#isDeprecated(vertex.parent))
     }
 
     accept<RETURN>(visitor: VertexVisitor<RETURN>): Maybe<RETURN> {
@@ -107,6 +113,7 @@ export abstract class PrimitiveField<
 
     get type(): PrimitiveType {return this.#type}
     get initValue(): V {return this.#initValue}
+    get isUnsaved(): boolean {return this.#unsaved}
 
     setInitValue(value: V): void {
         assert(this.graph.constructingBox(), "Cannot change initial value at runtime")
@@ -115,6 +122,16 @@ export abstract class PrimitiveField<
 
     getValue(): V {return this.#value}
     setValue(value: V): void {
+        if (this.#unsaved) {return panic(`${this.debugPath} is deprecated, a write would not be saved`)}
+        this.#assign(value)
+    }
+    // Only for migrations, which move or reset the value of a deprecated field.
+    writeDeprecated(value: V): void {
+        assert(this.#unsaved, `${this.debugPath} is not deprecated`)
+        this.#assign(value)
+    }
+    protected restoreValue(value: V): void {this.#assign(value)}
+    #assign(value: V): void {
         const oldValue = this.#value
         const newValue = this.clamp(value)
         if (this.equals(newValue)) {return}
@@ -146,13 +163,13 @@ export class BooleanField<E extends PointerTypes = UnreferenceableType> extends 
     serialization(): ValueSerialization<boolean> {return ValueSerialization[PrimitiveType.Boolean]}
     equals(value: boolean): boolean {return this.getValue() === value}
     clamp(value: boolean): boolean {return value}
-    read(input: DataInput): void {this.setValue(input.readBoolean())}
+    read(input: DataInput): void {this.restoreValue(input.readBoolean())}
     write(output: DataOutput): void {
         assert(!this.deprecated, "BooleanField.write: deprecated field")
         output.writeBoolean(this.getValue())
     }
     fromJSON(value: JSONValue): void {
-        if (this.deprecated) {return}
+        if (this.isUnsaved) {return}
         if (typeof value === "boolean") {
             this.setValue(value)
         } else {
@@ -185,7 +202,7 @@ export class Float32Field<E extends PointerTypes = UnreferenceableType> extends 
     serialization(): ValueSerialization<float> {return ValueSerialization[PrimitiveType.Float32]}
     equals(value: float): boolean {return this.getValue() === value}
     clamp(value: float): float {return Constraints.clampFloat32(this.#constraints, Float.toFloat32(value))}
-    read(input: DataInput): void {this.setValue(input.readFloat())}
+    read(input: DataInput): void {this.restoreValue(input.readFloat())}
     write(output: DataOutput): void {
         assert(!this.deprecated, "FLoat32Field.write: deprecated field")
         output.writeFloat(this.getValue())
@@ -195,7 +212,7 @@ export class Float32Field<E extends PointerTypes = UnreferenceableType> extends 
     get constraints(): Constraints.Float32 {return this.#constraints}
 
     fromJSON(value: JSONValue): void {
-        if (this.deprecated) {return}
+        if (this.isUnsaved) {return}
         if (typeof value === "number") {
             this.setValue(value)
         } else {
@@ -229,7 +246,7 @@ export class Int32Field<E extends PointerTypes = UnreferenceableType> extends Pr
     serialization(): ValueSerialization<int> {return ValueSerialization[PrimitiveType.Int32]}
     equals(value: int): boolean {return this.getValue() === value}
     clamp(value: int): int {return Constraints.clampInt32(this.#constraints, Integer.toInt(value))}
-    read(input: DataInput): void {this.setValue(input.readInt())}
+    read(input: DataInput): void {this.restoreValue(input.readInt())}
     write(output: DataOutput): void {
         assert(!this.deprecated, "Int32Field.write: deprecated field")
         output.writeInt(this.getValue())
@@ -239,7 +256,7 @@ export class Int32Field<E extends PointerTypes = UnreferenceableType> extends Pr
     get constraints(): Constraints.Int32 {return this.#constraints}
 
     fromJSON(value: JSONValue): void {
-        if (this.deprecated) {return}
+        if (this.isUnsaved) {return}
         if (typeof value === "number" && value === Math.floor(value)
             && value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE) {
             this.setValue(value)
@@ -259,13 +276,13 @@ export class StringField<E extends PointerTypes = UnreferenceableType> extends P
     serialization(): ValueSerialization<string> {return ValueSerialization[PrimitiveType.String]}
     equals(value: string): boolean {return this.getValue() === value}
     clamp(value: string): string {return value}
-    read(input: DataInput): void {this.setValue(input.readString())}
+    read(input: DataInput): void {this.restoreValue(input.readString())}
     write(output: DataOutput): void {
         assert(!this.deprecated, "StringField.write: deprecated field")
         output.writeString(this.getValue())
     }
     fromJSON(value: JSONValue): void {
-        if (this.deprecated) {return}
+        if (this.isUnsaved) {return}
         if (typeof value === "string") {
             this.setValue(value)
         } else {
@@ -312,7 +329,7 @@ export class ByteArrayField<E extends PointerTypes = UnreferenceableType> extend
     read(input: DataInput): void {
         const bytes: Int8Array = new Int8Array(input.readInt())
         input.readBytes(bytes)
-        this.setValue(bytes)
+        this.restoreValue(bytes)
     }
     write(output: DataOutput): void {
         assert(!this.deprecated, "ByteArrayField.write: deprecated field")
@@ -326,7 +343,7 @@ export class ByteArrayField<E extends PointerTypes = UnreferenceableType> extend
     }
 
     fromJSON(value: JSONValue): void {
-        if (this.deprecated) {return}
+        if (this.isUnsaved) {return}
         if (Array.isArray(value) && value.every(number => typeof number === "number")) {
             this.setValue(new Int8Array(value))
         } else {

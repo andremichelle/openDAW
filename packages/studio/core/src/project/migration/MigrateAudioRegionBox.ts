@@ -43,7 +43,7 @@ export const migrateAudioRegionBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: Au
         box.duration.setValue(currentDurationSeconds * scale)
         box.loopDuration.setValue(fileDuration)
         box.loopOffset.setValue(currentLoopOffsetSeconds * scale)
-        box.playback.setValue("")
+        box.playback.writeDeprecated("")
         boxGraph.endTransaction()
     } else if (playback.getValue() === AudioPlayback.Pitch) {
         console.debug("Migrate 'AudioRegionBox' to new PitchStretchBox")
@@ -54,7 +54,7 @@ export const migrateAudioRegionBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: Au
         AudioContentHelpers.addDefaultWarpMarkers(boxGraph, pitchBox, box.loopDuration.getValue(), fileDuration)
         box.timeBase.setValue(TimeBase.Musical)
         box.playMode.refer(pitchBox)
-        box.playback.setValue("")
+        box.playback.writeDeprecated("")
         boxGraph.endTransaction()
     }
     if (box.events.isEmpty()) {

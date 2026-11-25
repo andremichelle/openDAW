@@ -108,7 +108,6 @@ describe("spielwerk automation parity", () => {
         ValueEventBox.create(source, UUID.generate(), box => {
             box.position.setValue(0)
             box.value.setValue(UNIT)
-            box.slope.setValue(NaN)
             box.index.setValue(0)
             box.events.refer(shiftEvents.events)
             InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)

@@ -73,7 +73,6 @@ describe("strip volume automation", () => {
             box.position.setValue(0)
             box.value.setValue(0.0) // unit 0 -> -96 dB -> silence
             box.index.setValue(0)
-            box.slope.setValue(NaN)
             box.events.refer(volumeEvents.events)
             InterpolationFieldAdapter.write(box.interpolation, Interpolation.Linear)
         })
@@ -81,7 +80,6 @@ describe("strip volume automation", () => {
             box.position.setValue(SWEEP)
             box.value.setValue(1.0) // unit 1 -> +6 dB -> loud
             box.index.setValue(1)
-            box.slope.setValue(NaN)
             box.events.refer(volumeEvents.events)
             InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
         })

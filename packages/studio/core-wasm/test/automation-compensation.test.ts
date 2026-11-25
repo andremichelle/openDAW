@@ -40,7 +40,6 @@ const step = (source: BoxGraph, target: Field, tracks: Field, from: number, to: 
             box.position.setValue(position)
             box.value.setValue(value)
             box.index.setValue(order)
-            box.slope.setValue(NaN)
             box.events.refer(collection.events)
             InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
         })

@@ -73,7 +73,7 @@ export namespace YMapper {
         value instanceof Int8Array ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength) : value
 
     export const fromY = (field: PrimitiveField, value: unknown): void => {
-        if (field instanceof ByteArrayField && !field.deprecated && YBytes.isStored(value)) {
+        if (field instanceof ByteArrayField && !field.isUnsaved && YBytes.isStored(value)) {
             // a torn field keeps the value it has until the owner of the winning write mends it
             const read = YBytes.read(value)
             if (read.type === "whole") {field.setValue(read.value)}

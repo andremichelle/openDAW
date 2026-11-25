@@ -37,7 +37,7 @@ const copyCollection = (boxGraph: BoxGraph<BoxIO.TypeMap>, source: ValueEventCol
             box.index.setValue(sourceEvent.index.getValue())
             box.interpolation.setValue(sourceEvent.interpolation.getValue())
             box.value.setValue(sourceEvent.value.getValue())
-            box.slope.setValue(sourceEvent.slope.getValue())
+            box.slope.writeDeprecated(sourceEvent.slope.getValue())
         })
         sourceEvent.interpolation.pointerHub.incoming().forEach(pointer => {
             const curve = asCurve(pointer.box)

@@ -12,7 +12,7 @@ export const migrateEuclidLaneBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: Euc
         if (mute) {rhythm.mute.setValue(true)}
         if (solo) {rhythm.solo.setValue(true)}
     }
-    box.mute.setValue(false)
-    box.solo.setValue(false)
+    box.mute.writeDeprecated(false)
+    box.solo.writeDeprecated(false)
     boxGraph.endTransaction()
 }

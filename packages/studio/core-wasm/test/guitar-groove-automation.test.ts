@@ -70,7 +70,6 @@ const firstSound = async ({offset, step, switching}: Scene, bars: int): Promise<
                 box.position.setValue(position)
                 box.value.setValue(value)
                 box.index.setValue(order)
-                box.slope.setValue(NaN)
                 box.events.refer(curve.events)
                 InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
             })

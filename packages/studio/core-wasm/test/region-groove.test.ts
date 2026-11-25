@@ -91,7 +91,6 @@ const render = async ({offset, notes, unmute, unlisted}: Setup, pulses: int): Pr
                 box.position.setValue(position)
                 box.value.setValue(value)
                 box.index.setValue(order)
-                box.slope.setValue(NaN)
                 box.events.refer(curve.events)
                 InterpolationFieldAdapter.write(box.interpolation, Interpolation.None)
             })
