@@ -366,8 +366,8 @@ fn ratchet_parts(note: &NoteEvent, from: f64, to: f64, visit: &mut dyn FnMut(i32
     }
     let count = note.play_count as f64;
     let curve = note.play_curve as f64;
-    let search_start = inverse_curve_func((from - note.position) / duration, curve);
-    let search_limit = inverse_curve_func((to - note.position) / duration, curve);
+    let search_start = inverse_curve_func(((from - note.position) / duration).max(0.0), curve);
+    let search_limit = inverse_curve_func(((to - note.position) / duration).max(0.0), curve);
     let mut search_index = math::floor(search_start * count);
     let mut search_position = search_index / count;
     while search_position < search_limit {

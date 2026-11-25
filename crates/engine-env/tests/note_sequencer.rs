@@ -416,10 +416,7 @@ fn the_hash_is_pinned() {
 
 #[test]
 fn play_count_ratchets_the_note_linearly() {
-    // playCount 4, curve 0 (linear): a 40-pulse note at 10 ratchets every 10 pulses. The window start (0)
-    // lands EXACTLY on the pre-note grid point (index -1), which TS's `searchPosition >= searchStart`
-    // includes — so the faithful result is FIVE repeats starting at 0 (the grid-aligned phantom), 10, 20,
-    // 30, 40, each 10 long.
+    // playCount 4, curve 0 (linear): a 40-pulse note at 10 ratchets every 10 pulses, nothing plays before the note
     let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
     let mut note = NoteEvent::new(10.0, 40.0, 60, 0.0, 1.0);
     note.play_count = 4;
@@ -429,11 +426,27 @@ fn play_count_ratchets_the_note_linearly() {
         Event::NoteStart {position, duration, ..} => Some((*position, *duration)),
         _ => None
     }).collect();
-    assert_eq!(starts.len(), 5, "five repeats incl the grid-aligned pre-note (TS-faithful): {starts:?}");
+    assert_eq!(starts.len(), 4, "four repeats, none before the note: {starts:?}");
     for (index, (position, duration)) in starts.iter().enumerate() {
-        assert!((position - index as f64 * 10.0).abs() < 1.0e-9, "repeat {index} at {position}");
+        assert!((position - (10.0 + index as f64 * 10.0)).abs() < 1.0e-9, "repeat {index} at {position}");
         assert!((duration - 10.0).abs() < 1.0e-9, "repeat {index} duration {duration}");
     }
+}
+
+#[test]
+fn a_negative_curve_plays_every_part_also_when_a_block_starts_before_the_note() {
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 200.0, mute: false, groove: None};
+    let mut note = NoteEvent::new(10.0, 100.0, 60, 0.0, 1.0);
+    note.play_count = 4;
+    note.play_curve = -1.0;
+    let mut sequencer = sequencer(region, &[note]);
+    let mut events = Vec::new();
+    let mut from = 0.0;
+    while from < 200.0 {
+        events.extend(pull(&mut sequencer, from, from + 32.0));
+        from += 32.0;
+    }
+    assert_eq!(starts_of(&events, 60), vec![10.0, 16.25, 35.0, 66.25]);
 }
 
 #[test]
