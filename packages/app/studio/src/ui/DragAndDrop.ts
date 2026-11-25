@@ -117,6 +117,7 @@ export namespace DragAndDrop {
 
     export const installTarget = (element: HTMLElement, process: Process): Terminable => {
         let count: int = 0 | 0
+        const installed = {alive: true}
         return Terminable.many(
             Events.subscribe(element, "dragenter", (event: DragEvent) => {
                 if (count++ === 0) {
@@ -175,11 +176,12 @@ export namespace DragAndDrop {
             Events.subscribe(element, "dragend", (_event: DragEvent) => count = 0, {capture: true}),
             // a nested target may stop the drop from reaching this element, reset once the drop is dispatched
             Events.subscribe(element.ownerDocument, "drop", () => setTimeout(() => {
-                if (count > 0) {
+                if (installed.alive && count > 0) {
                     count = 0
                     process.leave()
                 }
-            }), {capture: true})
+            }), {capture: true}),
+            Terminable.create(() => installed.alive = false)
         )
     }
 

@@ -133,7 +133,8 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
         const accepted = files.filter(file => this.acceptsFile(file))
         const total = {bytes: 0, exact: true}
         for (const file of accepted) {
-            const {status, value} = await Promises.tryCatch(this.estimateFile(file))
+            const {status, value, error} = await Promises.tryCatch(this.estimateFile(file))
+            if (status === "rejected") {console.warn(`Could not estimate '${file.name}', using its file size`, error)}
             const {bytes, exact} = status === "resolved" ? value : {bytes: file.size, exact: false}
             total.bytes += bytes
             total.exact &&= exact

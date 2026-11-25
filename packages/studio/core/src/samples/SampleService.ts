@@ -29,9 +29,7 @@ export class SampleService extends AssetService<Sample, AudioData> {
     }
 
     protected async estimateFile(file: File): Promise<AssetService.SizeEstimate> {
-        const header = await file.slice(0, SampleSizeEstimate.HeaderBytes).arrayBuffer()
-        const smallest = SampleStorage.get().format === "smallest"
-        return SampleSizeEstimate.of(header, file.size, this.audioContext.sampleRate, smallest)
+        return SampleSizeEstimate.of(file, this.audioContext.sampleRate, SampleStorage.get().format === "smallest")
     }
 
     async importRecording(uuid: UUID.Bytes, audioData: AudioData, bpm: number, name: string = "Recording"): Promise<Sample> {

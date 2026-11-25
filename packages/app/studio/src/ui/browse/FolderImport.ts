@@ -59,12 +59,13 @@ export namespace FolderImport {
 
     export const approve = async ({count, bytes, exact}: AssetService.ImportEstimate, name: string): Promise<boolean> => {
         const storage = await Promises.tryCatch(navigator.storage.estimate())
+        if (storage.status === "rejected") {console.warn("Could not read the free browser storage", storage.error)}
         const free = storage.status === "resolved" && isDefined(storage.value.quota) && isDefined(storage.value.usage)
             ? Option.wrap(storage.value.quota - storage.value.usage)
             : Option.None
         const lines: ReadonlyArray<string> = [
-            `Files: ${count} ${name.toLowerCase()}`,
-            `Browser storage needed:${exact ? "" : "about "}${StorageUsage.format(bytes)}`,
+            `Files: ${count} ${count === 1 ? name.toLowerCase().replace(/s$/, "") : name.toLowerCase()}`,
+            `Browser storage needed: ${exact ? "" : "about "}${StorageUsage.format(bytes)}`,
             ...free.mapOr(available => [
                 `Free browser storage: ${StorageUsage.format(available)}`,
                 ...(bytes > available ? ["This is more than the free browser storage."] : [])

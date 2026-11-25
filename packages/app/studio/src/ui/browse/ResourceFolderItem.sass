@@ -65,5 +65,8 @@ component
     row-gap: 0.375em
     --indent: calc((var(--depth, 0) + 1) * 0.75em)
 
+    &.drag-over:not(:has(.drag-over))
+      background-color: var(--color-panel-background-bright)
+
     &.hidden
       display: none

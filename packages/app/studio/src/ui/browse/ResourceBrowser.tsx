@@ -43,6 +43,8 @@ import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData, DragFile} from "@/ui/AnyDragData"
 import {Surface} from "@/ui/surface/Surface"
 
+const TrashRejectsFiles = "Files cannot be dropped into the Trash"
+
 type Construct<T> = {
     lifecycle: Lifecycle
     service: StudioService
@@ -175,7 +177,7 @@ export const ResourceBrowser = <T, >({
                                     // identical audio is one item, it stays in the first folder it is found in
                                     const placed = new Set<UUID.String>()
                                     for (const [index, [folder]] of folders.entries()) {
-                                        const uuids = result.value[index]
+                                        const uuids = (result.value[index] ?? Arrays.empty())
                                             .map(config.resolveEntryUuid)
                                             .filter(uuid => !placed.has(uuid))
                                         uuids.forEach(uuid => placed.add(uuid))
@@ -242,14 +244,12 @@ export const ResourceBrowser = <T, >({
                                         Events.subscribe(window, "drop", clear, {capture: true})
                                     )
                                 }
-                                const rejectFiles = (target: HTMLElement): Terminable =>
+                                const rejectFiles = (target: HTMLElement, message: string, icon: IconSymbol): Terminable =>
                                     DragAndDrop.installTarget(target, {
                                         drag: (_event, data) => data.type === "file",
                                         drop: event => {
                                             event.stopPropagation()
-                                            Surface.get(target).toast(
-                                                `${Strings.capitalize(config.name)} can only be stored in the user folder`,
-                                                IconSymbol.UserFolder)
+                                            Surface.get(target).toast(message, icon)
                                         },
                                         enter: EmptyProcedure,
                                         leave: EmptyExec
@@ -271,6 +271,7 @@ export const ResourceBrowser = <T, >({
                                             apply: uuids => local.trash(uuids),
                                             importTo: Option.None
                                         }),
+                                        rejectFiles(header, TrashRejectsFiles, IconSymbol.Warning),
                                         ContextMenu.subscribe(header, collector =>
                                             collector.addItems(...ResourceMenus.trashFolder(
                                                 local, resourceSelection, folder.items, config.resolveEntryUuid, refresh)))
@@ -286,6 +287,14 @@ export const ResourceBrowser = <T, >({
                                         ContextMenu.subscribe(header, collector =>
                                             collector.addItems(...ResourceMenus.folder(local, path, refresh, () => importPicked(local, path))))
                                     )
+                                const installEntries = (local: LocalTree<T>, path: string, isTrash: boolean): Procedure<HTMLElement> =>
+                                    list => entriesLifeSpan.own(isTrash
+                                        ? rejectFiles(list, TrashRejectsFiles, IconSymbol.Warning)
+                                        : installDropTarget(list, {
+                                            accepts: () => false,
+                                            apply: () => Promise.resolve(),
+                                            importTo: Option.wrap(data => importDropped(local, data, path))
+                                        }))
                                 const renderContent = (folder: ResourceFolder<T>, path: string, depth: number): Array<HTMLElement> => [
                                     ...folder.folders.map(sub => {
                                         const subPath = LocalTree.path(path, sub.name)
@@ -304,6 +313,10 @@ export const ResourceBrowser = <T, >({
                                                 some: local => isTrash
                                                     ? installTrash(local, sub)
                                                     : installFolder(local, subPath)
+                                            }),
+                                            installEntries: tree.match<Procedure<HTMLElement>>({
+                                                none: () => EmptyProcedure,
+                                                some: local => installEntries(local, subPath, isTrash)
                                             })
                                         })
                                     }),
@@ -321,7 +334,11 @@ export const ResourceBrowser = <T, >({
                                     const isBlank = (element: Nullable<Element>): boolean =>
                                         !isDefined(element) || !isDefined(element.closest("[data-selection], .folder-header"))
                                     tree.match({
-                                        none: () => {entriesLifeSpan.own(rejectFiles(entries))},
+                                        none: () => {
+                                            entriesLifeSpan.own(rejectFiles(entries,
+                                                `${Strings.capitalize(config.name)} can only be stored in the user folder`,
+                                                IconSymbol.UserFolder))
+                                        },
                                         some: local => entriesLifeSpan.ownAll(
                                             installDropTarget(entries, {
                                                 accepts: uuids => uuids.some(uuid => local.isTrashed(uuid)

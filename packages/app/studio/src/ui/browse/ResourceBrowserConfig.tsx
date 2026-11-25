@@ -1,4 +1,4 @@
-import {Exec, Lifecycle, Option, UUID} from "@opendaw/lib-std"
+import {Exec, Func, Lifecycle, Option, UUID} from "@opendaw/lib-std"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {StudioService} from "@/service/StudioService"
 import {ResourceSelection} from "@/ui/browse/ResourceSelection"
@@ -30,8 +30,8 @@ export type ResourceBrowserConfig<T> = {
     resolveEntryUuid: (entry: T) => UUID.String
     createSelection: (service: StudioService, htmlSelection: HTMLSelection) => ResourceSelection<T>
     importSignal: StudioSignal["type"]
-    importGroups: (groups: ReadonlyArray<ReadonlyArray<File>>) => Promise<ReadonlyArray<ReadonlyArray<T>>>
-    estimateImport: (files: ReadonlyArray<File>) => Promise<AssetService.ImportEstimate>
+    importGroups: Func<ReadonlyArray<ReadonlyArray<File>>, Promise<ReadonlyArray<ReadonlyArray<T>>>>
+    estimateImport: Func<ReadonlyArray<File>, Promise<AssetService.ImportEstimate>>
     headers: ReadonlyArray<ResourceHeader>
     footer?: (props: { lifecycle: Lifecycle, service: StudioService }) => HTMLElement | null
     onReload?: Exec
