@@ -16,7 +16,6 @@ use crate::block::Block;
 use crate::channel_strip::StripAutomation;
 use crate::event_buffer::EventBuffer;
 use crate::event_receiver::EventReceiver;
-use crate::ppqn::{first_update_position, pulses_to_samples, UPDATE_CLOCK_RATE};
 use crate::process_info::ProcessInfo;
 use crate::processor::Processor;
 use crate::ramp::LinearRamp;
@@ -46,6 +45,7 @@ pub struct AuxSendProcessor {
     // The send's automation overrides, reusing the strip's shape: `volume` carries the sendGain curve (dB),
     // `panning` the sendPan curve (-1..1). `None` per parameter = not automated, the static `SendParams` rules.
     automation: Rc<StripAutomation>,
+    automation_lag: u32,
     output: SharedAudioBuffer,
     input: Option<SharedAudioBuffer>,
     gain_left: LinearRamp,
@@ -60,6 +60,7 @@ impl AuxSendProcessor {
         Self {
             params,
             automation,
+            automation_lag: 0,
             output: shared_audio_buffer(),
             input: None,
             gain_left: LinearRamp::linear(sample_rate),
@@ -85,11 +86,11 @@ impl AuxSendProcessor {
 
     fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let gain_db = match self.automation.volume.borrow().as_ref() {
-            Some(source) => source(position, transporting),
+            Some(source) => source(position, transporting, self.automation_lag),
             None => self.params.gain_db.get()
         };
         let panning = match self.automation.panning.borrow().as_ref() {
-            Some(source) => source(position, transporting),
+            Some(source) => source(position, transporting, self.automation_lag),
             None => self.params.pan.get()
         };
         self.retarget(gain_db, panning);
@@ -120,14 +121,7 @@ impl AuxSendProcessor {
 
     // Map an update-grid pulse to its sample offset within `block` (the engine's `sample_offset` formula).
     fn sample_offset(&self, position: f64, block: &Block) -> usize {
-        let pulses = position - block.p0;
-        let (s0, s1) = (block.s0 as usize, block.s1 as usize);
-        let raw = if pulses.abs() < 1.0e-7 {
-            s0
-        } else {
-            s0 + pulses_to_samples(pulses, block.bpm, self.sample_rate) as usize
-        };
-        raw.clamp(s0, s1)
+        crate::block::frame_of(block, position, self.sample_rate)
     }
 }
 
@@ -158,6 +152,10 @@ impl AudioGenerator for AuxSendProcessor {
 }
 
 impl Processor for AuxSendProcessor {
+    fn set_automation_delay(&mut self, frames: u32) {
+        self.automation_lag = frames;
+    }
+
     fn reset(&mut self) {
         self.output.borrow_mut().clear();
     }
@@ -191,7 +189,7 @@ impl Processor for AuxSendProcessor {
                 }
                 let mut cursor = s0;
                 self.retarget_at(block.p0);
-                let mut position = first_update_position(block.p0);
+                let mut position = crate::update_clock::first_update(block.p0, self.automation_lag);
                 while position < block.p1 {
                     let offset = self.sample_offset(position, block).clamp(cursor, s1);
                     if offset > cursor {
@@ -199,7 +197,7 @@ impl Processor for AuxSendProcessor {
                         cursor = offset;
                     }
                     self.retarget_at(position);
-                    position += UPDATE_CLOCK_RATE;
+                    position = crate::update_clock::next_update(position, self.automation_lag);
                 }
                 if cursor < s1 {
                     self.apply(&source, &mut output, cursor, s1);

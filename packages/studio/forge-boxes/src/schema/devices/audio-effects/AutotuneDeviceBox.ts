@@ -27,5 +27,6 @@ export const AutotuneDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioE
     15: {
         type: "float32", name: "smooth", pointerRules: ParameterPointerRules,
         value: 0.60, constraints: "unipolar", unit: "%"
-    }
+    },
+    16: {type: "boolean", name: "follow", pointerRules: ParameterPointerRules, value: false}
 })

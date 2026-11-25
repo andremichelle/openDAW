@@ -42,6 +42,8 @@ use crate::tempo_map::{SharedTempoMap, TempoMap};
 /// The boundary declick window in seconds (matches the TS tape `VOICE_FADE_DURATION`): a region edge with no
 /// authored fade gets this short anti-click ramp so an adjacent-region seam does not hard-cut into a click.
 const VOICE_FADE_DURATION: f64 = 0.020;
+/// The crossfade in seconds at a transport jump: only long enough to remove the hard click.
+const JUMP_FADE_DURATION: f64 = 0.005;
 
 pub(crate) struct AudioRegionPlayer {
     tracks: SharedAudioTrackSets,
@@ -80,6 +82,9 @@ pub(crate) struct AudioRegionPlayer {
     // Active fade-out tails (native regions): a region-end seam crossfade or a transport-stop release. Rendered
     // every block until each ramp expires, independent of the region iteration (the region is no longer played).
     release_tails: Vec<ReleaseTail>,
+    // Fade-out tails of native reads released by a transport jump, kept apart from `release_tails` because the
+    // region keeps playing (at its new position) and would drop its own tail there.
+    jump_tails: Vec<ReleaseTail>,
     // Active granular (time-stretch) releases: a region whose sequencer is ringing its voices out past its end or
     // a stop. Each keeps its sequencer alive in `sequencers`; driven every block until the voices finish.
     granular_releases: Vec<GranularRelease>,
@@ -122,12 +127,19 @@ struct NativeCursor {
     // until the first render, marking a cursor that has never sounded (no release to seed).
     file: Uuid,
     gain_db: f32,
-    rate: f64
+    rate: f64,
+    // The region content ended within the last rendered block, so a transport jump has nothing left to release.
+    ended: bool,
+    // The fade envelope at the last rendered sample, the start level of a transport-jump release.
+    level: f32,
+    // Remaining output samples of the fade-in after a transport jump into the middle of the region.
+    fade_in: f64
 }
 
 impl NativeCursor {
     fn new() -> Self {
-        Self {read_frame: 0.0, next_pulse: f64::NAN, raw_start: f64::NAN, file: [0u8; 16], gain_db: 0.0, rate: 0.0}
+        Self {read_frame: 0.0, next_pulse: f64::NAN, raw_start: f64::NAN, file: [0u8; 16], gain_db: 0.0, rate: 0.0,
+            ended: false, level: 1.0, fade_in: 0.0}
     }
 }
 
@@ -179,7 +191,7 @@ impl AudioRegionPlayer {
             sequencers: Vec::with_capacity(8), native_cursors: Vec::with_capacity(16), visited: Vec::with_capacity(32),
             sequencer_pool: Vec::with_capacity(8),
             signalsmith_players: Vec::with_capacity(4), signalsmith_pool: Vec::with_capacity(4),
-            release_tails: Vec::with_capacity(16), granular_releases: Vec::with_capacity(8),
+            release_tails: Vec::with_capacity(16), jump_tails: Vec::with_capacity(16), granular_releases: Vec::with_capacity(8),
             granular_files: Vec::with_capacity(8), signalsmith_releases: Vec::with_capacity(4),
             signalsmith_templates: Vec::with_capacity(4), enabled: true,
             monitor: None, meter: engine_env::meter::Meter::new(sample_rate), clips}
@@ -220,6 +232,7 @@ impl AudioRegionPlayer {
             }
             self.native_cursors.clear();
             self.release_tails.clear();
+            self.jump_tails.clear();
             self.granular_releases.clear();
             self.granular_files.clear();
             self.signalsmith_releases.clear();
@@ -255,7 +268,7 @@ impl Processor for AudioRegionPlayer {
     fn process(&mut self, info: &ProcessInfo) {
         let AudioRegionPlayer {
             tracks, sample_rate, tempo_map, output, sequencers, native_cursors, visited,
-            sequencer_pool, signalsmith_players, signalsmith_pool, release_tails, granular_releases, granular_files,
+            sequencer_pool, signalsmith_players, signalsmith_pool, release_tails, jump_tails, granular_releases, granular_files,
             signalsmith_releases, signalsmith_templates, clips, enabled, monitor, meter, ..
         } = self;
         let mut output = output.borrow_mut();
@@ -267,6 +280,8 @@ impl Processor for AudioRegionPlayer {
         let tempo_map = tempo_map.borrow();
         let mut fading_gain = [1.0f32; engine_env::RENDER_QUANTUM]; // per-cycle region fade, reused on the stack
         visited.clear();
+        let window = (VOICE_FADE_DURATION * sample_rate as f64).max(1.0);
+        let jump_window = (JUMP_FADE_DURATION * sample_rate as f64).max(1.0);
         for block in info.blocks {
             // Fade-out tails ring out on EVERY block, including non-playing ones: a transport stop releases the
             // voice over ~20 ms instead of hard-cutting it (the pause click), and a seam tail keeps summing with
@@ -278,7 +293,6 @@ impl Processor for AudioRegionPlayer {
                 // tail render below so it rings out from the pause sample IN THIS block (block.s0 == the stop
                 // point). Drain the cursors so this fires once; a resume re-primes fresh cursors. A cursor that
                 // never rendered (rate 0) or whose sample is gone is skipped.
-                let window = (VOICE_FADE_DURATION * sample_rate as f64).max(1.0);
                 for (uuid, cursor) in native_cursors.drain(..) {
                     if cursor.rate <= 0.0 { continue; }
                     release_tails.retain(|tail| tail.region_uuid != uuid);
@@ -304,12 +318,17 @@ impl Processor for AudioRegionPlayer {
                     }
                 }
             }
+            if !stopped && block.flags.discontinuous() {
+                seed_jump_tails(native_cursors, release_tails, jump_tails, jump_window);
+            }
             render_release_tails(release_tails, &mut output, block);
+            render_release_tails(jump_tails, &mut output, block);
             render_granular_releases(granular_releases, sequencers, sequencer_pool, granular_files, &mut output, block);
             render_signalsmith_releases(signalsmith_releases, signalsmith_players, signalsmith_templates, &mut output, block);
             if stopped {
                 continue;
             }
+            let visited_before = visited.len();
             for track in tracks.borrow().iter() {
                 let content = track.borrow();
                 let clip_info = BoundClipInfo {clips: &content.clips};
@@ -330,6 +349,10 @@ impl Processor for AudioRegionPlayer {
                         }
                     }
                 });
+            }
+            if block.flags.discontinuous() {
+                release_jumped_out(&visited[visited_before..], block, &mut output, sequencers, granular_releases, granular_files,
+                    signalsmith_players, signalsmith_releases, signalsmith_templates, window, jump_window);
             }
         }
         // Sum the staged live input into the player output (post regions, pre meter): the tape device is the
@@ -410,16 +433,7 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
         let index = match signalsmith_players.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
             Some(index) => index,
             None => {
-                let mut player = signalsmith_pool.pop().unwrap_or_else(|| SignalsmithStretch::preset_default(2, sample_rate));
-                // Stagger each voice's FFT-burst phase so concurrent voices don't all synthesize in the SAME
-                // render quantum (each voice runs one heavy FFT every `interval` samples = every `quanta`
-                // render quanta; phase-locked voices stack their peak cost). Players are per-audio-unit, so the
-                // slot must come from a GLOBAL key, not this player's index: derive it from the region uuid, so
-                // it is stable across loop-wraps/re-primes and spread over the cycle. Costs a fixed sub-cycle
-                // output latency on the voice (a pure delay; a few ms), inaudible for independent material.
-                let quanta = (player.interval_samples() / engine_env::RENDER_QUANTUM).max(1);
-                let slot = region.region_uuid.iter().fold(0usize, |acc, byte| acc.wrapping_add(*byte as usize)) % quanta;
-                player.set_phase_offset(slot * engine_env::RENDER_QUANTUM);
+                let player = signalsmith_pool.pop().unwrap_or_else(|| SignalsmithStretch::preset_default(2, sample_rate));
                 signalsmith_players.push((region.region_uuid, player));
                 signalsmith_players.len() - 1
             }
@@ -446,7 +460,7 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
             let source = Source {left, right, num_frames: sample.frame_count as usize};
             let complete = region.position + region.duration;
             for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
-                fill_fading_gain(fading_gain, region, cycle.result_start, cycle.result_end, block);
+                fill_fading_gain(fading_gain, region, cycle.result_start, cycle.result_end, block, sample_rate);
                 sequencers[index].1.process(
                     output, &source, sample.sample_rate, &region.transients, config,
                     region.waveform_offset, block, cycle.raw_start, cycle.result_start, cycle.result_end,
@@ -457,8 +471,7 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
             // region rendered after this in the same block); the remainder rides the block loop's release driver.
             let pulses = block.p1 - block.p0;
             if region.fade_out <= 0.0 && complete > from && complete <= to && pulses > 0.0 {
-                let samples = (block.s1 - block.s0) as f64;
-                let complete_sample = sample_of(block, complete, pulses, samples);
+                let complete_sample = sample_of(block, complete, sample_rate);
                 let block_end = block.s1 as usize;
                 let window = (VOICE_FADE_DURATION * sample_rate as f64).max(1.0);
                 let unity = [1.0f32; engine_env::RENDER_QUANTUM];
@@ -519,9 +532,11 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
     // A re-entry plays fresh (re-primes below), so drop any release seeded at a previous end.
     signalsmith_releases.retain(|release| release.region_uuid != region.region_uuid);
     let mut last_time_factor = 1.0f64;
+    let mut jump = block.flags.discontinuous();
+    let fade_in = jump && from > region.position;
     for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
-        let begin = sample_of(block, cycle.result_start, pulses, samples);
-        let end = sample_of(block, cycle.result_end, pulses, samples);
+        let begin = sample_of(block, cycle.result_start, engine_rate);
+        let end = sample_of(block, cycle.result_end, engine_rate);
         let count = end.saturating_sub(begin);
         if count == 0 { continue; }
         let (source_pos, time_factor) = if warp.is_empty() {
@@ -551,6 +566,10 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
         let entry = player.cycle_id().is_nan();
         let reprime = entry || block.flags.discontinuous()
             || (player.cycle_id() - cycle.raw_start).abs() >= 1e-6;
+        if reprime && jump && (fade_in || !entry) {
+            player.begin_crossfade((JUMP_FADE_DURATION * engine_rate as f64) as usize, !entry, fade_in);
+        }
+        jump = false;
         let restored = reprime && !entry && player.try_restore(time_factor, pitch, resample, source_pos);
         if reprime && !restored {
             player.reset_stream(source_pos);
@@ -583,7 +602,7 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
     // fade-out (its params frozen at the end so the pitch stays correct), overlapping the next region's fade-in.
     // Render the in-block portion now; the remainder rides the block loop's Signalsmith release driver.
     if region.fade_out <= 0.0 && complete > from && complete <= to {
-        let complete_sample = sample_of(block, complete, pulses, samples);
+        let complete_sample = sample_of(block, complete, engine_rate);
         let block_end = block.s1 as usize;
         let window = (VOICE_FADE_DURATION * engine_rate as f64).max(1.0);
         let count = block_end.saturating_sub(complete_sample);
@@ -605,11 +624,9 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
 
 /// Fill `buffer[0..count)` with the region's fade envelope/// Fill `buffer[0..count)` with the region's fade envelope across one loop cycle (TS `FadingEnvelope.fillGainBuffer`):
 /// the fade gain is linear in ppqn from `result_start` to `result_end`. Returns the sample count filled.
-fn fill_fading_gain(buffer: &mut [f32], region: &AudioRegion, result_start: f64, result_end: f64, block: &Block) -> usize {
-    let pulses = block.p1 - block.p0;
-    let samples = (block.s1 - block.s0) as f64;
-    let buffer_start = sample_of(block, result_start, pulses, samples);
-    let buffer_end = sample_of(block, result_end, pulses, samples);
+fn fill_fading_gain(buffer: &mut [f32], region: &AudioRegion, result_start: f64, result_end: f64, block: &Block, sample_rate: f32) -> usize {
+    let buffer_start = sample_of(block, result_start, sample_rate);
+    let buffer_end = sample_of(block, result_end, sample_rate);
     let count = buffer_end.saturating_sub(buffer_start).min(buffer.len());
     let start_ppqn = result_start - region.position;
     let span_ppqn = result_end - result_start;
@@ -646,6 +663,21 @@ fn render_one_tail(tail: &mut ReleaseTail, left: &[f32], right: &[f32], output: 
         tail.remaining -= 1.0;
     }
     tail.remaining > 0.0
+}
+
+/// A transport jump releases every native read still sounding from its last position as a fade-out tail. A region
+/// that ended (it rings out its own end tail or its authored fade-out) is skipped. The tail starts at the read's
+/// last envelope level by shortening its ramp, so a jump inside a fade does not pop back to full gain.
+fn seed_jump_tails(cursors: &[(Uuid, NativeCursor)], release_tails: &[ReleaseTail], jump_tails: &mut Vec<ReleaseTail>, window: f64) {
+    for (uuid, cursor) in cursors.iter() {
+        if cursor.rate <= 0.0 || cursor.ended || cursor.level <= 0.0
+            || release_tails.iter().any(|tail| tail.region_uuid == *uuid) { continue; }
+        let remaining = window * cursor.level as f64;
+        jump_tails.push(ReleaseTail {
+            region_uuid: *uuid, file: cursor.file, read_frame: cursor.read_frame,
+            rate: cursor.rate, gain_db: cursor.gain_db, remaining, window
+        });
+    }
 }
 
 /// Insert-or-update `key -> value` in a small assoc vec (region_uuid -> file for live granular sequencers).
@@ -719,27 +751,11 @@ fn render_signalsmith_releases(
     output: &mut AudioBuffer,
     block: &Block
 ) {
-    let buffer_start = block.s0 as usize;
-    let count = (block.s1 - block.s0) as usize;
-    let mut scratch_l = [0.0f32; engine_env::RENDER_QUANTUM];
-    let mut scratch_r = [0.0f32; engine_env::RENDER_QUANTUM];
     releases.retain_mut(|release| {
         let Some(pi) = players.iter().position(|(uuid, _)| *uuid == release.region_uuid) else { return false };
-        match crate::resolve_sample(release.file) {
-            Some(sample) => {
-                let left = sample.plane(0);
-                let right = if sample.channel_count >= 2 { sample.plane(1) } else { left };
-                players[pi].1.process_stream_stereo(left, right, &mut scratch_l[..count], &mut scratch_r[..count], release.time_factor, release.pitch, release.resample);
-                let gain = db_to_gain(release.gain_db);
-                for i in 0..count {
-                    let scale = gain * ((release.remaining - i as f64) / release.window).clamp(0.0, 1.0) as f32;
-                    output.left[buffer_start + i] += scratch_l[i] * scale;
-                    output.right[buffer_start + i] += scratch_r[i] * scale;
-                }
-            }
-            None => return false
+        if !render_signalsmith_release(release, &mut players[pi].1, output, block) {
+            return false;
         }
-        release.remaining -= count as f64;
         let keep = release.remaining > 0.0;
         if !keep {
             // Drop the template so the stop-seeding does NOT re-seed this finished release next block (which would
@@ -748,6 +764,61 @@ fn render_signalsmith_releases(
         }
         keep
     });
+}
+
+/// Stream one Signalsmith release into `[block.s0, block.s1)` with its fade-out ramp and advance `remaining`.
+/// Returns false when its source is gone.
+fn render_signalsmith_release(release: &mut SignalsmithRelease, player: &mut SignalsmithStretch, output: &mut AudioBuffer, block: &Block) -> bool {
+    let Some(sample) = crate::resolve_sample(release.file) else { return false };
+    let buffer_start = block.s0 as usize;
+    let count = (block.s1 - block.s0) as usize;
+    let mut scratch_l = [0.0f32; engine_env::RENDER_QUANTUM];
+    let mut scratch_r = [0.0f32; engine_env::RENDER_QUANTUM];
+    let left = sample.plane(0);
+    let right = if sample.channel_count >= 2 { sample.plane(1) } else { left };
+    player.process_stream_stereo(left, right, &mut scratch_l[..count], &mut scratch_r[..count], release.time_factor, release.pitch, release.resample);
+    let gain = db_to_gain(release.gain_db);
+    for i in 0..count {
+        let scale = gain * ((release.remaining - i as f64) / release.window).clamp(0.0, 1.0) as f32;
+        output.left[buffer_start + i] += scratch_l[i] * scale;
+        output.right[buffer_start + i] += scratch_r[i] * scale;
+    }
+    release.remaining -= count as f64;
+    true
+}
+
+/// A transport jump that leaves a granular or Signalsmith region (it was not played in the jump block) rings its
+/// voices / stream out instead of dropping them, like a stop does. The in-block portion renders here, the rest
+/// rides the release drivers.
+#[allow(clippy::too_many_arguments)]
+fn release_jumped_out(visited: &[Uuid], block: &Block, output: &mut AudioBuffer,
+                      sequencers: &mut [(Uuid, TimeStretchSequencer)], granular_releases: &mut Vec<GranularRelease>, granular_files: &[(Uuid, Uuid)],
+                      signalsmith_players: &mut [(Uuid, SignalsmithStretch)], signalsmith_releases: &mut Vec<SignalsmithRelease>,
+                      signalsmith_templates: &[(Uuid, SignalsmithRelease)], window: f64, jump_window: f64) {
+    let buffer_start = block.s0 as usize;
+    let count = (block.s1 - block.s0) as usize;
+    let unity = [1.0f32; engine_env::RENDER_QUANTUM];
+    for (uuid, sequencer) in sequencers.iter_mut() {
+        if visited.contains(uuid) || !sequencer.has_voices() || granular_releases.iter().any(|release| release.region_uuid == *uuid) { continue; }
+        let Some((_, file)) = granular_files.iter().find(|(key, _)| key == uuid) else { continue };
+        let Some(sample) = crate::resolve_sample(*file) else { continue };
+        let source = Source {
+            left: sample.plane(0),
+            right: if sample.channel_count >= 2 { sample.plane(1) } else { sample.plane(0) },
+            num_frames: sample.frame_count as usize
+        };
+        sequencer.render_release(&source, output, buffer_start, count, &unity[..count]);
+        granular_releases.push(GranularRelease {region_uuid: *uuid, file: *file, remaining: window - count as f64});
+    }
+    for (uuid, player) in signalsmith_players.iter_mut() {
+        if visited.contains(uuid) || player.cycle_id().is_nan()
+            || signalsmith_releases.iter().any(|release| release.region_uuid == *uuid) { continue; }
+        let Some((_, template)) = signalsmith_templates.iter().find(|(key, _)| key == uuid) else { continue };
+        let mut release = SignalsmithRelease {remaining: jump_window, window: jump_window, ..*template};
+        if render_signalsmith_release(&mut release, player, output, block) && release.remaining > 0.0 {
+            signalsmith_releases.push(release);
+        }
+    }
 }
 
 /// Render one region's contribution for one block, summing into `output` (the testable core — takes the source
@@ -774,11 +845,16 @@ fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], r
     // loop_offset, never waveform_offset), so both must be consulted — guarding on waveform_offset alone left a
     // cut's second region with no fade-in, hard-starting at full gain against the first region's declicked end.
     let declick_in = region.waveform_offset > 0.0 || region.loop_offset > 0.0;
+    let window = (VOICE_FADE_DURATION * engine_rate as f64).max(1.0);
+    let jump_window = (JUMP_FADE_DURATION * engine_rate as f64).max(1.0);
+    if block.flags.discontinuous() && from > region.position {
+        cursor.fade_in = jump_window;
+    }
     // The source frame + rate at the last rendered cycle's end, for seeding a fade-out tail past `complete`.
     let (mut end_frame, mut end_rate) = (0.0f64, 0.0f64);
     for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
-        let begin = sample_of(block, cycle.result_start, pulses, samples);
-        let end = sample_of(block, cycle.result_end, pulses, samples);
+        let begin = sample_of(block, cycle.result_start, engine_rate);
+        let end = sample_of(block, cycle.result_end, engine_rate);
         // The play STRATEGY decides the source read start (frames) + the per-sample advance:
         //  - native (no play-mode): the source plays at native real-time speed. The read FREE-RUNS — it continues
         //    from where the previous block left off (locked to the output clock, so a tempo ramp can't make the
@@ -821,7 +897,12 @@ fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], r
             // declick_out = false: the native path fades OUT by reading PAST the region end (the release tail
             // seeded below), not by carving its own last 20 ms — so at a cut A's tail overlaps B's fade-in into a
             // transparent self-crossfade instead of both dipping toward the seam.
-            let envelope = fade_gain(pulse - region.position, region.duration, region, declick_pulses, declick_in, false);
+            let mut envelope = fade_gain(pulse - region.position, region.duration, region, declick_pulses, declick_in, false);
+            if cursor.fade_in > 0.0 {
+                envelope = envelope.min(((jump_window - cursor.fade_in) / jump_window) as f32);
+                cursor.fade_in -= 1.0;
+            }
+            cursor.level = envelope;
             let scale = gain * envelope;
             output.left[index] += interpolate(left, base, frac) * scale;
             output.right[index] += interpolate(right, base, frac) * scale;
@@ -843,6 +924,7 @@ fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], r
             cursor.raw_start = cycle.raw_start;
         }
     }
+    cursor.ended = complete <= to;
     // Seed a fade-out tail when the region's content ENDS within this block (no authored fade-out), for native AND
     // pitch-warp regions. The read continues PAST `complete` from the end frame at the end rate, so the fade
     // overlaps the next region's fade-in reading the same source frames — a transparent self-crossfade at a cut, or
@@ -850,9 +932,8 @@ fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], r
     // block where the region already ended. The in-block portion renders here so it overlaps a following region in
     // the SAME block; the remainder rides `render_release_tails` across later blocks.
     if region.fade_out <= 0.0 && end_rate > 0.0 && complete > from && complete <= to {
-        let complete_sample = sample_of(block, complete, pulses, samples);
+        let complete_sample = sample_of(block, complete, engine_rate);
         let block_end = block.s1 as usize;
-        let window = (VOICE_FADE_DURATION * engine_rate as f64).max(1.0);
         let mut read_frame = end_frame;
         let mut elapsed = 0.0f64;
         for index in complete_sample..block_end {
@@ -876,11 +957,9 @@ fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], r
     None
 }
 
-/// The output sample index of a pulse position within a block, clamped to the block's sample window (truncated
-/// to a sample boundary, matching the TS `| 0`; `clamp` + `as usize` are core, so this stays `no_std`).
-fn sample_of(block: &Block, pulse: f64, pulses: f64, samples: f64) -> usize {
-    let ratio = (pulse - block.p0) / pulses;
-    (block.s0 as f64 + samples * ratio).clamp(block.s0 as f64, block.s1 as f64) as usize
+/// The output sample index of a pulse position within a block, clamped to the block's sample window.
+fn sample_of(block: &Block, pulse: f64, sample_rate: f32) -> usize {
+    engine_env::block::frame_of(block, pulse, sample_rate)
 }
 
 /// Linear interpolation of a planar source at a fractional frame; reads 0.0 past the end (TS `inp[i + 1] ?? 0`).
@@ -965,7 +1044,7 @@ mod tests {
 
     // A playing block covering the first 64 samples from transport 0 at 120 bpm.
     fn block() -> Block {
-        Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 240.0, s0: 0, s1: 64, bpm: 120.0}
+        Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 240.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 64, bpm: 120.0}
     }
 
     fn empty_player() -> AudioRegionPlayer {
@@ -990,7 +1069,7 @@ mod tests {
             let playing = k < stop_after;
             let p0 = (k * 128) as f64 / spp;
             let p1 = ((k + 1) * 128) as f64 / spp;
-            let block = Block {index: k as u32, flags: BlockFlags::create(playing, k == 0, playing, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+            let block = Block {index: k as u32, flags: BlockFlags::create(playing, k == 0, playing, false), p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
             let mut output = AudioBuffer::new();
             if !playing {
                 // Mirror the player's transport-stop release: seed a tail from each live cursor BEFORE rendering.
@@ -1016,6 +1095,78 @@ mod tests {
             out.extend_from_slice(&output.left[..128]);
         }
         out
+    }
+
+    // #533: a looped bounce at 44.1 kHz / 120 bpm, region two loops of 4 s, source exactly one loop long. The
+    // blocks come from the real transport. The second cycle must start on frame 176400 and read the source to its
+    // last frame, so the bounce's last frame is not silent.
+    #[test]
+    fn second_loop_cycle_starts_on_its_whole_frame() {
+        let (rate, loop_frames) = (44_100.0f32, 176_400usize);
+        let source: Vec<f32> = (0..loop_frames).map(|index| 0.25 + 0.5 * index as f32 / loop_frames as f32).collect();
+        let mut region = region(0.0, 0.0, 0.0);
+        region.duration = 15_360.0;
+        region.loop_duration = 7_680.0;
+        let tempo = TempoMap::fixed(120.0);
+        let mut cursor = NativeCursor::new();
+        let mut transport = transport::transport::Transport::new(rate, 120.0);
+        transport.play();
+        let mut out: Vec<f32> = Vec::with_capacity(2 * loop_frames + 128);
+        let mut index = 0u32;
+        while out.len() < 2 * loop_frames {
+            let mut blocks = Vec::new();
+            transport.render_quantum(None, &[], false, |block| blocks.push(*block));
+            let mut output = AudioBuffer::new();
+            for block in blocks {
+                let block = Block {index, flags: BlockFlags::create(true, index == 0, true, false),
+                    p0: block.p0, p1: block.p1, anchor: block.anchor, anchor_frame: block.anchor_frame, s0: block.s0 as u32, s1: block.s1 as u32, bpm: block.bpm};
+                let (from, to) = (block.p0.max(region.position), block.p1.min(region.position + region.duration));
+                if from < to {
+                    let _ = render_region(&mut output, &region, &source, &source, rate, from, to, &block, rate, &tempo, &mut cursor);
+                }
+                index += 1;
+            }
+            out.extend_from_slice(&output.left[..128]);
+        }
+        assert_eq!(out[loop_frames], source[0], "the second cycle starts on frame 176400");
+        assert_eq!(out[loop_frames - 1], source[loop_frames - 1], "the first cycle ends on its last frame");
+        assert_eq!(out[2 * loop_frames - 1], source[loop_frames - 1], "the bounce's last frame reads the source's last frame");
+    }
+
+    // #536: a region starting on a whole frame inside a block plays from that frame, not the one before. Blocks
+    // from the real transport, the cases the issue measured (122 and 68 frames into their block).
+    #[test]
+    fn a_region_on_a_whole_frame_inside_a_block_starts_on_it() {
+        for (rate, position, start_frame) in [(48_000.0f32, 1930.0, 48_250usize), (44_100.0, 1920.0, 44_100)] {
+            let source: Vec<f32> = (0..4096).map(|index| 0.25 + index as f32 / 8192.0).collect();
+            let mut region = region(0.0, 0.0, 0.0);
+            region.position = position;
+            region.duration = 480.0;
+            region.loop_duration = 480.0;
+            let tempo = TempoMap::fixed(120.0);
+            let mut cursor = NativeCursor::new();
+            let mut transport = transport::transport::Transport::new(rate, 120.0);
+            transport.play();
+            let mut out: Vec<f32> = Vec::new();
+            let mut index = 0u32;
+            while out.len() < start_frame + 128 {
+                let mut blocks = Vec::new();
+                transport.render_quantum(None, &[], false, |block| blocks.push(*block));
+                let mut output = AudioBuffer::new();
+                for block in blocks {
+                    let block = Block {index, flags: BlockFlags::create(true, index == 0, true, false),
+                        p0: block.p0, p1: block.p1, anchor: block.anchor, anchor_frame: block.anchor_frame, s0: block.s0 as u32, s1: block.s1 as u32, bpm: block.bpm};
+                    let (from, to) = (block.p0.max(region.position), block.p1.min(region.position + region.duration));
+                    if from < to {
+                        let _ = render_region(&mut output, &region, &source, &source, rate, from, to, &block, rate, &tempo, &mut cursor);
+                    }
+                    index += 1;
+                }
+                out.extend_from_slice(&output.left[..128]);
+            }
+            assert_eq!(out[start_frame - 1], 0.0, "{rate}: silent before frame {start_frame}");
+            assert_eq!(out[start_frame], source[0], "{rate}: the region starts on frame {start_frame}");
+        }
     }
 
     // The fix for "monitoring-with-effects gives the tape device no signal": the armed tape sums the staged
@@ -1093,7 +1244,7 @@ mod tests {
         let mut output = AudioBuffer::new();
         let mut warped = region(0.0, 0.0, 0.0);
         warped.warp = vec![(0.0, 0.0), (24_000.0, 1.0)];
-        let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 32.0, s0: 0, s1: 32, bpm: 120.0};
+        let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 32.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 32, bpm: 120.0};
         render_region(&mut output, &warped, &source, &source, 48_000.0, block.p0, block.p1, &block, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         for i in 0..32 {
             assert!((output.left[i] - (2 * i) as f32).abs() < 1e-3, "sample {i}: {} != {}", output.left[i], 2 * i);
@@ -1107,7 +1258,7 @@ mod tests {
         let mut output = AudioBuffer::new();
         let mut warped = region(0.0, 0.0, 0.0);
         warped.warp = vec![(0.0, 0.0), (10.0, 1.0)]; // warp range is only [0, 10) ppqn
-        let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 100.0, p1: 132.0, s0: 0, s1: 32, bpm: 120.0};
+        let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 100.0, p1: 132.0, anchor: 100.0, anchor_frame: 0, s0: 0, s1: 32, bpm: 120.0};
         render_region(&mut output, &warped, &source, &source, 48_000.0, block.p0, block.p1, &block, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         assert_eq!(output.left[0], 0.0, "content past the warp range is silent");
     }
@@ -1170,7 +1321,7 @@ mod tests {
         // A's end declick, so the seam is continuous (no step). Full transparency (no dip at all) comes with
         // the read-past-the-end tail in the next step; here we only assert the discontinuity is gone.
         let source = vec![1.0f32; 200_000];
-        let full = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 480.0, s0: 0, s1: 128, bpm: 120.0};
+        let full = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 480.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
         let mut a = region(0.0, 0.0, 0.0); a.position = 0.0;   a.duration = 240.0; a.loop_offset = 0.0;   a.loop_duration = 480.0;
         let mut b = region(0.0, 0.0, 0.0); b.position = 240.0; b.duration = 240.0; b.loop_offset = 240.0; b.loop_duration = 480.0;
         let mut output = AudioBuffer::new();
@@ -1188,15 +1339,16 @@ mod tests {
         // The granular envelope (`fill_fading_gain`) now plays region A at FULL through its end (declick_out=false):
         // the fade-OUT is the voice ring-out (GranularRelease), not a before-end dip, so A's tail overlaps B's
         // fade-in into a crossfade instead of both dipping. B still fades IN from its mid-file start (loop_offset).
-        let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 480.0, s0: 0, s1: 128, bpm: 120.0};
+        // 480 pulses over 128 frames at 120 bpm is a 512 Hz block
+        let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 480.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
         let mut a = region(0.0, 0.0, 0.0); a.position = 0.0;   a.duration = 240.0; a.loop_offset = 0.0;   a.loop_duration = 480.0;
         let mut b = region(0.0, 0.0, 0.0); b.position = 240.0; b.duration = 240.0; b.loop_offset = 240.0; b.loop_duration = 480.0;
         let mut buf_a = [1.0f32; engine_env::RENDER_QUANTUM];
-        let count_a = fill_fading_gain(&mut buf_a, &a, 0.0, 240.0, &block);
+        let count_a = fill_fading_gain(&mut buf_a, &a, 0.0, 240.0, &block, 512.0);
         assert!(buf_a[10] > 0.9, "region A envelope is full inside its half: {}", buf_a[10]);
         assert!(buf_a[count_a - 1] > 0.9, "region A envelope is FULL at its end (fade-out is the voice ring-out): {}", buf_a[count_a - 1]);
         let mut buf_b = [1.0f32; engine_env::RENDER_QUANTUM];
-        let count_b = fill_fading_gain(&mut buf_b, &b, 240.0, 480.0, &block);
+        let count_b = fill_fading_gain(&mut buf_b, &b, 240.0, 480.0, &block, 512.0);
         assert!(buf_b[0] < 0.2, "region B envelope fades in from ~0 at the seam start: {}", buf_b[0]);
         assert!(buf_b[count_b / 2] > 0.9, "region B envelope reaches full past its fade-in: {}", buf_b[count_b / 2]);
     }
@@ -1207,9 +1359,87 @@ mod tests {
         // output sample must be source[6000], not source[0] (the pop was reading the wrong frame).
         let source: Vec<f32> = (0..12_000).map(|i| (i % 100) as f32 * 0.01).collect();
         let mut output = AudioBuffer::new();
-        let started = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 240.0, p1: 480.0, s0: 0, s1: 64, bpm: 120.0};
+        let started = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 240.0, p1: 480.0, anchor: 240.0, anchor_frame: 0, s0: 0, s1: 64, bpm: 120.0};
         render_region(&mut output, &region(0.0, 0.0, 0.0), &source, &source, 48_000.0, started.p0, started.p1, &started, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         assert!((output.left[0] - source[6000]).abs() < 1e-3, "first sample is the correct mid-file frame: {} vs {}", output.left[0], source[6000]);
+    }
+
+    // The largest sample-to-sample step: a 0.5 amplitude 220 Hz sine never steps more than ~0.0144.
+    fn max_step(out: &[f32]) -> f32 {
+        out.windows(2).fold(0.0f32, |max, pair| max.max((pair[1] - pair[0]).abs()))
+    }
+
+    // Play a 220 Hz sine region from pulse 0, then jump the transport to `target` (mid-region) at block 20,
+    // mirroring the player: jump tails seeded at the discontinuity, then the region renders at the new position.
+    fn run_native_jump(target: f64) -> Vec<f32> {
+        let source = sine48k(220.0, 200_000);
+        let r = region(0.0, 0.0, 0.0);
+        let tempo = TempoMap::fixed(120.0);
+        let spp = 25.0f64;
+        let window = (JUMP_FADE_DURATION * 48_000.0f64).max(1.0);
+        let mut cursors: Vec<(Uuid, NativeCursor)> = vec![(r.region_uuid, NativeCursor::new())];
+        let mut jump_tails: Vec<ReleaseTail> = Vec::new();
+        let mut out = Vec::new();
+        for k in 0..40usize {
+            let jump = k == 20;
+            let p0 = if k < 20 { (k * 128) as f64 / spp } else { target + ((k - 20) * 128) as f64 / spp };
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k == 0 || jump, true, false), p0, p1: p0 + 128.0 / spp, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
+            let mut output = AudioBuffer::new();
+            if jump { seed_jump_tails(&cursors, &[], &mut jump_tails, window); }
+            jump_tails.retain_mut(|tail| render_one_tail(tail, &source, &source, &mut output, &block));
+            render_region(&mut output, &r, &source, &source, 48_000.0, block.p0, block.p1, &block, 48_000.0, &tempo, &mut cursors[0].1);
+            out.extend_from_slice(&output.left[..128]);
+        }
+        out
+    }
+
+    #[test]
+    fn transport_jump_inside_a_native_region_crossfades() {
+        // Jumping the playhead inside a playing region used to hard-switch the read position (a click). The old
+        // read now fades out as a tail while the new read fades in, so the output stays continuous.
+        let out = run_native_jump(1234.56);
+        let step = max_step(&out);
+        std::eprintln!("native jump max step {step:.4}");
+        assert!(step < 0.03, "no click at the jump: max step {step}");
+        // 25 samples per pulse at 48 k / 120 bpm; past the 240 sample fade the new position plays at full.
+        let frame = 1234.56f64 * 25.0 + 2000.0;
+        let expected = (0.5 * (2.0 * core::f64::consts::PI * 220.0 * frame / 48000.0).sin()) as f32;
+        assert!((out[20 * 128 + 2000] - expected).abs() < 1e-3, "plays the new position at full past the fade-in");
+    }
+
+    #[test]
+    fn transport_jump_to_the_region_start_keeps_the_onset() {
+        // A jump back to the region start (transport loop) keeps the hard onset, only the old read fades out.
+        let out = run_native_jump(0.0);
+        let source = sine48k(220.0, 200_000);
+        let tail = out[20 * 128 + 100] - source[100];
+        assert!(tail.abs() > 1e-4, "the old read still rings out as a tail: {tail}");
+        assert!(max_step(&out[20 * 128 - 1..21 * 128]) < 0.04, "no click at the loop jump");
+    }
+
+    #[test]
+    fn transport_jump_inside_a_signalsmith_region_crossfades() {
+        // Same jump for a Signalsmith region: the restarted stream fades in while the old stream's already
+        // synthesized output fades out, instead of the old stream cutting off and the new one starting at full.
+        let source = sine48k(220.0, 400_000);
+        let mut region = region(0.0, 0.0, 0.0);
+        let config = SignalsmithConfig {warp: Vec::new(), transpose: 0.0};
+        region.signalsmith = Some(config.clone());
+        let mut player = SignalsmithStretch::preset_default(2, 48000.0);
+        let tempo = TempoMap::fixed(120.0);
+        let mut out = Vec::new();
+        for k in 0..120usize {
+            let jump = k == 60;
+            let p0 = if k < 60 { (k * 128) as f64 * 0.04 } else { 1234.56 + ((k - 60) * 128) as f64 * 0.04 };
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k == 0 || jump, true, false), p0, p1: p0 + 128.0 * 0.04, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
+            let mut output = AudioBuffer::new();
+            play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, block.p0, block.p1, &block, 48_000.0, &tempo, &mut Vec::new(), &mut Vec::new(), &mut output);
+            out.extend_from_slice(&output.left[..128]);
+        }
+        let steady = max_step(&out[30 * 128..60 * 128]);
+        let around = max_step(&out[59 * 128..80 * 128]);
+        std::eprintln!("signalsmith steady max step {steady:.4}, around the jump {around:.4}");
+        assert!(around < steady * 2.0, "no click at the jump: {around} vs steady {steady}");
     }
 
     fn sine48k(freq: f64, n: usize) -> Vec<f32> {
@@ -1229,7 +1459,7 @@ mod tests {
         for k in 0..blocks {
             // each quantum: s0..s1 local (0..128), transport p0/p1 advances by the block's pulse span
             let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04); // 120bpm@48k: 0.04 ppqn/sample
-            let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
             let mut output = AudioBuffer::new();
             play_signalsmith(&mut player, region, config, source, source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut Vec::new(), &mut Vec::new(), &mut output);
             out.extend_from_slice(&output.left[..128]);
@@ -1305,7 +1535,7 @@ mod tests {
         let blocks = 40_000usize; // ~26 loop wraps, reaching pulse positions where the jitter is well past ULP
         for k in 0..blocks {
             let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04);
-            let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
             let mut output = AudioBuffer::new();
             play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut Vec::new(), &mut Vec::new(), &mut output);
         }
@@ -1331,7 +1561,7 @@ mod tests {
             for b in 0..loop_blocks {
                 let (p0, p1) = ((b*128) as f64*0.04, ((b+1)*128) as f64*0.04);
                 let disc = b == 0; // transport jumps back to the loop start at the top of every pass
-                let block = Block {index: (iteration*loop_blocks+b) as u32, flags: BlockFlags::create(true, disc, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+                let block = Block {index: (iteration*loop_blocks+b) as u32, flags: BlockFlags::create(true, disc, true, false), p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
                 let mut output = AudioBuffer::new();
                 play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut Vec::new(), &mut Vec::new(), &mut output);
             }
@@ -1363,7 +1593,7 @@ mod tests {
             let mut out = Vec::with_capacity(40 * 128);
             for b in 0..40 {
                 let (p0, p1) = ((b * 128) as f64 * 0.04, ((b + 1) * 128) as f64 * 0.04);
-                let block = Block {index: b as u32, flags: BlockFlags::create(true, false, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+                let block = Block {index: b as u32, flags: BlockFlags::create(true, false, true, false), p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
                 let mut output = AudioBuffer::new();
                 play_signalsmith(player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo,
                     &mut Vec::new(), templates, &mut output);
@@ -1382,7 +1612,7 @@ mod tests {
             releases.push(*template);
         }
         for b in 0..8 { // ring out the stop tail — this is what advances the persisted player's read head
-            let block = Block {index: 100 + b, flags: BlockFlags::create(false, false, false, false), p0: 0.0, p1: 0.0, s0: 0, s1: 128, bpm: 120.0};
+            let block = Block {index: 100 + b, flags: BlockFlags::create(false, false, false, false), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
             let mut output = AudioBuffer::new();
             render_signalsmith_releases(&mut releases, &mut players, &mut templates, &mut output, &block);
         }
@@ -1416,35 +1646,28 @@ mod tests {
         assert!((f-440.0).abs() < 12.0, "no transpose -> ~440 Hz preserved, got {f:.0}");
     }
 
+    // Riffle, SDK 0.0.184: every region played late by 0 to 7 x 128 samples, derived from its uuid. A click in the
+    // source must come out where the grid puts it.
     #[test]
-    fn signalsmith_phase_offset_delays_through_play_signalsmith() {
-        let source = sine48k(220.0, 190_000);
+    fn signalsmith_plays_clicks_on_time() {
+        let mut source = vec![0.0f32; 190_000];
+        let clicks: Vec<usize> = (0..6).map(|index| 6_000 + index * 12_000).collect();
+        for &click in &clicks {
+            for offset in 0..32 { source[click + offset] = 0.9 * (1.0 - offset as f32 / 32.0) * if offset % 2 == 0 { 1.0 } else { -1.0 }; }
+        }
         let mut region = region(0.0, 0.0, 0.0);
         region.duration = 96_000.0;
         let config = SignalsmithConfig { warp: Vec::new(), transpose: 0.0 };
         region.signalsmith = Some(config.clone());
-        let render = |off: usize| -> Vec<f32> {
-            let mut player = SignalsmithStretch::preset_default(2, 48000.0);
-            player.set_phase_offset(off);
-            let tempo = TempoMap::fixed(120.0);
-            let mut out = Vec::new();
-            for k in 0..80 {
-                let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04);
-                let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
-                let mut output = AudioBuffer::new();
-                play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut Vec::new(), &mut Vec::new(), &mut output);
-                out.extend_from_slice(&output.left[..128]);
-            }
-            out
-        };
-        let a = render(0); let b = render(400);
-        let (mut diff, mut energy) = (0.0f64, 0.0f64);
-        for i in 20*128..60*128 { diff += ((a[i]-b[i]) as f64).abs(); energy += (a[i] as f64).abs(); }
-        let rel = diff / energy.max(1e-9);
-        std::eprintln!("play_signalsmith offset 0 vs 400 rel diff: {rel:.3}");
-        assert!(rel > 0.05, "play_signalsmith must honor phase_offset (rel diff {rel:.3})");
+        let out = run_signalsmith(&region, &config, &source, 600);
+        for &click in &clicks {
+            let window = &out[click - 600..click + 600];
+            let (peak, _) = window.iter().enumerate().fold((0usize, 0.0f32), |best, (index, value)|
+                if value.abs() > best.1 { (index, value.abs()) } else { best });
+            let error = peak as isize - 600;
+            assert!(error.abs() <= 32, "click at {click} came out {error} samples off");
+        }
     }
-
 
     #[test]
     fn signalsmith_warp_stretch_preserves_pitch() {

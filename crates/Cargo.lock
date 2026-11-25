@@ -321,6 +321,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-korpus"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "hound",
+ "libm",
+ "math",
+ "voicing",
+]
+
+[[package]]
+name = "device-mastering"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "matchering",
+ "math",
+]
+
+[[package]]
 name = "device-maximizer"
 version = "0.0.0"
 dependencies = [
@@ -335,6 +358,7 @@ name = "device-nano"
 version = "0.0.0"
 dependencies = [
  "abi",
+ "dsp",
  "libm",
  "math",
 ]
@@ -356,6 +380,14 @@ version = "0.0.0"
 dependencies = [
  "abi",
  "dsp",
+ "math",
+]
+
+[[package]]
+name = "device-note-filter"
+version = "0.0.0"
+dependencies = [
+ "abi",
  "math",
 ]
 
@@ -393,6 +425,14 @@ dependencies = [
  "abi",
  "dsp",
  "libm",
+ "math",
+]
+
+[[package]]
+name = "device-scale-matrix"
+version = "0.0.0"
+dependencies = [
+ "abi",
  "math",
 ]
 
@@ -509,6 +549,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-wclap-midi"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "wclap-common",
+]
+
+[[package]]
 name = "device-werkstatt"
 version = "0.0.0"
 dependencies = [
@@ -520,7 +569,6 @@ name = "device-zeitgeist"
 version = "0.0.0"
 dependencies = [
  "abi",
- "math",
 ]
 
 [[package]]
@@ -579,6 +627,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
+name = "hound"
+version = "3.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
+
+[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -623,6 +677,10 @@ name = "log"
 version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
+
+[[package]]
+name = "matchering"
+version = "0.0.0"
 
 [[package]]
 name = "math"
@@ -807,9 +865,9 @@ dependencies = [
 
 [[package]]
 name = "talc"
-version = "5.0.3"
+version = "5.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3081e3f3ad542dc4cd0ae720f752598f8880fd364dc2d031132e3509f673aa23"
+checksum = "40a5888b3189a89207eea4190e74387b5db3150d213f84186cac637dcd55259d"
 dependencies = [
  "allocator-api2",
  "lock_api",

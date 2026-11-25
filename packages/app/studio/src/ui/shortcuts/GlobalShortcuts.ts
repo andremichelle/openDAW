@@ -3,8 +3,17 @@ import {CommonShortcuts} from "@/ui/shortcuts/CommonShortcuts"
 
 const shift = true
 const ctrl = true
+const alt = true
 
 export const GlobalShortcutsFactory = ShortcutValidator.validate({
+    "group-tracks": {
+        shortcut: Shortcut.of(Key.KeyG, {ctrl}),
+        description: "Create a group bus from the selected tracks"
+    },
+    "ungroup-tracks": {
+        shortcut: Shortcut.of(Key.KeyG, {ctrl, shift}),
+        description: "Remove the selected group buses (keep tracks)"
+    },
     "project-undo": {
         shortcut: Shortcut.of(Key.KeyZ, {ctrl}),
         description: "Undo last action"
@@ -44,7 +53,7 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
     },
     "start-recording-direct": {
         shortcut: Shortcut.of(Key.KeyR, {shift}),
-        description: "Start reocrding without count-in"
+        description: "Start recording without count-in"
     },
     "toggle-software-keyboard": {
         shortcut: Shortcut.of(Key.KeyK, {ctrl}),
@@ -74,8 +83,16 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyS, {shift}),
         description: "Show or hide signature track"
     },
-    "toggle-clips": {
+    "toggle-key-track": {
+        shortcut: Shortcut.of(Key.KeyK, {shift}),
+        description: "Show or hide key track"
+    },
+    "toggle-chord-track": {
         shortcut: Shortcut.of(Key.KeyC, {shift}),
+        description: "Show or hide chord track"
+    },
+    "toggle-clips": {
+        shortcut: Shortcut.of(Key.KeyG, {shift}),
         description: "Show or hide clips"
     },
     "toggle-follow-cursor": {
@@ -89,6 +106,22 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "toggle-loop": {
         shortcut: Shortcut.of(Key.KeyL, {shift}),
         description: "Toggle loop mode"
+    },
+    "toggle-mute": {
+        shortcut: Shortcut.of(Key.KeyM),
+        description: "Toggle mute of the edited audio unit"
+    },
+    "toggle-solo": {
+        shortcut: Shortcut.of(Key.KeyS),
+        description: "Toggle solo of the edited audio unit"
+    },
+    "add-instrument": {
+        shortcut: Shortcut.of(Key.KeyI, {shift}),
+        description: "Add an instrument track"
+    },
+    "add-audio-track": {
+        shortcut: Shortcut.of(Key.KeyA, {shift}),
+        description: "Add an audio track"
     },
     "copy-device": {
         shortcut: Shortcut.of(Key.KeyD, {ctrl}),
@@ -114,21 +147,21 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.Digit2, {shift}),
         description: "Go to mixer view"
     },
-    "workspace-screen-piano": {
+    "workspace-screen-modulation": {
         shortcut: Shortcut.of(Key.Digit3, {shift}),
+        description: "Go to modulation view"
+    },
+    "workspace-screen-piano": {
+        shortcut: Shortcut.of(Key.Digit4, {shift}),
         description: "Go to piano roll"
     },
     "workspace-screen-project": {
-        shortcut: Shortcut.of(Key.Digit4, {shift}),
+        shortcut: Shortcut.of(Key.Digit5, {shift}),
         description: "Go to project settings"
     },
     "workspace-screen-shadertoy": {
-        shortcut: Shortcut.of(Key.Digit5, {shift}),
-        description: "Go to shader visualizer"
-    },
-    "workspace-screen-modulation": {
         shortcut: Shortcut.of(Key.Digit6, {shift}),
-        description: "Go to modulation view"
+        description: "Go to shader visualizer"
     },
     "workspace-screen-tap": {
         shortcut: Shortcut.of(Key.Digit7, {shift}),
@@ -141,6 +174,26 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "show-preferences": {
         shortcut: Shortcut.of(Key.Comma, {ctrl}),
         description: "Open preferences"
+    },
+    "open-spotlight": {
+        shortcut: Shortcut.of(Key.Enter, {shift}),
+        description: "Open or close the spotlight"
+    },
+    "open-spotlight-alt": {
+        shortcut: Shortcut.of(Key.KeyF, {ctrl}),
+        description: "Open or close the spotlight"
+    },
+    "call-toggle-mic": {
+        shortcut: Shortcut.of(Key.KeyM, {shift, alt}),
+        description: "Mute or unmute the microphone in a room call"
+    },
+    "call-toggle-camera": {
+        shortcut: Shortcut.of(Key.KeyV, {shift, alt}),
+        description: "Turn the camera on or off in a room call"
+    },
+    "call-toggle-hand": {
+        shortcut: Shortcut.of(Key.KeyH, {shift, alt}),
+        description: "Raise or lower your hand in a room call"
     }
 })
 

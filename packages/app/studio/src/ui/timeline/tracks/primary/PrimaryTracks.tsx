@@ -6,6 +6,8 @@ import {MarkerTrack} from "./marker/MarkerTrack"
 import {deferNextFrame, Html} from "@opendaw/lib-dom"
 import {TempoTrack} from "@/ui/timeline/tracks/primary/tempo/TempoTrack"
 import {SignatureTrack} from "@/ui/timeline/tracks/primary/signature/SignatureTrack"
+import {KeyTrack} from "@/ui/timeline/tracks/primary/key/KeyTrack"
+import {ChordTrack} from "@/ui/timeline/tracks/primary/chord/ChordTrack"
 
 const className = Html.adoptStyleSheet(css, "primary-tracks")
 
@@ -15,7 +17,7 @@ type Construct = {
 }
 
 export const PrimaryTracks = ({lifecycle, service}: Construct) => {
-    const {timeline: {primaryVisibility: {markers, tempo, signature}}} = service
+    const {timeline: {primaryVisibility: {markers, tempo, signature, key, chords}}} = service
     const element: HTMLElement = (<div className={className}/>)
     const trackTerminator = lifecycle.own(new Terminator())
     const {request} = lifecycle.own(deferNextFrame(() => {
@@ -23,7 +25,10 @@ export const PrimaryTracks = ({lifecycle, service}: Construct) => {
         const isMarkerTrackVisible = markers.getValue()
         const isTempoTrackVisible = tempo.getValue()
         const isSignatureTrackVisible = signature.getValue()
+        const isKeyTrackVisible = key.getValue()
+        const isChordTrackVisible = chords.getValue()
         const anyPrimaryTrackVisible = isMarkerTrackVisible || isTempoTrackVisible || isSignatureTrackVisible
+            || isKeyTrackVisible || isChordTrackVisible
         element.classList.toggle("hidden", !anyPrimaryTrackVisible)
         if (anyPrimaryTrackVisible) {
             replaceChildren(element,
@@ -31,6 +36,8 @@ export const PrimaryTracks = ({lifecycle, service}: Construct) => {
                     {isMarkerTrackVisible && <MarkerTrack lifecycle={trackTerminator} service={service}/>}
                     {isSignatureTrackVisible && <SignatureTrack lifecycle={trackTerminator} service={service}/>}
                     {isTempoTrackVisible && <TempoTrack lifecycle={trackTerminator} service={service}/>}
+                    {isKeyTrackVisible && <KeyTrack lifecycle={trackTerminator} service={service}/>}
+                    {isChordTrackVisible && <ChordTrack lifecycle={trackTerminator} service={service}/>}
                 </Frag>
             )
         }
@@ -38,7 +45,9 @@ export const PrimaryTracks = ({lifecycle, service}: Construct) => {
     lifecycle.ownAll(
         markers.catchupAndSubscribe(request),
         tempo.catchupAndSubscribe(request),
-        signature.catchupAndSubscribe(request)
+        signature.catchupAndSubscribe(request),
+        key.catchupAndSubscribe(request),
+        chords.catchupAndSubscribe(request)
     )
     return element
 }

@@ -1,0 +1,31 @@
+component
+  display: grid
+  grid-template-columns: repeat(7, 1fr)
+  column-gap: 2px
+  padding: 1px
+
+  > div.pad
+    display: flex
+    flex-direction: column
+    row-gap: 2px
+    align-items: center
+    padding: 3px
+    border-radius: 2px
+    color: var(--color-gray)
+    cursor: pointer
+    user-select: none
+    background-color: rgba(white, 0.1)
+
+    &.active
+      background-color: var(--color-blue)
+      color: black
+
+    > div.info
+      width: 100%
+      display: flex
+      justify-content: space-around
+      font-size: 8px
+      opacity: 0.6
+
+    > span.name
+      font-size: 9px

@@ -94,8 +94,17 @@ export namespace RegionRenderer {
                 } else {
                     context.font = `${fontSize}px ${fontFamily}`
                 }
-                const text = TimelineLabels.forRegion(region)
-                context.fillText(Context2d.truncateText(context, text, maxTextWidth).text, x0Int + 3 * dpr, 1 + labelHeight / 2)
+                const textX = x0Int + 3 * dpr
+                const textY = 1 + labelHeight / 2
+                const name = Context2d.truncateText(context, TimelineLabels.forRegion(region), maxTextWidth)
+                context.fillText(name.text, textX, textY)
+                TimelineLabels.grooveOf(region.box).ifSome(groove => {
+                    const space = name.text.length === 0 ? 0 : context.measureText(" ").width
+                    const remaining = maxTextWidth - name.width - space
+                    if (remaining <= 0) {return}
+                    context.font = `italic ${fontSize}px ${fontFamily}`
+                    context.fillText(Context2d.truncateText(context, groove, remaining).text, textX + name.width + space, textY)
+                })
                 if (region.hasCollection) {
                     const loops = Array.from(LoopableRegion.locateLoops({
                         position, complete,
@@ -105,6 +114,9 @@ export namespace RegionRenderer {
                     context.fillStyle = loopStrokeColor
                     loops.filter(pass => pass.index > 0).forEach(pass =>
                         context.fillRect(Math.floor(range.unitToX(pass.resultStart) * dpr), labelHeight, 1, height - labelHeight))
+                    const contentShift = strategy.readContentShift?.(region) ?? 0
+                    const contentLoops = contentShift === 0 ? loops : loops.map(pass =>
+                        ({...pass, rawStart: pass.rawStart + contentShift, rawEnd: pass.rawEnd + contentShift}))
                     context.fillStyle = contentColor
                     context.save()
                     context.beginPath()
@@ -112,12 +124,12 @@ export namespace RegionRenderer {
                     context.clip()
                     region.accept({
                         visitNoteRegionBoxAdapter: (region: NoteRegionBoxAdapter): void =>
-                            region.optCollection.ifSome(collection => loops.forEach(pass =>
+                            region.optCollection.ifSome(collection => contentLoops.forEach(pass =>
                                 NotesRenderer.render(context, range, collection, bound, contentColor, pass))),
                         visitAudioRegionBoxAdapter: (region: AudioRegionBoxAdapter): void =>
                             region.optFile.ifSome(file => {
                                 const tempoMap = region.trackBoxAdapter.unwrap("trackBoxAdapter").context.tempoMap
-                                loops.forEach(pass => AudioRenderer.render(context, range, file, tempoMap,
+                                contentLoops.forEach(pass => AudioRenderer.render(context, range, file, tempoMap,
                                     region.observableOptPlayMode, region.waveformOffset.getValue(),
                                     region.gain.getValue(), bound, contentColor, pass, true, audioRenderStrategy))
                                 AudioFadingRenderer.render(context, range, region.fading, bound, position, complete, labelBackground)
@@ -127,7 +139,7 @@ export namespace RegionRenderer {
                             const bottom = bound.bottom * dpr
                             const valueToY = (value: unitValue): number => bottom + value * (top - bottom)
                             const events = region.events.unwrap("events")
-                            loops.forEach(pass => {
+                            contentLoops.forEach(pass => {
                                 const adapters = ValueEvent.iterateWindow(events,
                                     pass.resultStart - pass.rawStart, pass.resultEnd - pass.rawStart)
                                 context.beginPath()

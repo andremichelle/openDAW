@@ -10,7 +10,7 @@
 //! lives in the engine's `host_pull_events`, not here.
 
 use crate::param_automation::ParamHandle;
-use crate::{call_device_process_events, DeviceReg};
+use crate::{call_device_process_events, call_device_release_all, DeviceReg};
 use alloc::vec;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
@@ -32,12 +32,15 @@ impl DeviceState {
     }
 }
 
+const RELEASE_MAX: usize = 256;
+
 /// The host bridge for one MIDI-effect device instance: its `process_events` table slot, its instance state,
 /// and its bound parameters. Held in an `Rc` inside `PullLink::MidiFx`, so chain clones share the one
 /// instance (and its params). The params + clock-armed state use interior mutability (the instance is shared
 /// behind an `Rc`, so there is no `&mut`); the engine swaps them into the pull context during the fx's pull.
 pub(crate) struct PluginMidiEffect {
     process_index: u32, // the device's `process_events` slot in the shared function table
+    release_all_index: u32,
     state: DeviceState,
     params: RefCell<Vec<ParamHandle>>,
     clock_armed: Cell<bool>,
@@ -51,6 +54,7 @@ impl PluginMidiEffect {
     pub(crate) fn new(device: DeviceReg) -> Self {
         Self {
             process_index: device.process_index,
+            release_all_index: device.release_all_index,
             state: DeviceState::new(device.state_size as usize),
             params: RefCell::new(Vec::new()),
             clock_armed: Cell::new(false),
@@ -114,6 +118,16 @@ impl PluginMidiEffect {
     /// Invoked when something downstream pulls this fx for `[from, to)`: run the device's `process_events`
     /// with its instance state, writing the produced events to `out_ptr` and returning the count. The device
     /// pulls its own upstream from inside this call (the engine has pointed the pull context at it).
+    /// End every note this fx started (it was disabled or removed), appending the note-offs to `out`.
+    pub(crate) fn release_all(&self, out: &mut Vec<abi::EventRecord>) {
+        if self.release_all_index == 0 {return}
+        let start = out.len();
+        out.resize(start + RELEASE_MAX, abi::EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0});
+        let count = call_device_release_all(self.release_all_index, self.state.ptr(), 0.0, out[start..].as_mut_ptr() as u32, RELEASE_MAX as u32);
+        out.truncate(start + count as usize);
+        self.mark_notes(&out[start..]);
+    }
+
     pub(crate) fn process_events(&self, from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
         call_device_process_events(self.process_index, from, to, flags, self.state.ptr(), out_ptr, max)
     }

@@ -7,6 +7,7 @@ import {
     AudioUnitBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
+    GrooveOffsetBox,
     MIDIOutputBox,
     MIDIOutputDeviceBox,
     ModulationBox,
@@ -22,6 +23,10 @@ import {
     VaporisateurDeviceBox,
     ValueEventCollectionBox,
     ValueRegionBox,
+    ScriptBufferBox,
+    ScriptBufferChunkBox,
+    ScriptRecordBox,
+    ScriptValueBox,
     WerkstattParameterBox,
     WerkstattSampleBox
 } from "@opendaw/studio-boxes"
@@ -761,6 +766,34 @@ describe("DevicesClipboardHandler", () => {
             expect(deps.filter(box => isInstanceOf(box, WerkstattSampleBox)).length).toBe(2)
             expect(deps.filter(box => isInstanceOf(box, AudioFileBox)).length).toBe(2)
         })
+        it("collects script records with their values and script buffers", () => {
+            const audioUnit = createAudioUnit(source)
+            const apparat = addApparatInstrument(source, audioUnit, "Apparat")
+            source.boxGraph.beginTransaction()
+            const record = ScriptRecordBox.create(source.boxGraph, UUID.generate(), box => {
+                box.owner.refer(apparat.records)
+                box.collection.setValue("steps")
+            })
+            ScriptValueBox.create(source.boxGraph, UUID.generate(), box => {
+                box.owner.refer(record.values)
+                box.field.setValue("velocity")
+                box.value.setValue(0.5)
+            })
+            const buffer = ScriptBufferBox.create(source.boxGraph, UUID.generate(), box => {
+                box.owner.refer(apparat.buffers)
+                box.label.setValue("table")
+            })
+            ScriptBufferChunkBox.create(source.boxGraph, UUID.generate(), box => {
+                box.owner.refer(buffer.chunks)
+                box.data.setValue(new Int8Array(new Float32Array([0.25, -0.5]).buffer))
+            })
+            source.boxGraph.endTransaction()
+            const deps = collectDeviceDependencies(apparat, source.boxGraph)
+            expect(deps.filter(box => isInstanceOf(box, ScriptRecordBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, ScriptValueBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, ScriptBufferBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, ScriptBufferChunkBox)).length).toBe(1)
+        })
     })
 
     // ─────────────────────────────────────────────────────────
@@ -983,6 +1016,23 @@ describe("DevicesClipboardHandler", () => {
             addAutomationTrack(source, audioUnit, vaporisateur.cutoff, 1)
             const deps = collectDeviceDependencies(vaporisateur, source.boxGraph, audioUnit)
             expect(deps.filter(box => isInstanceOf(box, TrackBox)).length).toBe(2)
+        })
+        it("carries the groove of a region with the timeline, not the global one", () => {
+            const audioUnit = createAudioUnit(source)
+            const noteTrack = addTrack(source, audioUnit, TrackType.Notes, 0)
+            const region = addNoteRegion(source, noteTrack, 0, 480)
+            const {boxGraph, mandatoryBoxes: {rootBox}} = source
+            boxGraph.beginTransaction()
+            const groove = GrooveOffsetBox.create(boxGraph, UUID.generate(), box => {
+                box.collection.refer(rootBox.grooves)
+                box.index.setValue(1)
+            })
+            region.groove.refer(groove)
+            boxGraph.endTransaction()
+            const content = DevicesClipboard.collectTimeline(audioUnit.tracks, boxGraph)
+            expect(content).toContain(groove)
+            expect(content.some(box => isInstanceOf(box, RootBox))).toBe(false)
+            expect(content.filter(box => box.name === groove.name).length).toBe(1)
         })
         it("collects complete instrument with 2 tracks, 4 regions, 4 event collections", () => {
             const audioUnit = createAudioUnit(source)

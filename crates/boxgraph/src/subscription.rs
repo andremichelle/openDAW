@@ -316,6 +316,6 @@ impl Default for Subscriptions {
 fn update_address(update: &Update) -> Address {
     match update {
         Update::New {uuid, ..} | Update::Delete {uuid, ..} => Address::box_of(*uuid),
-        Update::Primitive {address, ..} | Update::Pointer {address, ..} => address.clone()
+        Update::Primitive {address, ..} | Update::Pointer {address, ..} | Update::BytesSplice {address, ..} => address.clone()
     }
 }

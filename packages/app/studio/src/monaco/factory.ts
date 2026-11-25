@@ -57,7 +57,6 @@ export namespace MonacoFactory {
             Events.subscribe(container, "keypress", event => event.stopPropagation()),
             Events.subscribe(container, "dragover", event => event.stopPropagation())
         )
-        requestAnimationFrame(() => editor.focus())
         return {editor, model, container}
     }
 }

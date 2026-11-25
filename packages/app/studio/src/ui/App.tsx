@@ -1,5 +1,5 @@
 import {isDefined, Terminator} from "@opendaw/lib-std"
-import {createElement, Frag, Router} from "@opendaw/lib-jsx"
+import {createElement, Frag, RouteLocation, Router} from "@opendaw/lib-jsx"
 import {WorkspacePage} from "@/ui/workspace/WorkspacePage.tsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ComponentsPage} from "@/ui/pages/ComponentsPage.tsx"
@@ -14,6 +14,7 @@ import {Header} from "@/ui/header/Header"
 import {ErrorsPage} from "@/ui/pages/ErrorsPage.tsx"
 import {ImprintPage} from "@/ui/pages/ImprintPage.tsx"
 import {GraphPage} from "@/ui/pages/GraphPage"
+import {SignalGraphPage} from "@/ui/pages/SignalGraphPage"
 import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
 import {OpenProjectPage} from "@/ui/pages/OpenProjectPage"
@@ -21,11 +22,18 @@ import {DashboardPage} from "@/ui/pages/stats/DashboardPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {ManifestoPage} from "@/ui/pages/ManifestoPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
+import {StoragePage} from "@/ui/pages/StoragePage"
 import {TestPage} from "@/ui/pages/TestPage"
 import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
 import {PerformancePage} from "@/ui/pages/PerformancePage"
 import {SampleReadPage} from "@/ui/pages/SampleReadPage"
-import {SpikeTestPage} from "@/ui/pages/SpikeTestPage"
+import {DevicePreviewPage} from "@/ui/pages/DevicePreviewPage"
+import {DevicePreviewRoute} from "@/service/StudioNavigation"
+import {SampleEditorPage} from "@/ui/pages/SampleEditorPage"
+import {SampleEditorRoute} from "@/service/SampleEditorService"
+import {ContestPage} from "@/ui/pages/contest/ContestPage"
+
+const StandaloneRoutes: ReadonlySet<string> = new Set([SampleEditorRoute])
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -34,10 +42,17 @@ export const App = (service: StudioService) => {
         terminator.own(service.roomAwareness.catchupAndSubscribe(owner =>
             favicon.href = isDefined(owner.getValue()) ? "/favicon-live.svg" : "/favicon.svg"))
     }
+    const header: HTMLElement = <Header lifecycle={new Terminator()} service={service}/>
+    const footer: HTMLElement = <Footer lifecycle={terminator} service={service}/>
+    terminator.own(RouteLocation.get().catchupAndSubscribe(({path}) => {
+        const standalone = StandaloneRoutes.has(path)
+        header.classList.toggle("hidden", standalone)
+        footer.classList.toggle("hidden", standalone)
+    }))
     return (
         <Frag>
             <RoomStatus lifecycle={terminator} service={service}/>
-            <Header lifecycle={new Terminator()} service={service}/>
+            {header}
             <Router
                 runtime={terminator}
                 service={service}
@@ -50,18 +65,21 @@ export const App = (service: StudioService) => {
                     {path: "/", factory: WorkspacePage, reuse: true},
                     {path: "/create", factory: WorkspacePage, reuse: true},
                     {path: "/preferences", factory: PreferencesPage},
+                    {path: "/storage", factory: StoragePage},
                     {path: "/imprint", factory: ImprintPage},
                     {path: "/privacy", factory: PrivacyPage},
                     {path: "/manifesto", factory: ManifestoPage},
                     {path: "/icons", factory: IconsPage},
                     {path: "/code", factory: CodeEditorPage},
                     {path: "/scripting", factory: CodeEditorPage},
+                    {path: SampleEditorRoute, factory: SampleEditorPage},
                     {path: "/components", factory: ComponentsPage},
                     {path: "/automation", factory: AutomationPage},
                     {path: "/errors", factory: ErrorsPage},
                     {path: "/upload", factory: SampleUploadPage},
                     {path: "/colors", factory: ColorsPage},
                     {path: "/graph", factory: GraphPage},
+                    {path: "/signal-graph", factory: SignalGraphPage},
                     {path: "/stats", factory: DashboardPage},
                     {
                         path: "/users", factory: (context) => {
@@ -74,12 +92,13 @@ export const App = (service: StudioService) => {
                     {path: "/test", factory: TestPage},
                     {path: "/performance", factory: PerformancePage},
                     {path: "/performance/sample-read", factory: SampleReadPage},
-                    {path: "/spike-test", factory: SpikeTestPage},
-                    {path: "/join/*", factory: JoinRoomPage}
+                    {path: "/join/*", factory: JoinRoomPage},
+                    {path: "/contests/*", factory: ContestPage},
+                    {path: DevicePreviewRoute, factory: DevicePreviewPage}
                 ]}
             />
             <ChatOverlay lifecycle={terminator} service={service}/>
-            <Footer lifecycle={terminator} service={service}/>
+            {footer}
         </Frag>
     )
 }

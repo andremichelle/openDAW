@@ -26,7 +26,7 @@ export namespace AudioContentHelpers {
     }
 
     export const addWarpMarkers = (boxGraph: BoxGraph,
-                                   playMode: AudioPitchStretchBox | AudioTimeStretchBox,
+                                   playMode: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox,
                                    templates: ReadonlyArray<WarpMarkerTemplate>) => {
         templates.forEach(({position, seconds}) => WarpMarkerBox.create(boxGraph, UUID.generate(), box => {
             box.owner.refer(playMode.warpMarkers)

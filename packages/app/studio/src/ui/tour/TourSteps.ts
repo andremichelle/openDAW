@@ -4,6 +4,7 @@ import {StudioService} from "@/service/StudioService"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {TourAnchor} from "./TourAnchor"
 import {TourPlacement} from "./TourPlacement"
+import {PanelType} from "@/ui/workspace/PanelType"
 
 export type TourStep = {
     screen: Workspace.ScreenKeys
@@ -14,7 +15,10 @@ export type TourStep = {
     prepare?: Procedure<StudioService>
 }
 
-const browse = (scope: BrowseScope): Procedure<StudioService> => service => service.layout.browseScope.setValue(scope)
+const browse = (scope: BrowseScope): Procedure<StudioService> => service => {
+    service.layout.browseScope.setValue(scope)
+    service.panelLayout.showIfAvailable(PanelType.BrowserPanel)
+}
 
 // Keys are the anchors. A key without a registered element shows a centered card.
 export const TourSteps: Record<TourAnchor, TourStep> = {
@@ -43,9 +47,8 @@ export const TourSteps: Record<TourAnchor, TourStep> = {
         text: "Switch between the arrangement, mixer, modulation and the special views."
     },
     presets: {
-        screen: "default", placement: "right", frame: 4, headline: "Presets",
-        text: "Instruments and effects ready to drop onto the timeline or into a device chain.",
-        prepare: browse(BrowseScope.Presets)
+        screen: "default", placement: "below", frame: 4, headline: "Instruments and Presets",
+        text: "Every instrument, preset, script and plugin in one browser. A click tries it right away, Enter keeps it. The + buttons in the device chain do the same for effects."
     },
     samples: {
         screen: "default", placement: "right", frame: 4, headline: "Samples",
@@ -61,7 +64,7 @@ export const TourSteps: Record<TourAnchor, TourStep> = {
         screen: "default", placement: "right", headline: "Clips",
         text: "Launch loops per track without arranging them. Great for sketching ideas live.",
         prepare: service => {
-            service.layout.browseScope.setValue(BrowseScope.Presets)
+            service.layout.browseScope.setValue(BrowseScope.Samples)
             service.timeline.clips.visible.setValue(true)
         }
     },

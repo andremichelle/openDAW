@@ -26,6 +26,8 @@ export interface RegionModifyStrategy {
     readComplete(region: AnyRegionBoxAdapter): ppqn
     readLoopOffset(region: AnyRegionBoxAdapter): ppqn
     readLoopDuration(region: AnyRegionBoxAdapter): ppqn
+    // previewed distance the content moves inside its loop, the loop cycles stay put
+    readContentShift?(region: AnyRegionBoxAdapter): ppqn
     readMirror(region: AnyRegionBoxAdapter): boolean
     translateTrackIndex(value: int): int
     iterateRange<R extends AnyRegionBoxAdapter>(regions: RegionCollection<R>, from: ppqn, to: ppqn): Iterable<R>

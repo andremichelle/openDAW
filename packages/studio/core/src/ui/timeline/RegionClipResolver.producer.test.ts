@@ -1,8 +1,23 @@
 import {describe, expect, it} from "vitest"
-import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {ProjectSkeleton, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
-import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
-import {PPQN, TimeBase} from "@opendaw/lib-dsp"
+import {int, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {
+    NoteRegionBoxAdapter,
+    ProjectSkeleton,
+    RegionEditing,
+    TrackBoxAdapter,
+    TrackType
+} from "@opendaw/studio-adapters"
+import {
+    AudioFileBox,
+    AudioRegionBox,
+    NoteEventBox,
+    NoteEventCollectionBox,
+    NoteRegionBox,
+    TrackBox,
+    ValueEventCollectionBox,
+    ValueRegionBox
+} from "@opendaw/studio-boxes"
+import {LoopableRegion, ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {RegionClipResolver} from "./RegionClipResolver"
 import type {ProjectEnv} from "../../project/ProjectEnv"
 
@@ -144,6 +159,146 @@ describe("RegionClipResolver producer: fractional boundary quantization (#287)",
         exec()
         boxGraph.endTransaction()
         expect(trackAdapter.regions.collection.asArray()).toHaveLength(0)
+        project.terminate()
+    })
+})
+
+describe("RegionClipResolver producer: looped 3/4 note and automation regions keep whole-tick loop offsets", () => {
+    // A one-bar 3/4 loop (2880 ppqn) with a note on every beat. 3840 is bar 2, beat 2, and lib-std mod
+    // returns 959.9999999999998 for mod(3840, 2880), which the Int32 loopOffset field truncates to 959.
+    const beat = PPQN.Quarter
+    const bar = 3 * beat
+
+    const createNoteLoop = async (bars: int) => {
+        const {Project} = await import("../../project/Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox}} = skeleton
+        boxGraph.beginTransaction()
+        const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(TrackType.Notes)
+            box.tracks.refer(primaryAudioUnitBox.tracks)
+            box.target.refer(primaryAudioUnitBox)
+        })
+        const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
+        for (const position of [0, beat, 2 * beat]) {
+            NoteEventBox.create(boxGraph, UUID.generate(), box => {
+                box.position.setValue(position)
+                box.events.refer(events.events)
+            })
+        }
+        NoteRegionBox.create(boxGraph, UUID.generate(), box => {
+            box.position.setValue(0)
+            box.duration.setValue(bars * bar)
+            box.loopDuration.setValue(bar)
+            box.regions.refer(trackBox.regions)
+            box.events.refer(events.owners)
+        })
+        boxGraph.endTransaction()
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        return {project, boxGraph, trackAdapter: project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)}
+    }
+
+    const noteRegionsOf = (trackAdapter: TrackBoxAdapter): ReadonlyArray<NoteRegionBoxAdapter> =>
+        trackAdapter.regions.collection.asArray()
+            .filter((region): region is NoteRegionBoxAdapter => region.isNoteRegion())
+
+    // Each loop cycle plays the note at content position p at rawStart + p, if that lies in [resultStart, resultEnd).
+    const playedNotes = (region: NoteRegionBoxAdapter): ReadonlyArray<ppqn> => {
+        const notes = region.optCollection.unwrap("collection").events.asArray()
+        return Array.from(LoopableRegion.locateLoops(region, region.position, region.complete))
+            .flatMap(({rawStart, resultStart, resultEnd}) => notes
+                .map(note => rawStart + note.position)
+                .filter(position => resultStart <= position && position < resultEnd))
+    }
+
+    const everyBeat = (from: ppqn, to: ppqn): ReadonlyArray<ppqn> => {
+        const beats: Array<ppqn> = []
+        for (let position = from; position < to; position += beat) {beats.push(position)}
+        return beats
+    }
+
+    it("start-trims a loop to loopOffset 960 when a range covers its first bar and a beat", async () => {
+        const {project, boxGraph, trackAdapter} = await createNoteLoop(4)
+        const exec = RegionClipResolver.fromRange(trackAdapter, 0, 4 * beat)
+        boxGraph.beginTransaction()
+        exec()
+        boxGraph.endTransaction()
+        const [region] = noteRegionsOf(trackAdapter)
+        expect(region.position).toBe(4 * beat)
+        expect(region.loopOffset).toBe(beat) // main: 959
+        expect(playedNotes(region)).toEqual(everyBeat(4 * beat, 4 * bar))
+        project.terminate()
+    })
+
+    it("clips a loop so its right part keeps loopOffset 960 (RegionEditing.clip)", async () => {
+        const {project, boxGraph, trackAdapter} = await createNoteLoop(4)
+        const exec = RegionClipResolver.fromRange(trackAdapter, bar, 4 * beat)
+        boxGraph.beginTransaction()
+        exec()
+        boxGraph.endTransaction()
+        const [left, right] = noteRegionsOf(trackAdapter)
+        expect(left.complete).toBe(bar)
+        expect(right.position).toBe(4 * beat)
+        expect(right.loopOffset).toBe(beat) // main: 959
+        expect(playedNotes(right)).toEqual(everyBeat(4 * beat, 4 * bar))
+        project.terminate()
+    })
+
+    it("cuts a loop at bar 2, beat 2 without moving the right half's notes off their beats", async () => {
+        const {project, boxGraph, trackAdapter} = await createNoteLoop(4)
+        const [region] = noteRegionsOf(trackAdapter)
+        boxGraph.beginTransaction()
+        const right = RegionEditing.cut(region, 4 * beat, false).unwrap("right half")
+        boxGraph.endTransaction()
+        expect(right.loopOffset).toBe(beat) // main: 959
+        expect(playedNotes(region)).toEqual(everyBeat(0, 4 * beat))
+        expect(playedNotes(right)).toEqual(everyBeat(4 * beat, 4 * bar)) // main: 3841, 4801, 5761, ...
+        project.terminate()
+    })
+
+    it("does not accumulate drift when the right-hand piece is cut again every four beats", async () => {
+        const {project, boxGraph, trackAdapter} = await createNoteLoop(9)
+        let [piece] = noteRegionsOf(trackAdapter)
+        for (let index = 1; index <= 6; index++) {
+            boxGraph.beginTransaction()
+            piece = RegionEditing.cut(piece, index * 4 * beat, false).unwrap("right-hand piece")
+            boxGraph.endTransaction()
+        }
+        expect(piece.position).toBe(24 * beat)
+        expect(piece.loopOffset).toBe(0) // main stores 959, 1919, 2879, 958, 1918, 2877 along the way
+        expect(playedNotes(piece)[0]).toBe(24 * beat) // main: 23043
+        expect(noteRegionsOf(trackAdapter).flatMap(playedNotes)).toEqual(everyBeat(0, 9 * bar))
+        project.terminate()
+    })
+
+    it("cuts a looped automation region at bar 2, beat 2 to loopOffset 960", async () => {
+        const {Project} = await import("../../project/Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox}} = skeleton
+        boxGraph.beginTransaction()
+        const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(TrackType.Value)
+            box.tracks.refer(primaryAudioUnitBox.tracks)
+            box.target.refer(primaryAudioUnitBox.volume)
+        })
+        const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+        ValueRegionBox.create(boxGraph, UUID.generate(), box => {
+            box.position.setValue(0)
+            box.duration.setValue(4 * bar)
+            box.loopDuration.setValue(bar)
+            box.regions.refer(trackBox.regions)
+            box.events.refer(events.owners)
+        })
+        boxGraph.endTransaction()
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        const trackAdapter = project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+        const [region] = trackAdapter.regions.collection.asArray()
+        expect(region.isValueRegion()).toBe(true)
+        boxGraph.beginTransaction()
+        const right = RegionEditing.cut(region, 4 * beat, false).unwrap("right half")
+        boxGraph.endTransaction()
+        expect(right.position).toBe(4 * beat)
+        expect(right.loopOffset).toBe(beat) // main: 959
         project.terminate()
     })
 })

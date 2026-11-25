@@ -1,7 +1,8 @@
 import {BoxGraph} from "@opendaw/lib-box"
 import {TrackBox} from "@opendaw/studio-boxes"
-import {Attempt, Attempts, clamp, int} from "@opendaw/lib-std"
+import {Attempt, Attempts, clamp, int, Predicate, Predicates} from "@opendaw/lib-std"
 import {RegionOverlap} from "./timeline/RegionOverlap"
+import {AnyRegionBox} from "./unions"
 import {TempoRange} from "./TempoRange"
 import {BaseFrequencyRange} from "./BaseFrequencyRange"
 
@@ -24,6 +25,6 @@ export namespace Validator {
         ? clamp(hz, BaseFrequencyRange.min, BaseFrequencyRange.max)
         : BaseFrequencyRange.default
 
-    export const hasOverlappingRegions = (boxGraph: BoxGraph): boolean => boxGraph.boxes()
-        .some(box => box instanceof TrackBox && RegionOverlap.find(RegionOverlap.sortedRegions(box)).nonEmpty())
+    export const hasOverlappingRegions = (boxGraph: BoxGraph, skipRegion: Predicate<AnyRegionBox> = Predicates.alwaysFalse): boolean => boxGraph.boxes()
+        .some(box => box instanceof TrackBox && RegionOverlap.find(RegionOverlap.sortedRegions(box).filter(region => !skipRegion(region))).nonEmpty())
 }

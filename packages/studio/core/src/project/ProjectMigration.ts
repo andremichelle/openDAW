@@ -3,10 +3,10 @@ import {
     AudioFileBox,
     AudioPitchStretchBox,
     AudioRegionBox,
+    AudioSignalsmithBox,
     AudioTimeStretchBox,
     AudioUnitBox,
     BoxVisitor,
-    DelayDeviceBox,
     GrooveShuffleBox,
     MIDIOutputDeviceBox,
     NeuralAmpDeviceBox,
@@ -15,11 +15,13 @@ import {
     ValueEventBox,
     ValueEventCollectionBox,
     VaporisateurDeviceBox,
+    WclapDeviceBox,
+    WclapInstrumentBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
-import {asInstanceOf, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
+import {panic, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {DeviceMigration, isGrooveBox, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ProjectEnv} from "./ProjectEnv"
 import {
@@ -30,7 +32,6 @@ import {
     migrateAudioUnitBox,
     migrateCaptureTrackMismatch,
     migrateDefaultLabels,
-    migrateDelayDeviceBox,
     migrateMIDIOutputDeviceBox,
     migrateNeuralAmpDeviceBox,
     migrateRevampDeviceBox,
@@ -41,7 +42,11 @@ import {
     migrateUnsatisfiedMandatory,
     migrateVaporisateurDeviceBox,
     migrateWarpMarkers,
+    migrateWclapState,
     migrateZeitgeistDeviceBox,
+    GlobalGrooveLabel,
+    migrateGrooveCollection,
+    migrateViewStates,
     migrateZeroDurationRegions
 } from "./migration"
 
@@ -59,12 +64,14 @@ export class ProjectMigration {
             rootBox.groove.refer(GrooveShuffleBox.create(boxGraph, UUID.generate()))
             boxGraph.endTransaction()
         }
-        const globalShuffle = asInstanceOf(rootBox.groove.targetVertex.unwrap("groove.target"), GrooveShuffleBox).label
-        if (globalShuffle.getValue() !== "Groove Shuffle") {
+        const globalGroove = rootBox.groove.targetVertex.unwrap("groove.target").box
+        const globalShuffle = isGrooveBox(globalGroove) ? globalGroove.label : panic("The global groove is no groove")
+        if (globalShuffle.getValue() !== GlobalGrooveLabel) {
             boxGraph.beginTransaction()
-            globalShuffle.setValue("Groove Shuffle")
+            globalShuffle.setValue(GlobalGrooveLabel)
             boxGraph.endTransaction()
         }
+        const beforeGrooveList = migrateGrooveCollection(boxGraph, rootBox)
         const loadAudioData = (uuid: Uint8Array): Promise<AudioData> => {
             const {promise, resolve, reject} = Promise.withResolvers<AudioData>()
             const loader = env.sampleManager.getOrCreate(uuid)
@@ -119,16 +126,21 @@ export class ProjectMigration {
             visitAudioClipBox: (box: AudioClipBox) => migrateAudioClipBox(boxGraph, box),
             visitAudioPitchStretchBox: (box: AudioPitchStretchBox) => migrateWarpMarkers(boxGraph, box),
             visitAudioTimeStretchBox: (box: AudioTimeStretchBox) => migrateWarpMarkers(boxGraph, box),
+            visitAudioSignalsmithBox: (box: AudioSignalsmithBox) => migrateWarpMarkers(boxGraph, box),
             visitTimelineBox: (box: TimelineBox) => migrateTimelineBox(boxGraph, box),
             visitMIDIOutputDeviceBox: (box: MIDIOutputDeviceBox) => migrateMIDIOutputDeviceBox(boxGraph, box, outputMidiDevices),
-            visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox) => migrateZeitgeistDeviceBox(boxGraph, box, grooveTarget),
+            visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox) => migrateZeitgeistDeviceBox(boxGraph, box, grooveTarget, beforeGrooveList),
             visitValueEventBox: (box: ValueEventBox) => migrateValueEventBox(boxGraph, box),
             visitAudioUnitBox: (box: AudioUnitBox) => migrateAudioUnitBox(boxGraph, box),
             visitRevampDeviceBox: (box: RevampDeviceBox) => migrateRevampDeviceBox(boxGraph, box),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) => migrateVaporisateurDeviceBox(boxGraph, box),
             visitValueEventCollectionBox: (box: ValueEventCollectionBox) => migrateValueEventCollection(boxGraph, box),
-            visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box)
+            visitWclapDeviceBox: (box: WclapDeviceBox) => migrateWclapState(boxGraph, box),
+            visitWclapInstrumentBox: (box: WclapInstrumentBox) => migrateWclapState(boxGraph, box)
         }))
+        // Must run after migrateValueEventBox.
+        const deviceMigration = DeviceMigration.visitor(boxGraph)
+        boxGraph.boxes().slice().forEach(box => perBox(box, deviceMigration))
         // 3rd pass. Drop content tracks whose type no longer matches their unit's capture device (a MIDI
         // instrument swapped for a Tape leaves note tracks on an audio-capture unit, and vice versa) — they
         // are unusable and crash editors. Runs after per-unit migration, which ensures each unit has a
@@ -139,6 +151,8 @@ export class ProjectMigration {
         migrateUndefinedTracks(boxGraph)
         // Hard-coded "Notes" / "Automation" labels are no longer written at creation.
         migrateDefaultLabels(boxGraph)
+        // Collapse states and heights moved from the shared units and tracks into each user's interface.
+        migrateViewStates(boxGraph, mandatoryBoxes.userInterfaceBoxes)
         // 4th pass. Drop regions with a non-positive (derived) duration — legacy of the zero-length-sample
         // bug — so they can never trip validateTrack on a later edit. Runs after per-region migration (which
         // can rewrite audio durations) and before the overlap heal (which then sees only valid spans).

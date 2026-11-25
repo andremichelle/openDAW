@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {asDefined, isDefined, Option, quantizeRound, Terminable, UUID} from "@opendaw/lib-std"
+import {asDefined, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {AudioRegionBoxAdapter, ProjectSkeleton, SampleMetaData, TrackType} from "@opendaw/studio-adapters"
 import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
@@ -40,7 +40,8 @@ const createEnv = (meta: Option<SampleMetaData>): ProjectEnv => ({
     }
 }) as unknown as ProjectEnv
 
-const setup = async (contentSeconds: number, meta: Option<SampleMetaData>, neighbours: ReadonlyArray<number> = []) => {
+const setup = async (contentSeconds: number, meta: Option<SampleMetaData>, neighbours: ReadonlyArray<number> = [],
+                     audioSeconds: number = AUDIO_SECONDS) => {
     const {Project} = await import("../Project")
     const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
     const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox}} = skeleton
@@ -52,7 +53,7 @@ const setup = async (contentSeconds: number, meta: Option<SampleMetaData>, neigh
     })
     const audioFileBox = AudioFileBox.create(boxGraph, UUID.generate(), box => {
         box.fileName.setValue("loop.wav")
-        box.endInSeconds.setValue(AUDIO_SECONDS)
+        box.endInSeconds.setValue(audioSeconds)
     })
     const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
     const regionBox = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
@@ -83,8 +84,9 @@ const setup = async (contentSeconds: number, meta: Option<SampleMetaData>, neigh
     return {project, adapter, track: adapter.trackBoxAdapter.unwrap("track")}
 }
 
-const sampleMeta = (bpm: number): Option<SampleMetaData> => Option.wrap({
-    name: "loop.wav", bpm, duration: AUDIO_SECONDS, sample_rate: 48000, origin: "import" as const
+const sampleMeta = (bpm: number, origin: SampleMetaData["origin"] = "import",
+                    duration: number = AUDIO_SECONDS): Option<SampleMetaData> => Option.wrap({
+    name: "loop.wav", bpm, duration, sample_rate: 48000, origin
 })
 
 const lastMarker = (adapter: AudioRegionBoxAdapter) => asDefined(
@@ -136,8 +138,8 @@ describe("converting to a stretched play-mode warps the AUDIO, not the region's 
         const marker = lastMarker(adapter)
         const remaining = AUDIO_SECONDS - 1.0
         expect(marker.seconds).toBeCloseTo(remaining, 6)
-        expect(marker.position, "the remaining audio, measured at the sample's own tempo")
-            .toBe(quantizeRound(PPQN.secondsToPulses(remaining, SAMPLE_BPM), PPQN.SemiQuaver))
+        expect(marker.position, "the remaining audio, measured at the sample's own tempo, off the grid stays exact")
+            .toBeCloseTo(PPQN.secondsToPulses(remaining, SAMPLE_BPM), 0)
         project.terminate()
     })
 
@@ -156,6 +158,45 @@ describe("converting to a stretched play-mode warps the AUDIO, not the region's 
 // tempo change alone can stretch it that far). Switching it to a stretched play-mode drops the exemption, so
 // the conversion must never leave it reaching past the next region: nothing validates the track until some
 // unrelated edit detonates it minutes later.
+// Riffle, SDK 0.0.184: a 4.06 s take at 120 bpm was rounded to 32 sixteenths, so its last click played 60 ms early.
+describe("converting to a stretched play-mode keeps lengths that are not on the sixteenth grid", () => {
+    const TAKE_SECONDS = 4.06
+    it("keeps a recording's exact length", async () => {
+        const {project, adapter} = await setup(TAKE_SECONDS, sampleMeta(PROJECT_BPM, "recording", TAKE_SECONDS), [], TAKE_SECONDS)
+        project.editing.modify(await AudioContentModifier.toSignalsmith([adapter]))
+        const marker = lastMarker(adapter)
+        expect(marker.seconds).toBeCloseTo(TAKE_SECONDS, 6)
+        expect(marker.position).toBeCloseTo(PPQN.secondsToPulses(TAKE_SECONDS, PROJECT_BPM), 0)
+        expect(adapter.duration).toBeCloseTo(PPQN.secondsToPulses(TAKE_SECONDS, PROJECT_BPM), 0)
+        expect(adapter.duration, "the region ends exactly on its last warp marker").toBe(marker.position)
+        project.terminate()
+    })
+    it("keeps an import that is clearly off the grid", async () => {
+        const {project, adapter} = await setup(TAKE_SECONDS, sampleMeta(PROJECT_BPM, "import", TAKE_SECONDS), [], TAKE_SECONDS)
+        project.editing.modify(await AudioContentModifier.toSignalsmith([adapter]))
+        expect(lastMarker(adapter).position).toBeCloseTo(PPQN.secondsToPulses(TAKE_SECONDS, PROJECT_BPM), 0)
+        project.terminate()
+    })
+    // 35 samples at 128 bpm are 1.5 pulses, within the tolerance of 1% of a sixteenth (2.4 pulses)
+    const PADDED = AUDIO_SECONDS + 35 / 48000
+    it("snaps an import that sits on the grid but for a few samples", async () => {
+        const padded = PADDED
+        const {project, adapter} = await setup(padded, sampleMeta(SAMPLE_BPM, "import", padded), [], padded)
+        project.editing.modify(await AudioContentModifier.toSignalsmith([adapter]))
+        expect(lastMarker(adapter).position).toBe(FOUR_BARS)
+        expect(lastMarker(adapter).seconds).toBeCloseTo(padded, 5)
+        project.terminate()
+    })
+    it("never snaps a recording, even a few samples off the grid", async () => {
+        const padded = PADDED
+        const {project, adapter} = await setup(padded, sampleMeta(SAMPLE_BPM, "recording", padded), [], padded)
+        project.editing.modify(await AudioContentModifier.toSignalsmith([adapter]))
+        expect(lastMarker(adapter).position).toBeCloseTo(PPQN.secondsToPulses(padded, SAMPLE_BPM), 0)
+        expect(lastMarker(adapter).position).not.toBe(FOUR_BARS)
+        project.terminate()
+    })
+})
+
 describe("converting to a stretched play-mode never reaches into the next region", () => {
     it("clamps to the gap when the sample's tempo is unknown", async () => {
         const {project, adapter, track} = await setup(AUDIO_SECONDS, Option.None, [PPQN.Bar, PPQN.Bar * 2])

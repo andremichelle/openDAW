@@ -27,3 +27,23 @@ describe("ErrorInfo.isForeignRealmError", () => {
         expect(ErrorInfo.isForeignRealmError(runInNewContext("({message: 'x'})"))).toBe(false)
     })
 })
+
+// #1189 (and 580/807/809): Safari reported untrusted plain Events named "unhandledrejection" with no reason.
+describe("ErrorInfo.isSyntheticRejection", () => {
+    class FakePromiseRejectionEvent extends Event {
+        get [Symbol.toStringTag]() {return "PromiseRejectionEvent"}
+    }
+
+    it("flags a script-dispatched plain Event named unhandledrejection", () => {
+        expect(ErrorInfo.isSyntheticRejection(new Event("unhandledrejection"))).toBe(true)
+    })
+
+    it("keeps PromiseRejectionEvents, including untrusted ones", () => {
+        expect(ErrorInfo.isSyntheticRejection(new FakePromiseRejectionEvent("unhandledrejection"))).toBe(false)
+    })
+
+    it("keeps other event types", () => {
+        expect(ErrorInfo.isSyntheticRejection(new Event("error"))).toBe(false)
+        expect(ErrorInfo.isSyntheticRejection(new Event("processorerror"))).toBe(false)
+    })
+})

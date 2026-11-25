@@ -53,6 +53,9 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
     async list(): Promise<ReadonlyArray<T>> {return this.collectAllFiles()}
 
     async replaceMissingFiles(boxGraph: BoxGraph, manager: { invalidate: (uuid: UUID.Bytes) => void }): Promise<void> {
+        // a project without such files needs no catalogue (offline it may never arrive)
+        const boxes = boxGraph.boxes().filter(box => isInstanceOf(box, this.boxType))
+        if (boxes.length === 0) {return}
         const {status, error, value: available} = await Promises.tryCatch(this.collectAllFiles())
         if (status === "rejected") {
             console.warn(`Could not collect ${this.namePlural}:`, error)
@@ -62,8 +65,6 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
             })
             return
         }
-        const boxes = boxGraph.boxes().filter(box => isInstanceOf(box, this.boxType))
-        if (boxes.length === 0) {return}
         for (const box of boxes) {
             const uuid = box.address.uuid
             const uuidAsString = UUID.toString(uuid)
@@ -96,6 +97,7 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
                 uuid, name: files[0].name, arrayBuffer: readResult.value, progressHandler: Progress.Empty
             }))
             if (importResult.status === "rejected") {
+                if (Errors.isAbort(importResult.error)) {continue}
                 await RuntimeNotifier.info({
                     headline: `${this.nameSingular} Import Failed`,
                     message: `'${files[0].name}' could not be imported: ${String(importResult.error)}`
@@ -140,7 +142,11 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
                 arrayBuffer: readResult.value,
                 progressHandler: progressHandler[index]
             }))
-            if (status === "rejected") {rejected.push(String(error))} else {imported.push(value)}
+            if (status === "resolved") {
+                imported.push(value)
+            } else if (!Errors.isAbort(error)) {
+                rejected.push(String(error))
+            }
         }
         dialog.terminate()
         if (rejected.length > 0) {

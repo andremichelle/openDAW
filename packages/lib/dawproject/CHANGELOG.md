@@ -3,6 +3,34 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.87](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dawproject@0.0.86...@opendaw/lib-dawproject@0.0.87) (2026-11-09)
+
+**Note:** Version bump only for package @opendaw/lib-dawproject
+
+## [0.0.86](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dawproject@0.0.85...@opendaw/lib-dawproject@0.0.86) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/lib-dawproject
+
+## [0.0.85](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dawproject@0.0.84...@opendaw/lib-dawproject@0.0.85) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/lib-dawproject
+
+## [0.0.84](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dawproject@0.0.83...@opendaw/lib-dawproject@0.0.84) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/lib-dawproject
+
+## [0.0.83](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dawproject@0.0.82...@opendaw/lib-dawproject@0.0.83) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/lib-dawproject
+
+## [0.0.82](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dawproject@0.0.81...@opendaw/lib-dawproject@0.0.82) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/lib-dawproject
+
+## [0.0.81](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dawproject@0.0.80...@opendaw/lib-dawproject@0.0.81) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/lib-dawproject
+
 ## [0.0.80](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dawproject@0.0.79...@opendaw/lib-dawproject@0.0.80) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/lib-dawproject

@@ -2,6 +2,8 @@
 export class RecordingStartEdge {
     #wasRecording: boolean = false
 
+    get wasRecording(): boolean {return this.#wasRecording}
+
     observe(isRecording: boolean): boolean {
         const started = isRecording && !this.#wasRecording
         this.#wasRecording = isRecording

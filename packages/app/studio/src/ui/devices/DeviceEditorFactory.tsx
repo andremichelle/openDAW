@@ -23,6 +23,9 @@ import {
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapInstrumentBox,
+    WclapMidiEffectBox,
+    NoteFilterDeviceBox,
+    ScaleMatrixDeviceBox,
     PitchDeviceBox,
     InstrumentCompositeBox,
     PlayfieldDeviceBox,
@@ -40,6 +43,7 @@ import {
     NeonDeviceBox,
     TubularDeviceBox,
     CubedDeviceBox,
+    KorpusDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     VocoderDeviceBox,
@@ -75,6 +79,9 @@ import {
     NeuralAmpDeviceBoxAdapter,
     WclapDeviceBoxAdapter,
     WclapInstrumentBoxAdapter,
+    WclapMidiEffectBoxAdapter,
+    NoteFilterDeviceBoxAdapter,
+    ScaleMatrixDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
     InstrumentCompositeBoxAdapter,
     PlayfieldDeviceBoxAdapter,
@@ -92,6 +99,7 @@ import {
     NeonDeviceBoxAdapter,
     TubularDeviceBoxAdapter,
     CubedDeviceBoxAdapter,
+    KorpusDeviceBoxAdapter,
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
     VocoderDeviceBoxAdapter,
@@ -106,9 +114,12 @@ import {ModularDeviceEditor} from "@/ui/devices/audio-effects/ModularDeviceEdito
 import {asDefined, Lifecycle} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {PitchDeviceEditor} from "./midi-effects/PitchDeviceEditor"
+import {NoteFilterDeviceEditor} from "./midi-effects/NoteFilterDeviceEditor"
+import {ScaleMatrixDeviceEditor} from "./midi-effects/ScaleMatrixDeviceEditor"
 import {TapeDeviceEditor} from "@/ui/devices/instruments/TapeDeviceEditor.tsx"
 import {VaporisateurDeviceEditor} from "@/ui/devices/instruments/VaporisateurDeviceEditor.tsx"
 import {CubedDeviceEditor} from "@/ui/devices/instruments/CubedDeviceEditor.tsx"
+import {KorpusDeviceEditor} from "@/ui/devices/instruments/KorpusDeviceEditor.tsx"
 import {NeonDeviceEditor} from "@/ui/devices/instruments/NeonDeviceEditor.tsx"
 import {TubularDeviceEditor} from "@/ui/devices/instruments/TubularDeviceEditor.tsx"
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
@@ -164,11 +175,29 @@ export namespace DeviceEditorFactory {
                                    adapter={service.project.boxAdapters.adapterFor(box, PitchDeviceBoxAdapter)}
                                    deviceHost={deviceHost}/>
             ),
+            visitNoteFilterDeviceBox: (box: NoteFilterDeviceBox) => (
+                <NoteFilterDeviceEditor lifecycle={lifecycle}
+                                        service={service}
+                                        adapter={service.project.boxAdapters.adapterFor(box, NoteFilterDeviceBoxAdapter)}
+                                        deviceHost={deviceHost}/>
+            ),
+            visitScaleMatrixDeviceBox: (box: ScaleMatrixDeviceBox) => (
+                <ScaleMatrixDeviceEditor lifecycle={lifecycle}
+                                         service={service}
+                                         adapter={service.project.boxAdapters.adapterFor(box, ScaleMatrixDeviceBoxAdapter)}
+                                         deviceHost={deviceHost}/>
+            ),
             visitVelocityDeviceBox: (box: VelocityDeviceBox) => (
                 <VelocityDeviceEditor lifecycle={lifecycle}
                                       service={service}
                                       adapter={service.project.boxAdapters.adapterFor(box, VelocityDeviceBoxAdapter)}
                                       deviceHost={deviceHost}/>
+            ),
+            visitWclapMidiEffectBox: (box: WclapMidiEffectBox) => (
+                <WclapDeviceEditor lifecycle={lifecycle}
+                                   service={service}
+                                   adapter={service.project.boxAdapters.adapterFor(box, WclapMidiEffectBoxAdapter)}
+                                   deviceHost={deviceHost}/>
             ),
             visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox) => (
                 <ZeitgeistDeviceEditor lifecycle={lifecycle}
@@ -206,6 +235,12 @@ export namespace DeviceEditorFactory {
                                    service={service}
                                    adapter={service.project.boxAdapters.adapterFor(box, CubedDeviceBoxAdapter)}
                                    deviceHost={deviceHost}/>
+            ),
+            visitKorpusDeviceBox: (box: KorpusDeviceBox): JsxValue => (
+                <KorpusDeviceEditor lifecycle={lifecycle}
+                                    service={service}
+                                    adapter={service.project.boxAdapters.adapterFor(box, KorpusDeviceBoxAdapter)}
+                                    deviceHost={deviceHost}/>
             ),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox): JsxValue => (
                 <VaporisateurDeviceEditor lifecycle={lifecycle}

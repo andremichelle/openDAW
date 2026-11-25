@@ -3,6 +3,42 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.107](/compare/@opendaw/lib-box-forge@0.0.106...@opendaw/lib-box-forge@0.0.107) (2026-11-20)
+
+**Note:** Version bump only for package @opendaw/lib-box-forge
+
+## [0.0.106](/compare/@opendaw/lib-box-forge@0.0.105...@opendaw/lib-box-forge@0.0.106) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/lib-box-forge
+
+## [0.0.105](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box-forge@0.0.104...@opendaw/lib-box-forge@0.0.105) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/lib-box-forge
+
+## [0.0.104](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box-forge@0.0.103...@opendaw/lib-box-forge@0.0.104) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/lib-box-forge
+
+## [0.0.103](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box-forge@0.0.102...@opendaw/lib-box-forge@0.0.103) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/lib-box-forge
+
+## [0.0.102](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box-forge@0.0.101...@opendaw/lib-box-forge@0.0.102) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/lib-box-forge
+
+## [0.0.101](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box-forge@0.0.100...@opendaw/lib-box-forge@0.0.101) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/lib-box-forge
+
+## [0.0.100](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box-forge@0.0.99...@opendaw/lib-box-forge@0.0.100) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/lib-box-forge
+
+## [0.0.99](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box-forge@0.0.98...@opendaw/lib-box-forge@0.0.99) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/lib-box-forge
+
 ## [0.0.98](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box-forge@0.0.97...@opendaw/lib-box-forge@0.0.98) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/lib-box-forge

@@ -3,6 +3,72 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.3.5](/compare/@opendaw/studio-core@0.3.4...@opendaw/studio-core@0.3.5) (2026-11-20)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.3.4](/compare/@opendaw/studio-core@0.3.3...@opendaw/studio-core@0.3.4) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.3.3](/compare/@opendaw/studio-core@0.3.2...@opendaw/studio-core@0.3.3) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.3.2](/compare/@opendaw/studio-core@0.3.1...@opendaw/studio-core@0.3.2) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.3.1](/compare/@opendaw/studio-core@0.3.0...@opendaw/studio-core@0.3.1) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+# [0.3.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.17...@opendaw/studio-core@0.3.0) (2026-11-10)
+
+### Bug Fixes
+
+- delete group subtrees instead of ungrouping children ([775fa97](https://github.com/andremichelle/openDAW/commit/775fa9767fff9081bc137da8101dddedb8454f4b))
+
+### Features
+
+- add nested audio group model, routing and duplication ([b2599ee](https://github.com/andremichelle/openDAW/commit/b2599ee4b00ddf73688235fcb7abf775d289b852))
+
+## [0.2.17](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.16...@opendaw/studio-core@0.2.17) (2026-11-09)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.2.16](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.15...@opendaw/studio-core@0.2.16) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.2.15](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.14...@opendaw/studio-core@0.2.15) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.2.14](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.13...@opendaw/studio-core@0.2.14) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.2.13](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.12...@opendaw/studio-core@0.2.13) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.2.12](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.11...@opendaw/studio-core@0.2.12) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.2.11](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.10...@opendaw/studio-core@0.2.11) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.2.10](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.9...@opendaw/studio-core@0.2.10) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.2.9](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.8...@opendaw/studio-core@0.2.9) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
 ## [0.2.8](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.7...@opendaw/studio-core@0.2.8) (2026-10-09)
 
 ### Bug Fixes

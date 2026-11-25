@@ -16,7 +16,8 @@ export const NoteRegionBox: BoxSchema<Pointers> = {
             14: {type: "int32", name: "event-offset", ...PPQNPositionConstraints, deprecated},
             15: {type: "boolean", name: "mute"},
             16: {type: "string", name: "label"},
-            17: {type: "int32", name: "hue", ...HueConstraints}
+            17: {type: "int32", name: "hue", ...HueConstraints},
+            18: {type: "pointer", name: "groove", pointerType: Pointers.Groove, mandatory: false}
         }
     }, pointerRules: {accepts: [Pointers.Selection, Pointers.Editing, Pointers.MetaData], mandatory: false}
 }

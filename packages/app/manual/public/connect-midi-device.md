@@ -16,8 +16,8 @@ _Web MIDI is not available in Safari. Firefox supports it but needs a few extra 
 
 A MIDI device drives an **instrument** (a synth, sampler, Playfield, etc.), so you need an instrument track to play.
 
-- Use **Add instrument** in the timeline header, or drag an instrument from the Device Browser onto the track area, or
-  drop an instrument preset.
+- Use **Add Instrument…** in the timeline. It opens the [Device Browser](/manuals/device-browser), where you can try
+  instruments and presets with your controller before keeping one.
 
 An instrument track is a MIDI track: its input captures MIDI rather than audio, which is what lets it listen to a
 controller.

@@ -9,7 +9,7 @@
 
 use alloc::vec::Vec;
 use dsp::{db_to_gain, fast_sin, PI};
-use engine_env::ppqn::{from_signature, pulses_to_samples};
+use engine_env::ppqn::{frame_at, from_signature};
 use math::floor;
 use transport::transport::Block;
 use crate::signature_track::SignatureEvent;
@@ -209,7 +209,8 @@ impl Metronome {
                 let first_beat_index = ceil(offset / step_size);
                 let mut position = signature_start + first_beat_index * step_size;
                 while position < region_end {
-                    let distance = floor(pulses_to_samples(position - block.p0, block.bpm, self.sample_rate)) as usize;
+                    let frame = frame_at(position, block.anchor, block.anchor_frame, block.bpm, self.sample_rate);
+                    let distance = (frame - block.s0 as i64).max(0) as usize;
                     let beat_index = js_round((position - signature_start) / step_size) as i64;
                     // JS `%` (truncated): a NEGATIVE count-in beat hits 0 only at exact bar multiples.
                     let click_index = if beat_index % curr.nominator as i64 == 0 {0} else {1};
@@ -235,7 +236,7 @@ impl Metronome {
 mod tests {
     use super::*;
     use alloc::vec;
-    use engine_env::ppqn::samples_to_pulses;
+    use engine_env::ppqn::{pulses_to_samples, samples_to_pulses};
 
     const SAMPLE_RATE: f32 = 48000.0;
     const BPM: f32 = 120.0;
@@ -272,7 +273,7 @@ mod tests {
         let mut p0 = start;
         for quantum in 0..quanta {
             let p1 = start + (quantum + 1) as f64 * step;
-            let block = Block {p0, p1, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
+            let block = Block {p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
             p0 = p1; // contiguous ranges like the transport's (p1 carries into the next block's p0)
             let mut left = [0.0f32; QUANTUM];
             let mut right = [0.0f32; QUANTUM];
@@ -302,6 +303,24 @@ mod tests {
     }
 
     #[test]
+    fn clicks_land_on_their_whole_frames() {
+        // #536: blocks from the real transport, 4 s at 120 bpm, every beat is a whole frame (24000 apart).
+        let mut metronome = impulse_metronome();
+        let signature = [storage(4, 4)];
+        let mut transport = transport::transport::Transport::new(SAMPLE_RATE, BPM);
+        transport.play();
+        let mut frames = Vec::new();
+        for quantum in 0..(4.0 * SAMPLE_RATE) as usize / QUANTUM {
+            let block = transport.process_quantum();
+            let mut left = [0.0f32; QUANTUM];
+            let mut right = [0.0f32; QUANTUM];
+            metronome.process(&block, &signature, &mut left, &mut right);
+            frames.extend(left.iter().enumerate().filter(|(_, value)| **value != 0.0).map(|(index, _)| quantum * QUANTUM + index));
+        }
+        assert_eq!(frames, (0..8).map(|beat| beat * 24000).collect::<Vec<_>>());
+    }
+
+    #[test]
     fn accents_reset_at_a_signature_change() {
         // 4/4 storage, 3/4 from bar 1 (3840): beats stay quarters, but the DOWNBEATS move to 3840 and
         // 6720 (3840 + 3 * 960) — under a static 4/4 the second accent would sit at 7680 instead.
@@ -318,7 +337,7 @@ mod tests {
         // (only 0), the region after restarts the (shorter) eighth grid AT the event.
         let mut metronome = impulse_metronome();
         let signature = [storage(4, 4), event(0, 480.0, 3, 8)];
-        let block = Block {p0: 0.0, p1: 1000.0, s0: 0, s1: QUANTUM, bpm: 96000.0, discontinuous: false};
+        let block = Block {p0: 0.0, p1: 1000.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: QUANTUM, bpm: 96000.0, discontinuous: false};
         let mut left = [0.0f32; QUANTUM];
         let mut right = [0.0f32; QUANTUM];
         metronome.process(&block, &signature, &mut left, &mut right);
@@ -345,7 +364,7 @@ mod tests {
         // schedule the boundary downbeat. A block straddling pulse 0 (p0 < 0 < p1) reproduces that.
         let signature = [storage(4, 4)];
         let step = samples_to_pulses(QUANTUM as f64, BPM, SAMPLE_RATE);
-        let block = Block {p0: -step / 2.0, p1: step / 2.0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
+        let block = Block {p0: -step / 2.0, p1: step / 2.0, anchor: -step / 2.0, anchor_frame: 0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
         let mut leaked = impulse_metronome();
         let mut left = [0.0f32; QUANTUM];
         let mut right = [0.0f32; QUANTUM];
@@ -364,7 +383,7 @@ mod tests {
         // The ceiling must cut ONLY at/after recording_start: a count-in beat strictly before it still sounds.
         let signature = [storage(4, 4)];
         let step = samples_to_pulses(QUANTUM as f64, BPM, SAMPLE_RATE);
-        let block = Block {p0: -960.0 - step / 2.0, p1: -960.0 + step / 2.0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
+        let block = Block {p0: -960.0 - step / 2.0, p1: -960.0 + step / 2.0, anchor: -960.0 - step / 2.0, anchor_frame: 0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
         let mut metronome = impulse_metronome();
         metronome.set_click_ceiling(0.0); // recording_start, well past this block
         let mut left = [0.0f32; QUANTUM];
@@ -468,7 +487,7 @@ mod tests {
         metronome.load_click_sound(0, ClickSound::new(vec![0.0, 1.0, 0.0], 3, 1, SAMPLE_RATE * 0.5));
         metronome.set_gain(0.0);
         let signature = [storage(4, 4)];
-        let block = Block {p0: 0.0, p1: 1.0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
+        let block = Block {p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
         let mut left = [0.0f32; QUANTUM];
         let mut right = [0.0f32; QUANTUM];
         metronome.process(&block, &signature, &mut left, &mut right);
@@ -489,7 +508,7 @@ mod tests {
         metronome.load_click_sound(0, ClickSound::new(vec![1.0, 1.0, -1.0, -1.0], 2, 2, SAMPLE_RATE));
         metronome.set_gain(0.0);
         let signature = [storage(4, 4)];
-        let block = Block {p0: 0.0, p1: 1.0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
+        let block = Block {p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
         let mut left = [0.0f32; QUANTUM];
         let mut right = [0.0f32; QUANTUM];
         metronome.process(&block, &signature, &mut left, &mut right);

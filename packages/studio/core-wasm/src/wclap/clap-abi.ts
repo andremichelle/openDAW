@@ -63,6 +63,10 @@ export namespace ClapAbi {
         export const OUT_EVENTS = 36
     }
 
+    export namespace ProcessStatus {
+        export const ERROR = 0
+    }
+
     export namespace AudioBuffer {
         export const SIZE = 24
         export const DATA32 = 0
@@ -102,6 +106,7 @@ export namespace ClapAbi {
         export const PARAM_GESTURE_BEGIN = 7
         export const PARAM_GESTURE_END = 8
         export const TRANSPORT = 9
+        export const MIDI = 10
     }
 
     export namespace NoteEvent {
@@ -111,6 +116,10 @@ export namespace ClapAbi {
         export const CHANNEL = 22
         export const KEY = 24
         export const VELOCITY = 32
+    }
+
+    export namespace MidiEvent {
+        export const DATA = 18
     }
 
     export namespace ParamValueEvent {
@@ -134,6 +143,45 @@ export namespace ClapAbi {
         export const THREAD_CHECK = "clap.thread-check"
         export const PARAM_HOVERED = "clap.param-hovered/1"
         export const HOST_PARAMS = "clap.params"
+        export const LATENCY = "clap.latency"
+        export const DEVICE_PANEL = "opendaw.device-panel/1"
+        export const SAMPLES = "opendaw.samples/1" // both a host and a plugin extension
+    }
+
+    export namespace Feature {
+        export const DEVICE_PANEL = "opendaw:device-panel"
+        // followed by the panel's width at 176 px: the studio reads it from the cloud index before the plugin loads
+        export const DEVICE_PANEL_WIDTH = "opendaw:device-panel-width:"
+        export const NOTE_EFFECT = "note-effect"
+    }
+
+    // opendaw_plugin_device_panel_t: get_uri(plugin, uri, capacity), get_width(plugin, height, *width)
+    export namespace DevicePanel {
+        export const GET_URI = 0
+        export const GET_WIDTH = 4
+    }
+
+    export namespace PluginLatency {
+        export const GET = 0
+    }
+
+    // opendaw_host_samples_t: available(host) — the host keeps the plugin's samples (in the project, by key)
+    export namespace HostSamples {
+        export const SIZE = 4
+        export const AVAILABLE = 0
+    }
+
+    // opendaw_plugin_samples_t: prepare(plugin, key, frames, channels, rate: f64) -> float* (planar, channels * frames,
+    // 0 refuses), commit(plugin, key) once the frames are written, clear(plugin, key) when the slot has none
+    export namespace PluginSamples {
+        export const PREPARE = 0
+        export const COMMIT = 4
+        export const CLEAR = 8
+    }
+
+    export namespace HostLatency {
+        export const SIZE = 4
+        export const CHANGED = 0
     }
 
     export namespace AudioPorts {

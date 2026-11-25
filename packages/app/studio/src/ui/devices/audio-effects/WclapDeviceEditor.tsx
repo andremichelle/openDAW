@@ -16,18 +16,23 @@ import {
     Optional,
     RuntimeNotifier,
     StringComparator,
+    Terminator,
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Files, Html} from "@opendaw/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {PointerField} from "@opendaw/lib-box"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
-import {EffectFactories, MenuItem, WclapBundles, WclapStorage} from "@opendaw/studio-core"
+import {
+    EffectFactories, FilePickerAcceptTypes, MenuItem, WclapBundles, WclapGuis, WclapStates, WclapStorage
+} from "@opendaw/studio-core"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {parameterContextItems} from "@/ui/menu/automation.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
+import {DeviceMidiMeter} from "@/ui/devices/panel/DeviceMidiMeter.tsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {Layers} from "@/ui/surface/Layers.tsx"
@@ -35,9 +40,10 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {WclapAdapter, WclapWindows} from "@/service/WclapWindows"
+import {WclapFrame} from "@/service/WclapFrame"
 import {StoredWclapPlugin, WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
-import {OpenWclapAPI, WclapIndexFolder} from "@/opendaw-api"
+import {WclapCatalog, WclapIndexFolder} from "@/opendaw-api"
 import {ParameterTree, WclapParameterTree} from "@/ui/devices/audio-effects/WclapParameterTree"
 import {populateSidechainMenu} from "@/ui/devices/SidechainButton"
 
@@ -58,6 +64,11 @@ type CloudPlugin = { uuid: string, label: string, info: WclapPluginInfo }
 type CloudFolder = { name: string, folders: ReadonlyArray<CloudFolder>, plugins: ReadonlyArray<CloudPlugin> }
 
 const EmptyCloudFolder: CloudFolder = {name: "", folders: [], plugins: []}
+const DEVICE_PANEL_FEATURE = "opendaw:device-panel"
+// the panel's width at the device body's height, so the panel opens at its size before the plugin loads
+const DEVICE_PANEL_WIDTH_FEATURE = "opendaw:device-panel-width:"
+// the device body's content height (mixins.Control: 192px minus its 0.5em padding)
+const PANEL_HEIGHT = 176
 
 export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project, engine} = service
@@ -65,22 +76,79 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const uuid = adapter.uuid
     const uuidString = UUID.toString(uuid)
     const {parameters: parametersField} = adapter.box
+    const kind: WclapDescriber.Kind = adapter.type === "midi-effect" ? "note-effect" : adapter.type
     const nameLabel: HTMLElement = <span className="name"/>
     const vendorLabel: HTMLElement = <span className="vendor"/>
-    const state: { info: Optional<WclapPluginInfo>, ready: boolean, inputs: ReadonlyArray<WclapAudioPort> } =
-        {info: undefined, ready: false, inputs: []}
+    const state: {
+        info: Optional<WclapPluginInfo>, catalog: Optional<WclapPluginInfo>, ready: boolean, failed: boolean,
+        editor: boolean, panel: boolean, inputs: ReadonlyArray<WclapAudioPort>, credits: string
+    } = {info: undefined, catalog: undefined, ready: false, failed: false, editor: false, panel: false, inputs: [], credits: ""}
+    const pluginBox: HTMLElement = (
+        <div className="plugin" onclick={() => {
+            if (state.credits.length > 0) {window.open(state.credits, "_blank", "noopener")}
+        }}>{nameLabel}{vendorLabel}</div>
+    )
+    const showCredits = (url: string): void => {
+        state.credits = ""
+        pluginBox.classList.remove("linked")
+        pluginBox.title = ""
+        if (!WclapStorage.isLocal(url)) {return}
+        WclapCatalog.get().find(WclapStorage.idOf(url)).then(entry => entry.ifSome(({credits}) => {
+            if (adapter.urlField.getValue() !== url || credits.length === 0) {return}
+            state.credits = credits
+            pluginBox.classList.add("linked")
+            pluginBox.title = credits
+        }))
+    }
+    // the cloud index carries the descriptor, known before the bundle is booted to describe it
+    const showCatalog = (url: string, clapId: string): void => {
+        state.catalog = undefined
+        if (!WclapStorage.isLocal(url) || clapId.length === 0) {return}
+        WclapCatalog.get().find(WclapStorage.idOf(url)).then(entry => entry.ifSome(({plugins}) => {
+            if (adapter.urlField.getValue() !== url || adapter.clapIdField.getValue() !== clapId) {return}
+            state.catalog = plugins.find(plugin => plugin.clapId === clapId)
+            showStrategy()
+        }))
+    }
     const describe = (url: string): Promise<ReadonlyArray<WclapPluginInfo>> =>
         url.length === 0 ? Promise.resolve([]) : engine.wclapDescribe(url)
-    const select = (url: string, clapId: string): void => {
+    const select = (url: string, {clapId, name}: WclapPluginInfo): void => {
+        const previous = state.info?.name
         editing.modify(() => {
-            adapter.urlField.setValue(url)
-            adapter.clapIdField.setValue(clapId)
+            WclapStates.select(adapter.box, url, clapId)
+            WclapStates.name(project, adapter.box, previous, name)
         })
     }
     const showName = (): void => {
         const clapId = adapter.clapIdField.getValue()
         nameLabel.classList.toggle("empty", clapId.length === 0)
         nameLabel.textContent = clapId.length === 0 ? "No plugin loaded" : state.info?.name ?? clapId
+    }
+    const successor: { plugin: Option<CloudPlugin> } = {plugin: Option.None}
+    const updateGroup: HTMLElement = (
+        <div className="group hidden">
+            <Button lifecycle={lifecycle}
+                    onClick={() => successor.plugin.ifSome(({uuid, info}) => useCloud(uuid, info))}
+                    appearance={{
+                        framed: true,
+                        cursor: "pointer",
+                        color: Colors.green,
+                        tooltip: "Load the newer build of this plugin from the openDAW cloud"
+                    }}>
+                <span className="button-label">Update</span>
+            </Button>
+        </div>
+    )
+    const showUpdate = (url: string, clapId: string): void => {
+        successor.plugin = Option.None
+        updateGroup.classList.add("hidden")
+        if (!WclapStorage.isLocal(url) || clapId.length === 0) {return}
+        WclapCatalog.get().successorOf(WclapStorage.idOf(url)).then(entry => entry.ifSome(({uuid, name, plugins}) => {
+            const info = plugins.find(plugin => plugin.clapId === clapId)
+            if (adapter.urlField.getValue() !== url || !isDefined(info)) {return}
+            successor.plugin = Option.wrap({uuid, label: name, info})
+            updateGroup.classList.remove("hidden")
+        }))
     }
     const showPlugin = (): void => {
         const url = adapter.urlField.getValue()
@@ -89,12 +157,17 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         vendorLabel.textContent = ""
         vendorLabel.classList.remove("failed")
         showName()
+        showCredits(url)
+        showUpdate(url, clapId)
+        showCatalog(url, clapId)
+        showStrategy()
         if (clapId.length === 0) {return}
         describe(url).then(plugins => {
             if (adapter.clapIdField.getValue() !== clapId) {return}
             state.info = plugins.find(plugin => plugin.clapId === clapId)
             showName()
             if (isDefined(state.info) && state.ready) {vendorLabel.textContent = state.info.vendor}
+            showStrategy()
         }, () => {})
     }
     // the latest pick wins, a download that finishes after another choice is dropped
@@ -105,19 +178,24 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         nameLabel.classList.remove("empty")
         nameLabel.textContent = info.name
         vendorLabel.classList.remove("failed")
-        vendorLabel.textContent = "Downloading…"
-        OpenWclapAPI.get().load(uuid, progress => {
-            if (current()) {vendorLabel.textContent = `Downloading… ${Math.round(progress * 100)}%`}
-        })
-            .then(archive => WclapStorage.store(archive))
+        // cloud ids are the archive's hash: a stored one is this very version, a newer version has another id
+        WclapStorage.exists(uuid)
+            .then(stored => {
+                if (stored) {return WclapStorage.urlOf(uuid)}
+                vendorLabel.textContent = "Downloading…"
+                return WclapCatalog.get().load(uuid, progress => {
+                    if (current()) {vendorLabel.textContent = `Downloading… ${Math.round(progress * 100)}%`}
+                }).then(archive => WclapStorage.store(archive))
+            })
             .then(local => {
                 if (local !== WclapStorage.urlOf(uuid)) {throw new Error("the download does not match its id")}
                 if (!current()) {return}
+                engine.wclapRetry(local)
                 if (isCurrent(local, info)) {
                     showPlugin()
                     return
                 }
-                select(local, info.clapId)
+                select(local, info)
                 refreshStored()
             })
             .catch(error => {
@@ -128,23 +206,27 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             })
     }
     const browse = async (): Promise<void> => {
-        const files = await Files.open({
-            types: [{description: "WebCLAP bundle", accept: {"application/gzip": [".gz", ".tgz"]}}], multiple: false
-        }).catch(() => [])
+        const files = await Files.open({...FilePickerAcceptTypes.WclapFiles, multiple: false}).catch(() => [])
         if (files.length === 0) {return}
         const file = files[0]
-        const archive = await file.arrayBuffer()
+        // Safari fails to read a file it cannot reach, an iCloud file not downloaded yet for one (error 1184)
+        const read = await Promises.tryCatch(file.arrayBuffer())
+        if (read.status === "rejected") {
+            RuntimeNotifier.notify({message: `Could not read ${file.name}. If it lives in iCloud, download it first.`, icon: "Warning"})
+            return
+        }
+        const archive = read.value
         const url = await WclapStorage.urlFor(archive)
         WclapBundles.register(url, archive).catch(EmptyExec)
         const described: ReadonlyArray<WclapPluginInfo> = await describe(url).catch(error => {
             RuntimeNotifier.notify({message: `${file.name} is not a WebCLAP bundle: ${error}`, icon: "Warning"})
             return []
         })
-        const plugins = described.filter(plugin => kindOf(plugin) === adapter.type)
+        const plugins = described.filter(plugin => kindOf(plugin) === kind)
         if (plugins.length === 0) {
             if (described.length > 0) {
                 RuntimeNotifier.notify({
-                    message: `${file.name} holds no ${adapter.type === "instrument" ? "instrument" : "audio effect"}`,
+                    message: `${file.name} holds no ${kind === "instrument" ? "instrument" : kind === "note-effect" ? "note effect" : "audio effect"}`,
                     icon: "Warning"
                 })
             }
@@ -160,7 +242,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         if (chosen.isEmpty()) {return}
         await WclapStorage.store(archive)
         refreshStored()
-        select(url, chosen.unwrap().clapId)
+        engine.wclapRetry(url)
+        select(url, chosen.unwrap())
     }
     // The hub notifies per child, so an earlier child's notification sees later children without an adapter yet
     const parameterOf = (paramBox: WclapParameterBox): Optional<AutomatableParameterFieldAdapter> =>
@@ -197,11 +280,12 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         MenuItem.default({label: "Enter Percentage..."}).setTriggerProcedure(() => enterPercentage(parameter)),
         ...parameterContextItems(editing, midiLearning, adapter.deviceHost().audioUnitBoxAdapter().tracks, parameter)
     ]
-    const parametersMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+    const populateParameters = (parent: MenuItem): void => {
         const entries = parametersField.pointerHub.incoming().flatMap(({box}) => {
             const paramBox = asInstanceOf(box, WclapParameterBox)
             const parameter = parameterOf(paramBox)
-            return isDefined(parameter)
+            const hidden = (paramBox.flags.getValue() & 4) !== 0 // CLAP_PARAM_IS_HIDDEN
+            return isDefined(parameter) && !hidden
                 ? [{module: paramBox.module.getValue(), name: paramBox.label.getValue(), value: parameter}] : []
         })
         const populate = (parent: MenuItem, tree: ParameterTree<AutomatableParameterFieldAdapter>): void => {
@@ -211,7 +295,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 .setRuntimeChildrenProcedure(leaf => leaf.addMenuItem(...parameterItems(value)))))
         }
         populate(parent, WclapParameterTree.build(entries))
-    })
+    }
+    const parametersMenu = MenuItem.root().setRuntimeChildrenProcedure(populateParameters)
     const byLabel = (a: { label: string }, b: { label: string }): number =>
         StringComparator(a.label.toLowerCase(), b.label.toLowerCase())
     const isCurrent = (url: string, {clapId}: WclapPluginInfo): boolean =>
@@ -229,27 +314,40 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                         return {...plugin, label: vendor.length > 0 ? `${shortNames[index]} (${vendor})` : shortNames[index]}
                     })
                 })
-                .filter(({info}) => kindOf(info) === adapter.type)
+                .filter(({info}) => kindOf(info) === kind)
                 .toSorted(byLabel)
         }, EmptyExec)
     }
-    const cloud: { root: CloudFolder, plugins: ReadonlyArray<CloudPlugin> } = {root: EmptyCloudFolder, plugins: []}
-    OpenWclapAPI.get().tree().then(({folders}) => {
-        const toFolder = ({name, folders, wclaps}: WclapIndexFolder): CloudFolder => ({
-            name,
-            folders: (folders ?? []).map(toFolder).filter(folder => folder.folders.length > 0 || folder.plugins.length > 0),
-            plugins: (wclaps ?? [])
-                .flatMap(({uuid, name, plugins}) => {
-                    const shortNames = WclapNames.distinct(plugins.map(info => info.name))
-                    return plugins.map((info, index) => ({uuid, label: plugins.length > 1 ? shortNames[index] : name, info}))
-                })
-                .filter(({info}) => kindOf(info) === adapter.type)
-                .toSorted(byLabel)
-        })
-        cloud.root = toFolder({name: "", folders})
-        const collect = ({folders, plugins}: CloudFolder): ReadonlyArray<CloudPlugin> => [...plugins, ...folders.flatMap(collect)]
-        cloud.plugins = collect(cloud.root)
-    }, EmptyExec)
+    const cloud: { root: CloudFolder, community: CloudFolder, plugins: ReadonlyArray<CloudPlugin>, loaded: boolean } =
+        {root: EmptyCloudFolder, community: EmptyCloudFolder, plugins: [], loaded: false}
+    // asked again while the catalogue is empty (it could not be fetched): the next menu then lists it
+    const refreshCloud = (): void => {
+        WclapCatalog.get().trees().then(({cloud: {folders}, community}) => {
+            const toFolder = ({name, folders, wclaps}: WclapIndexFolder): CloudFolder => ({
+                name,
+                folders: (folders ?? []).map(toFolder).filter(folder => folder.folders.length > 0 || folder.plugins.length > 0),
+                plugins: (wclaps ?? [])
+                    .flatMap(({uuid, name, plugins}) => {
+                        const shortNames = WclapNames.distinct(plugins.map(info => info.name))
+                        return plugins.map((info, index) => ({uuid, label: plugins.length > 1 ? shortNames[index] : name, info}))
+                    })
+                    .filter(({info}) => kindOf(info) === kind)
+                    .toSorted(byLabel)
+            })
+            cloud.root = toFolder({name: "", folders})
+            // the community index holds one "Community" folder, its content is the menu's Community entry
+            const shared = toFolder({name: "", folders: community.folders}).folders
+            cloud.community = {
+                name: "",
+                folders: shared.flatMap(folder => folder.folders),
+                plugins: shared.flatMap(folder => folder.plugins).toSorted(byLabel)
+            }
+            const collect = ({folders, plugins}: CloudFolder): ReadonlyArray<CloudPlugin> => [...plugins, ...folders.flatMap(collect)]
+            cloud.plugins = [...collect(cloud.root), ...collect(cloud.community)]
+            cloud.loaded = true
+        }, EmptyExec)
+    }
+    refreshCloud()
     const populateCloud = (parent: MenuItem, {folders, plugins}: CloudFolder): void => {
         parent.addMenuItem(...folders.map(folder => MenuItem.default({label: folder.name, icon: IconSymbol.Folder})
             .setRuntimeChildrenProcedure(sub => populateCloud(sub, folder))))
@@ -257,19 +355,28 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             MenuItem.default({label, checked: isCurrent(WclapStorage.urlOf(uuid), info)})
                 .setTriggerProcedure(() => useCloud(uuid, info))))
     }
-    const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+    const populatePlugins = (parent: MenuItem): void => {
+        if (cloud.plugins.length === 0) {refreshCloud()}
         // a cloud plugin picked once is stored too, it stays listed under Cloud only
         const cloudUrls = new Set(cloud.plugins.map(({uuid}) => WclapStorage.urlOf(uuid)))
         const local = stored.plugins.filter(({url}) => !cloudUrls.has(url))
+        const hasPlugins = ({folders, plugins}: CloudFolder): boolean => plugins.length > 0 || folders.some(hasPlugins)
         parent.addMenuItem(
-            MenuItem.default({label: "Cloud", icon: IconSymbol.CloudFolder, selectable: cloud.plugins.length > 0})
-                .setRuntimeChildrenProcedure(sub => populateCloud(sub, cloud.root)),
+            MenuItem.default({label: "Cloud", icon: IconSymbol.CloudFolder, selectable: !cloud.loaded || hasPlugins(cloud.root)})
+                .setRuntimeChildrenProcedure(sub => cloud.loaded
+                    ? populateCloud(sub, cloud.root)
+                    : sub.addMenuItem(MenuItem.default({label: "Loading...", selectable: false}))),
+            MenuItem.default({label: "Community", icon: IconSymbol.Folder, selectable: !cloud.loaded || hasPlugins(cloud.community)})
+                .setRuntimeChildrenProcedure(sub => cloud.loaded
+                    ? populateCloud(sub, cloud.community)
+                    : sub.addMenuItem(MenuItem.default({label: "Loading...", selectable: false}))),
             MenuItem.default({label: "Local", icon: IconSymbol.UserFolder, selectable: local.length > 0})
                 .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...local.map(({url, label, info}) =>
                     MenuItem.default({label, checked: isCurrent(url, info)})
                         .setTriggerProcedure(() => {
                             pick.generation++
-                            select(url, info.clapId)
+                            engine.wclapRetry(url)
+                            select(url, info)
                         })))),
             MenuItem.default({label: "Import WebCLAP...", separatorBefore: true})
                 .setTriggerProcedure(() => {
@@ -278,7 +385,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 })
         )
         refreshStored()
-    })
+    }
+    const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(populatePlugins)
     const openLabel: HTMLElement = <span>Open UI</span>
     const openButton: HTMLElement = (
         <Button lifecycle={lifecycle}
@@ -304,7 +412,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         </MenuButton>
     )
     const pluginButtons: HTMLElement = <div className="group plugin">{openButton}{parametersButton}</div>
-    const audioInMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+    const populateAudioIn = (parent: MenuItem): void => {
         if (adapter.type !== "instrument") {return}
         const fields = adapter.audioInputs
         const count = Math.min(state.inputs.length, fields.length)
@@ -321,7 +429,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 checked: fields[index].targetAddress.nonEmpty()
             }).setRuntimeChildrenProcedure(sub => populateSidechainMenu(sub, menuOf(fields[index]))))
         }
-    })
+    }
+    const audioInMenu = MenuItem.root().setRuntimeChildrenProcedure(populateAudioIn)
     const audioInLabel: HTMLElement = <span className="button-label">Audio In</span>
     const audioInGroup: HTMLElement = (
         <div className="group hidden">
@@ -346,9 +455,128 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         lifecycle.ownAll(...adapter.audioInputs.map(field => field.subscribe(showAudioIn)))
     }
     const showStatus = (): void => {
-        openLabel.textContent = WclapWindows.isOpen(uuidString) ? "Close UI" : "Open UI"
-        openButton.classList.toggle("disabled", !state.ready)
+        // a plugin without a window of its own is played through the Parameters menu
+        openLabel.textContent = WclapWindows.isOpen(uuidString) ? "Close UI" : state.ready && !state.editor ? "No UI" : "Open UI"
+        openButton.classList.toggle("disabled", !state.ready || !state.editor)
         parametersButton.classList.toggle("disabled", !state.ready)
+    }
+    const title = (): string => state.info?.name ?? adapter.labelField.getValue()
+    const minimized = adapter.minimizedField.getValue()
+    const buttonsRow: HTMLElement = (
+        <div className="buttons">
+            <div className="group">
+                <MenuButton root={pluginMenu}
+                            appearance={{
+                                framed: true, color: Colors.shadow, activeColor: Colors.white,
+                                tooltip: "Pick a plugin from the openDAW cloud or this device, or import one"
+                            }}>
+                    <span className="button-label">Load Plugin</span>
+                </MenuButton>
+            </div>
+            {updateGroup}
+            {pluginButtons}
+            {audioInGroup}
+        </div>
+    )
+    const aboutText: HTMLElement = (
+        <p className="about">
+            Hosts a <a href="https://github.com/free-audio/web-clap" target="_blank"
+                       rel="noopener">WebCLAP</a> bundle,
+            a CLAP plugin compiled to WebAssembly. Pick one from the openDAW cloud or import a
+            .wclap.tar.gz or a bare .wasm from disk.
+        </p>
+    )
+    const panelArea: HTMLElement = <div className="panel hidden" style={{width: `${PANEL_HEIGHT}px`}}/>
+    const controls: HTMLElement = <div className={className}>{pluginBox}{buttonsRow}{aboutText}{panelArea}</div>
+    // panel strategy: the plugin's own page fills the device body, the device controls move into the menu
+    const panel = {active: false, framed: false, generation: 0}
+    const panelSession = lifecycle.own(new Terminator())
+    const features = (): ReadonlyArray<string> => (state.info ?? state.catalog)?.features ?? []
+    const wantsPanel = (): boolean => features().includes(DEVICE_PANEL_FEATURE)
+    const declaredWidth = (): number => {
+        const feature = features().find(feature => feature.startsWith(DEVICE_PANEL_WIDTH_FEATURE))
+        const width = isDefined(feature) ? parseInt(feature.slice(DEVICE_PANEL_WIDTH_FEATURE.length), 10) : NaN
+        return Number.isFinite(width) && width > 0 ? width : PANEL_HEIGHT
+    }
+    const dropPanel = (): void => {
+        state.panel = false
+        showStrategy()
+    }
+    const openPanelFrame = async (generation: number): Promise<void> => {
+        const current = (): boolean => generation === panel.generation
+        const opened = await engine.wclapOpenPanel(uuid, PANEL_HEIGHT)
+        if (opened.uri.length === 0) {
+            if (current()) {dropPanel()}
+            return
+        }
+        const guiSession = {held: true}
+        const release = (): void => {
+            if (!guiSession.held) {return}
+            guiSession.held = false
+            engine.wclapCloseGui(uuid)
+        }
+        if (!current()) {return release()}
+        const bundle = await WclapBundles.fetch(adapter.urlField.getValue()).catch(error => {
+            release()
+            throw error
+        })
+        if (!current()) {return release()}
+        const frame = panelSession.own(WclapFrame({
+            service, adapter, bundle, uri: opened.uri,
+            reload: async () => {
+                release()
+                const {uri} = await engine.wclapOpenPanel(uuid, PANEL_HEIGHT)
+                guiSession.held = uri.length > 0
+                return uri
+            },
+            reloaded: () => Promise.resolve(),
+            release,
+            lost: dropPanel,
+            scroll: (deltaX, deltaY, deltaMode) => frame.iframe.dispatchEvent(new WheelEvent("wheel", {
+                bubbles: true, cancelable: true, deltaX, deltaY, deltaMode
+            })),
+            transparent: true
+        }))
+        panelArea.style.width = `${opened.width > 0 ? opened.width : declaredWidth()}px`
+        panelArea.appendChild(frame.iframe)
+        panelSession.own(frame.listen(window))
+    }
+    const showStrategy = (): void => {
+        const active = wantsPanel() && !state.failed && (!state.ready || state.panel)
+        if (active !== panel.active) {
+            panel.active = active
+            controls.classList.toggle("panel-view", active)
+            for (const element of [pluginBox, buttonsRow, aboutText]) {element.classList.toggle("hidden", active)}
+            panelArea.classList.toggle("hidden", !active)
+        }
+        if (!panel.framed) {panelArea.style.width = `${declaredWidth()}px`}
+        const framed = active && state.ready && !minimized
+        if (framed === panel.framed) {return}
+        panel.framed = framed
+        panel.generation++
+        panelSession.terminate()
+        panelArea.replaceChildren()
+        panelArea.style.width = `${declaredWidth()}px`
+        if (framed) {
+            openPanelFrame(panel.generation)
+                .catch(error => RuntimeNotifier.notify({message: `Could not open the plugin panel: ${error}`, icon: "Warning"}))
+        }
+    }
+    const populatePanelMenu = (parent: MenuItem): void => {
+        if (!panel.active) {return}
+        parent.addMenuItem(
+            MenuItem.default({
+                label: WclapWindows.isOpen(uuidString) ? "Close Window" : "Open Window",
+                selectable: state.ready && state.editor, separatorBefore: true
+            }).setTriggerProcedure(() => WclapWindows.toggle(service, adapter, title(), state.panel)),
+            MenuItem.default({label: "Load Plugin"}).setRuntimeChildrenProcedure(populatePlugins),
+            MenuItem.default({label: "Update", selectable: successor.plugin.nonEmpty()})
+                .setTriggerProcedure(() => successor.plugin.ifSome(({uuid, info}) => useCloud(uuid, info))),
+            MenuItem.default({label: "Parameters", selectable: state.ready}).setRuntimeChildrenProcedure(populateParameters)
+        )
+        if (adapter.type === "instrument" && state.ready && state.inputs.length > 0) {
+            parent.addMenuItem(MenuItem.default({label: "Audio In"}).setRuntimeChildrenProcedure(populateAudioIn))
+        }
     }
     lifecycle.ownAll(
         Events.subscribe(globalThis, "pointermove", (event: PointerEvent) => {
@@ -366,6 +594,9 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         adapter.urlField.subscribe(showPlugin),
         engine.subscribeWclapStatus(uuidString, status => {
             state.ready = status.state === "ready"
+            state.failed = status.state === "failed"
+            state.editor = status.editor === true
+            state.panel = status.panel === true
             vendorLabel.classList.toggle("failed", status.state === "failed")
             vendorLabel.textContent = status.state === "ready"
                 ? state.info?.vendor ?? ""
@@ -374,8 +605,10 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             state.inputs = status.inputs
             showAudioIn()
             showStatus()
+            showStrategy()
         }),
-        WclapWindows.subscribe(uuidString, showStatus)
+        WclapWindows.subscribe(uuidString, showStatus),
+        WclapGuis.subscribeShow(uuidString, visible => {if (visible) {WclapWindows.show(service, adapter, title(), state.panel)}})
     )
     showStatus()
     refreshStored()
@@ -389,40 +622,20 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                           } else {
                               MenuItems.forEffectDevice(parent, service, deviceHost, adapter)
                           }
+                          populatePanelMenu(parent)
                       }}
-                      populateControls={() => (
-                          <div className={className}>
-                              <div className="plugin">
-                                  {nameLabel}
-                                  {vendorLabel}
-                              </div>
-                              <div className="buttons">
-                                  <div className="group">
-                                      <MenuButton root={pluginMenu}
-                                                  appearance={{
-                                                      framed: true, color: Colors.shadow, activeColor: Colors.white,
-                                                      tooltip: "Pick a plugin from the openDAW cloud or this device, or import one"
-                                                  }}>
-                                          <span className="button-label">Load Plugin</span>
-                                      </MenuButton>
-                                  </div>
-                                  {pluginButtons}
-                                  {audioInGroup}
-                              </div>
-                              <p className="about">
-                                  Hosts a <a href="https://github.com/free-audio/web-clap" target="_blank"
-                                             rel="noopener">WebCLAP</a> bundle,
-                                  a CLAP plugin compiled to WebAssembly. Pick one from the openDAW cloud or import a
-                                  .wclap.tar.gz from disk.
-                              </p>
-                          </div>)}
-                      populateMeter={() => (
+                      populateControls={() => controls}
+                      populateMeter={() => adapter.type === "midi-effect" ? (
+                          <DeviceMidiMeter lifecycle={lifecycle}
+                                           receiver={project.liveStreamReceiver}
+                                           address={adapter.address}/>
+                      ) : (
                           <DevicePeakMeter lifecycle={lifecycle}
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={adapter.type === "instrument"
-                          ? InstrumentFactories.Wclap.defaultIcon
-                          : EffectFactories.AudioNamed.Wclap.defaultIcon}/>
+                      icon={adapter.type === "instrument" ? InstrumentFactories.Wclap.defaultIcon
+                          : adapter.type === "midi-effect" ? EffectFactories.MidiNamed.WclapMidi.defaultIcon
+                              : EffectFactories.AudioNamed.Wclap.defaultIcon}/>
     )
 }

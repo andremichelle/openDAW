@@ -96,8 +96,7 @@ By default Wet is at 0 dB.
 
 ## 8. Drag & Drop
 
-- **From the Device Browser onto a band** — the effect is added to that band's chain. Because the bands are fixed, a drop never creates a new band, it always goes into the band you drop on.
-- **An existing effect onto a band** — moves that effect into that band's chain.
+- **An existing effect onto a band** — moves that effect into that band's chain. Because the bands are fixed, a drop never creates a new band, it always goes into the band you drop on.
 - **An effect onto the back button (inside a band)** — moves the effect out of the band and onto the parent chain, next to the composite.
 
 ---

@@ -31,16 +31,36 @@ export const SidechainButton = (construct: Construct) => {
     )
 }
 
+// Every composite this device is nested inside, innermost first. A device in entry A of composite C
+// may sidechain off C's INPUT (the signal entering C), and off an OUTER composite's input if C nests.
+const enclosingCompositesOf = (host: DeviceHost): ReadonlyArray<AudioCompositeAdapter> =>
+    host.asCompositeCell().mapOr(cell => host instanceof AudioEffectCompositeCellBoxAdapter
+        ? [host.compositeDevice(), ...enclosingCompositesOf(cell.deviceHost())]
+        : enclosingCompositesOf(cell.deviceHost()), [])
+
+// The label of the source a sidechain pointer targets, as the picker names it ("" when unset or unknown)
+export const resolveSidechainLabel = (sideChain: PointerField<Pointers.SideChain>,
+                                      rootBoxAdapter: RootBoxAdapter, deviceHost?: DeviceHost): string =>
+    sideChain.targetAddress.mapOr(address => {
+        const find = (outputs: Iterable<LabeledAudioOutput>): Option<string> => {
+            for (const output of outputs) {
+                if (output.address.equals(address)) {return Option.wrap(output.label)}
+                const nested = output.children().flatMap(children => find(children))
+                if (nested.nonEmpty()) {return nested}
+            }
+            return Option.None
+        }
+        const composite = (isDefined(deviceHost) ? enclosingCompositesOf(deviceHost) : [])
+            .find(entry => entry.inputField.address.equals(address))
+        return isDefined(composite)
+            ? `${composite.labelField.getValue()} Input`
+            : find(rootBoxAdapter.labeledAudioOutputs()).unwrapOrElse("")
+    }, "")
+
 // The source picker of a sidechain pointer: remove, the enclosing composites' inputs, every track's outputs
 export const populateSidechainMenu = (parent: MenuItem, {sideChain, rootBoxAdapter, editing, deviceHost}: Construct): void => {
     const isSelected = (address: Address) =>
         sideChain.targetAddress.mapOr(other => other.equals(address), false)
-    // Every composite this device is nested inside, innermost first. A device in entry A of composite C
-    // may sidechain off C's INPUT (the signal entering C), and off an OUTER composite's input if C nests.
-    const enclosingCompositesOf = (host: DeviceHost): ReadonlyArray<AudioCompositeAdapter> =>
-        host.asCompositeCell().mapOr(cell => host instanceof AudioEffectCompositeCellBoxAdapter
-            ? [host.compositeDevice(), ...enclosingCompositesOf(cell.deviceHost())]
-            : enclosingCompositesOf(cell.deviceHost()), [])
     const enclosingComposites = (): ReadonlyArray<AudioCompositeAdapter> =>
         isDefined(deviceHost) ? enclosingCompositesOf(deviceHost) : []
     const createSelectableItem = (output: LabeledAudioOutput): MenuItem => {

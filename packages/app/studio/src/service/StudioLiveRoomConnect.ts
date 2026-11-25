@@ -1,4 +1,4 @@
-import {Errors, Option, Optional, panic, Progress, RuntimeNotifier, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {Errors, isDefined, Option, Optional, panic, Progress, RuntimeNotifier, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
 import {Promises, Wait} from "@opendaw/lib-runtime"
 import {SampleStorage, SoundfontStorage, WclapStorage, Workers, YService} from "@opendaw/studio-core"
 import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
@@ -7,7 +7,15 @@ import {showConnectRoomDialog} from "@/service/StudioLiveRoomDialog.tsx"
 import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
 import {newRoomSessionId, reportRoomResult, RoomResultStatus, startRoomDurationHeartbeat} from "@/service/RoomStatsReporter"
 import {ChatService} from "@/chat/ChatService"
+import {CallService} from "@/call/CallService"
+import {FollowService} from "@/follow/FollowService"
+import {StudioFollowHost} from "@/follow/StudioFollowHost"
+import {asFollowMessage, FollowMessage} from "@/follow/FollowTypes"
+import {RoomSignaling} from "@/service/RoomSignaling"
 import {Events} from "@opendaw/lib-dom"
+import {removeAwarenessStates} from "y-protocols/awareness"
+
+const LiveServerUrl = "wss://live.opendaw.studio"
 
 const classifyConnectError = (error: unknown): RoomResultStatus => {
     if (Errors.isAbort(error)) {return "abort"}
@@ -17,6 +25,12 @@ const classifyConnectError = (error: unknown): RoomResultStatus => {
 }
 
 export const connectRoom = async (service: StudioService, prefillRoomName?: Optional<string>): Promise<void> => {
+    if (!isDefined(window.RTCPeerConnection)) {
+        return RuntimeNotifier.info({
+            headline: "Live Rooms Unavailable",
+            message: "Live rooms require WebRTC, which is disabled or not supported in this browser."
+        })
+    }
     const result = await showConnectRoomDialog(prefillRoomName).catch(() => null)
     if (result === null) {return}
     const {roomName, userName, userColor} = result
@@ -34,9 +48,13 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
     if (status === "resolved") {
         reportRoomResult(sessionId, "success")
         const heartbeat = startRoomDurationHeartbeat(sessionId)
-        const pagehideHandler = () => heartbeat.finalize()
-        window.addEventListener("pagehide", pagehideHandler)
         const {project, provider} = roomResult
+        // y-websocket only leaves on a node process exit: tell the room right away instead of after its 30 s timeout
+        const pagehideHandler = () => {
+            heartbeat.finalize()
+            removeAwarenessStates(provider.awareness, [provider.awareness.clientID], "pagehide")
+        }
+        window.addEventListener("pagehide", pagehideHandler)
         const p2pSession = new P2PSession({
             chainedSampleProvider: service.chainedSampleProvider,
             chainedSoundfontProvider: service.chainedSoundfontProvider,
@@ -70,7 +88,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
                     .flatMap(profile => profile.coverId === UUID.toString(uuid) ? profile.cover : Option.None)
                     .unwrapOrElse(() => panic(`No cover for ${UUID.toString(uuid)}`))
             }
-        }, roomName, "wss://live.opendaw.studio")
+        }, roomName, LiveServerUrl)
         project.own(p2pSession)
         const terminator = new Terminator()
         project.own(terminator)
@@ -113,6 +131,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
             terminator.own(profile.subscribeCoverId(() => {fetchCover()}))
             fetchCover()
         })
+        terminator.own(project.engine.isRecording.catchupAndSubscribe(owner => roomAwareness.recording.setValue(owner.getValue())))
         service.setRoomAwareness(roomAwareness)
         terminator.own({terminate: () => service.setRoomAwareness(null)})
         service.setTrafficMeter(p2pSession.trafficMeter)
@@ -121,6 +140,17 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         terminator.own(chatService)
         service.chatService.wrap(chatService)
         terminator.own({terminate: () => service.chatService.clear()})
+        const callService = new CallService(service, provider.awareness, roomName, LiveServerUrl)
+        terminator.own(callService)
+        service.callService.wrap(callService)
+        terminator.own({terminate: () => service.callService.clear()})
+        const followHost = terminator.own(new StudioFollowHost(service.audioContext, service.engine, project))
+        const followService = new FollowService(provider.awareness, followHost, onMessage =>
+            new RoomSignaling<FollowMessage>(`${LiveServerUrl}/signaling`, `follow:${roomName}`,
+                asFollowMessage, onMessage, () => {}))
+        terminator.own(followService)
+        service.followService.wrap(followService)
+        terminator.own({terminate: () => service.followService.clear()})
         await Wait.timeSpan(TimeSpan.seconds(1))
     } else {
         reportRoomResult(sessionId, classifyConnectError(error))

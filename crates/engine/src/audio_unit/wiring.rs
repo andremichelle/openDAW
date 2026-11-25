@@ -46,6 +46,7 @@ impl Engine {
         let player_output = player.borrow().audio_output();
         let player_id = self.context.register_processor(player);
         self.context.set_label(player_id, format!("frozen {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(player_id, unit.unit);
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(player_output.clone());
         let strip_output = strip.borrow().audio_output();
@@ -53,6 +54,7 @@ impl Engine {
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:frozen {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(strip_id, unit.unit);
         self.context.register_edge(player_id, strip_id);
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
         unit.wired = Some(Wired::Frozen(FrozenWired {
@@ -100,6 +102,7 @@ impl Engine {
             let sum = Rc::new(RefCell::new(AudioBusProcessor::new(buffer.clone())));
             let id = self.context.register_processor(sum.clone());
             self.context.set_label(id, format!("bus-sum {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
+            self.context.set_owner(id, bus_uuid);
             (sum, id, buffer)
         };
         self.bus_registry.insert(bus_uuid, (sum.clone(), sum_id));
@@ -124,7 +127,7 @@ impl Engine {
         // The bus's own audio-effect chain (host 23), ordered by index: one builder for every audio chain —
         // a plugin effect OR an effect composite (an FX stack / split), exactly like a leaf / tape unit.
         let mut audio_members: Vec<Member> = Vec::new();
-        for device_uuid in unit.audio.sorted() {
+        for device_uuid in unit.audio_chain() {
             if let Some(member) = self.take_or_build_audio_member(&mut pool, device_uuid, signal, invalidate, rewire) {
                 audio_members.push(member);
             }
@@ -162,6 +165,7 @@ impl Engine {
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:bus {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
+        self.context.set_owner(strip_id, bus_uuid);
         self.context.register_edge(source_id, strip_id);
         edges.push((source_id, strip_id));
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
@@ -169,6 +173,7 @@ impl Engine {
         // rebuild so `render` reads the current chain (an added / removed master effect takes effect live).
         if is_output {
             self.output_bus = Some(strip_output.clone());
+            self.output_node = strip_id;
         }
         let sum_node = if is_output { None } else { Some(sum_id) };
         unit.wired = Some(Wired::Bus(BusWired {
@@ -266,6 +271,7 @@ impl Engine {
             }
         });
         self.context.set_label(player_id, format!("region-player {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(player_id, unit.unit);
         // Live telemetry: the tape's raw output peaks, registered under the TapeDeviceBox (the device column).
         let player_meter = player.borrow().meter_slot();
         self.broadcasts.register(instrument_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &player_meter);
@@ -275,7 +281,7 @@ impl Engine {
         // Build the AUDIO-effects chain (reusing survivors, building joiners, terminating leavers) exactly like a
         // leaf unit. Without this an audio track's effects (EQ / compressor / gain) are silently dropped.
         let mut audio_members: Vec<Member> = Vec::new();
-        for uuid in unit.audio.sorted() {
+        for uuid in unit.audio_chain() {
             // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
             if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
                 audio_members.push(member);
@@ -317,6 +323,7 @@ impl Engine {
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:tape {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(strip_id, unit.unit);
         self.context.register_edge(output_node, strip_id);
         edges.push((output_node, strip_id));
         // The strip's output is routed to the unit's OUTPUT bus by `resolve_outputs` (not wired to master here).
@@ -339,9 +346,11 @@ impl Engine {
         // a chain edit never re-emits unchanged CCs (TS keeps its AutomatableParameters across such edits).
         let mut previous_cc: Vec<(Uuid, f32)> = Vec::new();
         let mut first_build = true;
+        let mut previous_node: Option<Rc<RefCell<MidiOutProcessor>>> = None;
         match unit.wired.take() {
             Some(Wired::MidiOut(previous)) => {
                 first_build = false;
+                previous_node = Some(previous.node.clone());
                 previous_cc = previous.node.borrow().cc_snapshot();
                 for sub in previous.subs {
                     self.graph.unsubscribe(sub);
@@ -373,6 +382,112 @@ impl Engine {
             Some(other) => self.teardown_wired_value(unit.unit, other),
             None => {}
         }
+        let label = format!("midi-out {:02x}{:02x}", unit.unit[0], unit.unit[1]);
+        let MidiOutDevice {node, node_id, instrument_uuid: _, controls, subs, cc_subs, cc_collections} =
+            self.build_midi_out_device(instrument_uuid, Some(unit.note_bits.clone()), &previous_cc, unit.unit, label, invalidate, rewire);
+        let node_output = node.borrow().audio_output();
+        // The unit's midi-fx members (reusing survivors, like a leaf) folded into the node's pull chain.
+        let mut midi_members: Vec<Member> = Vec::new();
+        for uuid in unit.midi.sorted() {
+            if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
+                if device.kind == DEVICE_KIND_MIDI_EFFECT {
+                    midi_members.push(self.take_or_build_midi(&mut pool, uuid, device, invalidate, rewire));
+                }
+            }
+        }
+        let sequencer: SharedNoteEventSource = match sequencer_keep {
+            Some((uuid, kept)) if uuid == instrument_uuid => kept,
+            _ => {
+                let sequencer = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: unit.track_sets.clone()}), self.clip_sequencer.clone())));
+                sequencer.borrow_mut().bind_truncate_preference(self.truncate_pref.clone());
+                sequencer
+            }
+        };
+        let mut pull = PullLink::Source(sequencer.clone());
+        for member in &midi_members {
+            if !self.device_enabled(member.uuid) {
+                continue; // a disabled midi-fx is bypassed (left out of the pull chain), like `wire_cluster`
+            }
+            if let ProcHandle::Midi(effect) = &member.proc {
+                pull = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(pull)};
+            }
+        }
+        node.borrow_mut().set_pull_chain(pull);
+        if let Some(previous) = previous_node {previous.borrow().hand_over(&node.borrow())}
+        // The unit's AUDIO-effects chain over the silent output + the channel strip, exactly like the tape.
+        let signal = unit.mark.signal();
+        let mut audio_members: Vec<Member> = Vec::new();
+        for uuid in unit.audio_chain() {
+            // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
+            if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, &signal, invalidate, rewire) {
+                audio_members.push(member);
+            }
+        }
+        for (_, member) in core::mem::take(&mut pool) {
+            self.terminate_member(member);
+        }
+        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut output = node_output;
+        let mut output_node = node_id;
+        let monitor_node = self.monitor_channels_of(&unit.unit).map(|(left, right)| {
+            let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
+            let mixer_id = self.context.register_processor(mixer);
+            self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
+            self.context.set_owner(mixer_id, unit.unit);
+            self.context.register_edge(output_node, mixer_id);
+            edges.push((output_node, mixer_id));
+            output_node = mixer_id;
+            mixer_id
+        });
+        let include_fx = self.unit_options(&unit.unit).include_audio_effects;
+        for member in &audio_members {
+            if !include_fx {
+                break; // a STEM export with includeAudioEffects=false: the fx chain is left unwired
+            }
+            if !self.device_enabled(member.uuid) {
+                continue;
+            }
+            match &member.proc {
+                ProcHandle::Audio(fx_node) => fx_node.borrow_mut().set_audio_source(output.clone()),
+                // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
+                ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
+                ProcHandle::Sink(binding) => binding.proc.borrow_mut().set_audio_source(output.clone()),
+                _ => {}
+            }
+            let fx_id = member.node_id.expect("member.node_id");
+            let entry_node = member.input_node.unwrap_or(fx_id);
+            self.context.register_edge(output_node, entry_node);
+            edges.push((output_node, entry_node));
+            output = member.output.clone().expect("member.output");
+            output_node = fx_id;
+        }
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
+        strip.borrow_mut().set_audio_source(output.clone());
+        let strip_output = strip.borrow().audio_output();
+        let strip_meter = strip.borrow().meter_slot();
+        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
+        let strip_id = self.context.register_processor(strip);
+        self.context.set_label(strip_id, format!("strip:midi-out {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(strip_id, unit.unit);
+        self.context.register_edge(output_node, strip_id);
+        edges.push((output_node, strip_id));
+        self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
+        if first_build {
+            node.borrow().read_all_parameters(); // the TS constructor's `readAllParameters()` initial CC push
+        }
+        unit.wired = Some(Wired::MidiOut(MidiOutWired {
+            node, node_id, instrument_uuid, sequencer, controls, midi: midi_members, audio: audio_members,
+            pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges, subs, cc_subs,
+            cc_collections, monitor_node
+        }));
+    }
+
+    /// Build a MIDI Output device's node and box observations (`enabled`, `channel`, `device`, the `parameters`
+    /// hub, the CC bindings). `note_bits` is the owning unit's note indicator.
+    #[allow(clippy::too_many_arguments)] // the reconcile cascade threads its invalidate/rewire context
+    pub(crate) fn build_midi_out_device(&mut self, instrument_uuid: Uuid, note_bits: Option<engine_env::telemetry::BroadcastSlot>,
+                                        previous_cc: &[(Uuid, f32)], owner: Uuid, label: String,
+                                        invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> MidiOutDevice {
         // The live control cells (TS reads the box per block / per event; the node reads these instead).
         let channel = self.graph.field_value(&Address::of(instrument_uuid, vec![MIDI_OUT_CHANNEL_KEY]))
             .and_then(|value| value.as_int32()).unwrap_or(0);
@@ -382,12 +497,12 @@ impl Engine {
         // `enabled` (TS `box.enabled.catchupAndSubscribe`): disabling stops the pull; the wasm side also
         // clears the unit's note indicator (the TS-side fix clears its NoteBroadcaster via `reset()`).
         let enabled_controls = controls.clone();
-        let enabled_bits = unit.note_bits.clone();
+        let enabled_bits = note_bits.clone();
         subs.push(self.graph.catchup_and_subscribe(Address::of(instrument_uuid, vec![DEVICE_ENABLED_KEY]), move |value| {
             if let Some(enabled) = value.as_bool() {
                 enabled_controls.enabled.set(enabled);
-                if !enabled {
-                    engine_env::telemetry::clear_note_bits(&enabled_bits);
+                if let Some(bits) = enabled_bits.as_ref().filter(|_| !enabled) {
+                    engine_env::telemetry::clear_note_bits(bits);
                 }
             }
         }));
@@ -427,109 +542,61 @@ impl Engine {
         // The CC parameter bindings (TS `bindParameter` per MIDIOutputParameterBox).
         let mut cc_subs: Vec<SubscriptionId> = Vec::new();
         let mut cc_collections: Vec<ValueCollection> = Vec::new();
-        let cc = self.build_midi_out_cc(instrument_uuid, invalidate, &previous_cc, &mut cc_subs, &mut cc_collections);
-        let node = Rc::new(RefCell::new(MidiOutProcessor::new(self.sample_rate, controls.clone(), self.midi_out.clone(), Some(unit.note_bits.clone()))));
-        let node_output = node.borrow().audio_output();
-        // The unit's midi-fx members (reusing survivors, like a leaf) folded into the node's pull chain.
-        let mut midi_members: Vec<Member> = Vec::new();
-        for uuid in unit.midi.sorted() {
-            if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
-                if device.kind == DEVICE_KIND_MIDI_EFFECT {
-                    midi_members.push(self.take_or_build_midi(&mut pool, uuid, device, invalidate, rewire));
-                }
-            }
-        }
-        let sequencer: SharedNoteEventSource = match sequencer_keep {
-            Some((uuid, kept)) if uuid == instrument_uuid => kept,
-            _ => {
-                let sequencer = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: unit.track_sets.clone()}), self.clip_sequencer.clone())));
-                sequencer.borrow_mut().bind_truncate_preference(self.truncate_pref.clone());
-                sequencer
-            }
-        };
-        let mut pull = PullLink::Source(sequencer.clone());
-        for member in &midi_members {
-            if !self.device_enabled(member.uuid) {
-                continue; // a disabled midi-fx is bypassed (left out of the pull chain), like `wire_cluster`
-            }
-            if let ProcHandle::Midi(effect) = &member.proc {
-                pull = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(pull)};
-            }
-        }
-        {
-            let mut node_mut = node.borrow_mut();
-            node_mut.set_pull_chain(pull);
-            node_mut.set_cc(cc);
-        }
+        let cc = self.build_midi_out_cc(instrument_uuid, invalidate, previous_cc, &mut cc_subs, &mut cc_collections);
+        let node = Rc::new(RefCell::new(MidiOutProcessor::new(self.sample_rate, controls.clone(), self.midi_out.clone(), note_bits.clone())));
+        node.borrow_mut().set_cc(cc);
         let node_id = self.context.register_processor(node.clone());
-        self.context.set_label(node_id, format!("midi-out {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_label(node_id, label);
+        self.context.set_owner(node_id, owner);
         // The node's (silent) output under the device box uuid, so a sidechain pointer targeting the device
         // resolves like it does for every built device (TS registers every processor's audioOutput).
-        self.output_registry.register(Address::of(instrument_uuid, vec![]), node_output.clone(), node_id);
-        // The unit's AUDIO-effects chain over the silent output + the channel strip, exactly like the tape.
-        let signal = unit.mark.signal();
-        let mut audio_members: Vec<Member> = Vec::new();
-        for uuid in unit.audio.sorted() {
-            // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
-            if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, &signal, invalidate, rewire) {
-                audio_members.push(member);
-            }
+        self.output_registry.register(Address::of(instrument_uuid, vec![]), node.borrow().audio_output(), node_id);
+        MidiOutDevice {node, node_id, instrument_uuid, controls, subs, cc_subs, cc_collections}
+    }
+
+    pub(crate) fn teardown_midi_out_device(&mut self, device: MidiOutDevice) {
+        device.node.borrow().end_held_notes(); // nothing else ends the notes a node leaving the graph holds
+        for sub in device.subs.into_iter().chain(device.cc_subs) {
+            self.graph.unsubscribe(sub);
         }
-        for (_, member) in core::mem::take(&mut pool) {
-            self.terminate_member(member);
+        for collection in device.cc_collections {
+            collection.terminate(&mut self.graph);
         }
-        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
-        let mut output = node_output;
-        let mut output_node = node_id;
-        let monitor_node = self.monitor_channels_of(&unit.unit).map(|(left, right)| {
-            let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
-            let mixer_id = self.context.register_processor(mixer);
-            self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
-            self.context.register_edge(output_node, mixer_id);
-            edges.push((output_node, mixer_id));
-            output_node = mixer_id;
-            mixer_id
-        });
-        let include_fx = self.unit_options(&unit.unit).include_audio_effects;
-        for member in &audio_members {
-            if !include_fx {
-                break; // a STEM export with includeAudioEffects=false: the fx chain is left unwired
-            }
-            if !self.device_enabled(member.uuid) {
-                continue;
-            }
-            match &member.proc {
-                ProcHandle::Audio(fx_node) => fx_node.borrow_mut().set_audio_source(output.clone()),
-                // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
-                ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
-                ProcHandle::Sink(binding) => binding.proc.borrow_mut().set_audio_source(output.clone()),
-                _ => {}
-            }
-            let fx_id = member.node_id.expect("member.node_id");
-            let entry_node = member.input_node.unwrap_or(fx_id);
-            self.context.register_edge(output_node, entry_node);
-            edges.push((output_node, entry_node));
-            output = member.output.clone().expect("member.output");
-            output_node = fx_id;
+        self.output_registry.remove(&Address::of(device.instrument_uuid, vec![]));
+        self.context.remove_processor(device.node_id);
+    }
+
+    /// Re-observe a MIDI Output's CC bindings in place, carrying each survivor's last emitted value.
+    pub(crate) fn rebind_midi_out_cc(&mut self, device: &mut MidiOutDevice, invalidate: &Rc<dyn Fn()>) {
+        let previous = device.node.borrow().cc_snapshot();
+        for sub in core::mem::take(&mut device.cc_subs) {
+            self.graph.unsubscribe(sub);
         }
-        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
-        strip.borrow_mut().set_audio_source(output.clone());
-        let strip_output = strip.borrow().audio_output();
-        let strip_meter = strip.borrow().meter_slot();
-        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
-        let strip_id = self.context.register_processor(strip);
-        self.context.set_label(strip_id, format!("strip:midi-out {:02x}{:02x}", unit.unit[0], unit.unit[1]));
-        self.context.register_edge(output_node, strip_id);
-        edges.push((output_node, strip_id));
-        self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
-        if first_build {
-            node.borrow().read_all_parameters(); // the TS constructor's `readAllParameters()` initial CC push
+        for collection in core::mem::take(&mut device.cc_collections) {
+            collection.terminate(&mut self.graph);
         }
-        unit.wired = Some(Wired::MidiOut(MidiOutWired {
-            node, node_id, instrument_uuid, sequencer, controls, midi: midi_members, audio: audio_members,
-            pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges, subs, cc_subs,
-            cc_collections, monitor_node
-        }));
+        let cc = self.build_midi_out_cc(device.instrument_uuid, invalidate, &previous, &mut device.cc_subs, &mut device.cc_collections);
+        device.node.borrow_mut().set_cc(cc);
+    }
+
+    /// A composite layer's MIDI Output: a survivor re-binds its CCs (the `parameters` hub re-wires the slot),
+    /// a joiner pushes its CC values once, like a unit's first build.
+    pub(crate) fn take_or_build_midi_out(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid,
+                                         invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> Member {
+        if let Some(mut existing) = pool.remove(&uuid) {
+            if let ProcHandle::MidiOut(device) = &mut existing.proc {
+                self.rebind_midi_out_cc(device, invalidate);
+                return existing;
+            }
+            self.terminate_member(existing);
+        }
+        let label = device_label(&self.graph, &uuid);
+        let device = self.build_midi_out_device(uuid, crate::current_unit_note_bits(), &[], uuid, label, invalidate, rewire);
+        device.node.borrow_mut().set_release_held_only(true);
+        device.node.borrow().read_all_parameters();
+        let (node_id, output) = (device.node_id, device.node.borrow().audio_output());
+        let enabled_sub = self.subscribe_enabled(uuid, rewire);
+        Member {uuid, proc: ProcHandle::MidiOut(Box::new(device)), node_id: Some(node_id), input_node: None, output: Some(output), params: None, sidechain: None, enabled_sub}
     }
 
     /// Bind the current `MIDIOutputParameterBox` children (the `parameters` hub) into CC bindings: each
@@ -618,7 +685,7 @@ impl Engine {
         // The unit's AUDIO-effects chain over the sum (reusing survivors, building joiners, terminating leavers)
         // exactly like a leaf / tape unit.
         let mut audio_members: Vec<Member> = Vec::new();
-        for uuid in unit.audio.sorted() {
+        for uuid in unit.audio_chain() {
             // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
             if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
                 audio_members.push(member);
@@ -637,6 +704,7 @@ impl Engine {
             let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
             let mixer_id = self.context.register_processor(mixer);
             self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
+            self.context.set_owner(mixer_id, unit.unit);
             self.context.register_edge(output_node, mixer_id);
             tail_edges.push((output_node, mixer_id));
             output_node = mixer_id;
@@ -673,6 +741,7 @@ impl Engine {
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:composite {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.set_owner(strip_id, unit.unit);
         self.context.register_edge(pre_strip_node, strip_id);
         tail_edges.push((pre_strip_node, strip_id));
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
@@ -730,7 +799,7 @@ impl Engine {
             }
         }
         let mut audio_members: Vec<Member> = Vec::new();
-        for uuid in unit.audio.sorted() {
+        for uuid in unit.audio_chain() {
             // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
             if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
                 audio_members.push(member);
@@ -768,6 +837,7 @@ impl Engine {
                 self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
                 let strip_id = self.context.register_processor(strip.clone());
                 self.context.set_label(strip_id, format!("strip:leaf {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+                self.context.set_owner(strip_id, unit.unit);
                 (strip, strip_id, strip_output)
             }
         };
@@ -820,6 +890,7 @@ impl Engine {
         let output = instrument.borrow().audio_output();
         let node_id = self.context.register_processor(instrument.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        self.context.set_owner(node_id, uuid);
         // The instrument's RAW output under its box uuid, so a sidechain pointer targeting THIS device taps it
         // directly (TS: every device processor registers `adapter.address -> output`). A composite SLOT child
         // overwrites this with its post-fx cluster output right after (its child uuid IS the instrument uuid).
@@ -828,7 +899,7 @@ impl Engine {
         // 128-bit note set broadcasts separately (the binding's `note_bits`, marked from the pull path).
         let meter_slot = instrument.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, node_id, instrument.clone(), signal);
+        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, params.reg.sidechain_collection_field, node_id, instrument.clone(), signal);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
     }
@@ -892,29 +963,41 @@ impl Engine {
         let output = node.borrow().audio_output();
         let node_id = self.context.register_processor(node.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        self.context.set_owner(node_id, uuid);
         // The effect's own output under its box uuid, so a sidechain pointer targeting THIS device taps it
         // directly (TS: every device processor registers `adapter.address -> output`).
         self.output_registry.register(Address::of(uuid, vec![]), output.clone(), node_id);
         // Live telemetry: the effect's output peaks (TS `PeakBroadcaster(adapter.address)`).
         let meter_slot = node.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, node_id, node.clone(), signal);
+        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, params.reg.sidechain_collection_field, node_id, node.clone(), signal);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
     }
 
     /// The device's declared sidechain ports with their pointer monitors; the resolve pass wires the edges.
-    fn build_sidechain(&mut self, uuid: Uuid, paths: &[Vec<u16>], node_id: NodeId, sink: Rc<RefCell<dyn SidechainSink>>,
-                       signal: &Rc<dyn Fn()>) -> Option<SidechainBinding> {
-        if paths.is_empty() { return None; }
+    /// A device with a sidechain COLLECTION hub gets its child ports on the first resolve (and on every hub edit).
+    fn build_sidechain(&mut self, uuid: Uuid, paths: &[Vec<u16>], collection_field: u16, node_id: NodeId,
+                       sink: Rc<RefCell<dyn SidechainSink>>, signal: &Rc<dyn Fn()>) -> Option<SidechainBinding> {
+        if paths.is_empty() && collection_field == 0 { return None; }
         let mut ports = Vec::new();
         for (index, path) in paths.iter().cloned().enumerate() {
+            let address = Address::of(uuid, path);
             let port_signal = signal.clone();
-            let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, path.clone()),
+            let pointer_sub = self.graph.subscribe_vertex(Propagation::This, address.clone(),
                 Box::new(move |_graph, _update| port_signal()));
-            ports.push(SidechainPort {port_id: index as u32 + 2, path, resolved: None, pointer_sub});
+            ports.push(SidechainPort {port_id: index as u32 + 2, address, resolved: None, pointer_sub, child: None});
         }
-        Some(SidechainBinding {sink, node_id, device_uuid: uuid, ports})
+        let collection = (collection_field != 0).then(|| {
+            let hub_signal = signal.clone();
+            let armed = Rc::new(core::cell::Cell::new(false)); // the catch-up `Added`s must not re-enqueue the unit being built
+            let hub_armed = armed.clone();
+            let hub_sub = self.graph.subscribe_pointer_hub(Address::of(uuid, vec![collection_field]),
+                Box::new(move |_graph, _event| if hub_armed.get() { hub_signal() }));
+            armed.set(true);
+            SidechainCollection {hub_field: collection_field, bound_count: paths.len() as u32, hub_sub, signal: signal.clone()}
+        });
+        Some(SidechainBinding {sink, node_id, device_uuid: uuid, ports, collection})
     }
 
     /// Reuse the pooled audio sink (its target binding survives, `resolve_sinks` diffs it) or build a fresh one:
@@ -935,6 +1018,7 @@ impl Engine {
         let output = node.borrow().audio_output();
         let node_id = self.context.register_processor(node.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        self.context.set_owner(node_id, uuid);
         self.output_registry.register(Address::of(uuid, vec![]), output.clone(), node_id);
         // Live telemetry: the tap's peaks (what the bus receives), under the device address like any effect.
         let meter_slot = node.borrow().meter_slot();
@@ -982,9 +1066,13 @@ impl Engine {
                 pull = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(pull)};
             }
         }
-        if let ProcHandle::Instrument(processor) = &instrument.proc {
-            processor.borrow_mut().set_enabled(self.device_enabled(instrument_uuid));
-            processor.borrow_mut().set_pull_chain(pull);
+        match &instrument.proc {
+            ProcHandle::Instrument(processor) => {
+                processor.borrow_mut().set_enabled(self.device_enabled(instrument_uuid));
+                processor.borrow_mut().set_pull_chain(pull);
+            }
+            ProcHandle::MidiOut(device) => device.node.borrow_mut().set_pull_chain(pull),
+            _ => {}
         }
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut output = instrument.output.clone().expect("instrument.output");
@@ -995,6 +1083,7 @@ impl Engine {
             let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
             let mixer_id = self.context.register_processor(mixer);
             self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
+            self.context.set_owner(mixer_id, instrument_uuid);
             self.context.register_edge(output_node, mixer_id);
             edges.push((output_node, mixer_id));
             output_node = mixer_id;
@@ -1033,7 +1122,7 @@ impl Engine {
     /// `reconcile_leaf` minus the channel-strip tail (the caller appends the slot's sum edge). `rewire` is the
     /// slot's own re-wire signal (a member `enabled` toggle re-runs THIS, not the unit chain).
     #[allow(clippy::too_many_arguments)] // the reconcile cascade threads its signal/invalidate/rewire context
-    pub(crate) fn reconcile_slot_cluster(&mut self, prev: Option<SlotCluster>, instrument_uuid: Uuid, device: DeviceReg,
+    pub(crate) fn reconcile_slot_cluster(&mut self, prev: Option<SlotCluster>, instrument_uuid: Uuid, device: SlotInstrument,
                                          midi_uuids: &[Uuid], audio_uuids: &[Uuid], track_sets: &SharedTrackSets, unit_midi: &[Rc<PluginMidiEffect>],
                                          choke: &[i32], gate: &Rc<Cell<bool>>, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> SlotCluster {
         let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
@@ -1048,7 +1137,10 @@ impl Engine {
             for member in prev.midi { pool.insert(member.uuid, member); }
             for member in prev.audio { pool.insert(member.uuid, member); }
         }
-        let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, device, signal, invalidate, rewire);
+        let instrument = match device {
+            SlotInstrument::Plugin(device) => self.take_or_build_instrument(&mut pool, instrument_uuid, device, signal, invalidate, rewire),
+            SlotInstrument::MidiOut => self.take_or_build_midi_out(&mut pool, instrument_uuid, invalidate, rewire)
+        };
         let unit_replicas: Vec<Member> = unit_midi.iter()
             .filter_map(|original| self.take_or_build_midi_replica(&mut pool, original, invalidate, rewire)).collect();
         let replica_handles: Vec<Rc<PluginMidiEffect>> = unit_replicas.iter().filter_map(|member| match &member.proc {

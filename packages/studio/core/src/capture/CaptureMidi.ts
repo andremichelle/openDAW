@@ -1,7 +1,6 @@
 import {
     byte,
     DefaultObservableValue,
-    Errors,
     Func,
     int,
     isDefined,
@@ -9,24 +8,27 @@ import {
     ObservableValue,
     Observer,
     Option,
+    Optional,
     Subscription,
     Terminable,
     Terminator,
     unitValue
 } from "@opendaw/lib-std"
-import {Events} from "@opendaw/lib-dom"
 import {MidiData} from "@opendaw/lib-midi"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBox, CaptureMidiBox} from "@opendaw/studio-boxes"
 import {NoteSignal} from "@opendaw/studio-adapters"
 import {bpm, ppqn, PPQN} from "@opendaw/lib-dsp"
 import {MidiDevices} from "../midi"
+import {BrowserContextClock, BrowserMidiInput, ContextClock, MidiInputPort} from "../io"
 import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {RecordMidi} from "./RecordMidi"
+import {TransportLog} from "./TransportLog"
 
-type RawNoteOn = { type: "on", pitch: byte, velocity: unitValue, delta: number }
-type RawNoteOff = { type: "off", pitch: byte, delta: number }
+// `time` is the audio context time the note was heard at
+type RawNoteOn = { type: "on", pitch: byte, velocity: unitValue, time: number }
+type RawNoteOff = { type: "off", pitch: byte, time: number }
 type RawNoteEvent = RawNoteOn | RawNoteOff
 
 export type ResolvedNote = { pitch: byte, velocity: unitValue, position: ppqn, duration: ppqn }
@@ -39,6 +41,9 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
     readonly #notifier = new Notifier<NoteSignal>()
     readonly #captureNoteOnCount = new DefaultObservableValue<int>(0)
     readonly #captureSubscriptions = new Terminator()
+    readonly #input: MidiInputPort
+    readonly #clock: ContextClock
+    readonly #captureLog: TransportLog
 
     #filterChannel: Option<byte> = Option.None
     #stream: Option<Subscription> = Option.None
@@ -46,16 +51,19 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
     #captureEvents: Array<RawNoteEvent> = []
     #captureMode: "stopped" | "playing" = "stopped"
     #captureOrigin: number = 0
+    #captureOriginTime: number = 0
     #captureOriginSet: boolean = false
     #capturePendingReset: boolean = false
     #captureBpmAtOrigin: bpm = 120.0
-    #captureLoopOffset: ppqn = 0
-    #captureLastPosition: ppqn = 0
 
-    constructor(manager: CaptureDevices, audioUnitBox: AudioUnitBox, captureMidiBox: CaptureMidiBox) {
+    constructor(manager: CaptureDevices, audioUnitBox: AudioUnitBox, captureMidiBox: CaptureMidiBox,
+                input: MidiInputPort = BrowserMidiInput.instance,
+                clock: ContextClock = new BrowserContextClock(manager.project.env.audioContext)) {
         super(manager, audioUnitBox, captureMidiBox)
+        this.#input = input
+        this.#clock = clock
+        this.#captureLog = new TransportLog(manager.project.tempoMap)
         this.#streamGenerator = Promises.sequentialize(() => this.#updateStream())
-        const accessSubscription = new Terminator()
         this.ownAll(
             captureMidiBox.channel.catchupAndSubscribe(async owner => {
                 const channel = owner.getValue()
@@ -81,17 +89,8 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
             }),
             this.#notifier.subscribe((signal: NoteSignal) => manager.project.engine.noteSignal(signal)),
             this.#notifier.subscribe((signal: NoteSignal) => this.#bufferNote(signal)),
-            accessSubscription,
-            // The stream snapshots the input devices when arming — MIDI access granted AFTER arming
-            // (the header toggle) or a hot-plugged device must rebuild the stream of an armed capture.
-            MidiDevices.available().catchupAndSubscribe(async () => {
-                accessSubscription.terminate()
-                MidiDevices.get().ifSome(access => accessSubscription.own(
-                    Events.subscribe(access, "statechange", async () => {
-                        if (this.armed.getValue()) {
-                            await this.#streamGenerator()
-                        }
-                    })))
+            // the stream snapshots the input devices when arming: access granted later or a hot-plugged device rebuilds it
+            input.subscribeDevicesChanged(async () => {
                 if (this.armed.getValue()) {
                     await this.#streamGenerator()
                 }
@@ -147,18 +146,26 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
     async prepareRecording(): Promise<void> {}
 
     startRecording(): Terminable {
-        return RecordMidi.start({notifier: this.#notifier, project: this.manager.project, capture: this})
+        return RecordMidi.start({notifier: this.#notifier, project: this.manager.project, capture: this, clock: this.#clock})
     }
 
     #startCapture(): void {
         this.#captureReset()
         this.#captureSubscriptions.terminate()
-        const {engine, timelineBox} = this.manager.project
-        const {loopArea} = timelineBox
+        const {engine, env: {audioContext}} = this.manager.project
+        this.#captureLog.clear()
         this.#captureSubscriptions.ownAll(
+            engine.subscribeTransportAnchors(anchors => anchors.forEach(anchor => this.#captureLog.append(anchor))),
             engine.isPlaying.catchupAndSubscribe(owner => {
                 const playing = owner.getValue()
                 if (playing) {
+                    // armed while the transport ran: no start anchor came, so begin at the render clock
+                    const {currentTime} = audioContext
+                    if (this.#captureLog.anchorAt(currentTime).mapOr(anchor => anchor.kind === "stop", true)) {
+                        this.#captureLog.append({
+                            kind: "start", contextTime: currentTime, position: engine.position.getValue(), recording: false
+                        })
+                    }
                     this.#captureReset()
                     this.#captureMode = "playing"
                 } else if (this.#captureEvents.length > 0) {
@@ -170,20 +177,6 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
             }),
             engine.isRecording.catchupAndSubscribe(owner => {
                 if (owner.getValue()) {this.#captureReset()}
-            }),
-            engine.position.subscribe(owner => {
-                if (this.#captureMode !== "playing") {return}
-                const currentPosition = owner.getValue()
-                if (!this.#captureOriginSet) {
-                    this.#captureOrigin = currentPosition
-                    this.#captureLastPosition = currentPosition
-                    this.#captureOriginSet = true
-                    return
-                }
-                if (currentPosition < this.#captureLastPosition && loopArea.enabled.getValue()) {
-                    this.#captureLoopOffset += loopArea.to.getValue() - loopArea.from.getValue()
-                }
-                this.#captureLastPosition = currentPosition
             })
         )
     }
@@ -202,67 +195,65 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
                 this.#captureMode = "stopped"
                 this.#capturePendingReset = false
             }
+            const time = this.#timeOf(signal.timeStamp)
             if (!this.#captureOriginSet) {
+                this.#captureOriginTime = time
                 if (this.#captureMode === "playing") {
-                    const currentPosition = this.manager.project.engine.position.getValue()
-                    this.#captureOrigin = currentPosition
-                    this.#captureLastPosition = currentPosition
+                    this.#captureOrigin = this.#captureLog.positionAt(time)
+                        .unwrapOrElse(this.manager.project.engine.position.getValue())
                 } else {
-                    this.#captureOrigin = performance.now()
+                    this.#captureOrigin = time * 1000.0
                     this.#captureBpmAtOrigin = this.manager.project.timelineBox.bpm.getValue()
                 }
                 this.#captureOriginSet = true
             }
-            const delta = this.#computeCaptureDelta()
-            this.#captureEvents.push({type: "on", pitch: signal.pitch, velocity: signal.velocity, delta})
+            this.#captureEvents.push({type: "on", pitch: signal.pitch, velocity: signal.velocity, time})
             this.#captureNoteOnCount.setValue(this.#captureNoteOnCount.getValue() + 1)
         } else if (NoteSignal.isOff(signal)) {
-            const delta = this.#computeCaptureDelta()
-            this.#captureEvents.push({type: "off", pitch: signal.pitch, delta})
+            this.#captureEvents.push({type: "off", pitch: signal.pitch, time: this.#timeOf(signal.timeStamp)})
         }
     }
 
-    #computeCaptureDelta(): number {
-        if (this.#captureMode === "playing") {
-            return this.#captureLastPosition - this.#captureOrigin + this.#captureLoopOffset
-        }
-        return performance.now() - this.#captureOrigin
+    #timeOf(timeStamp: Optional<number>): number {
+        const stamp = isDefined(timeStamp) ? Math.min(timeStamp, performance.now()) : performance.now()
+        return this.#clock.audibleTimeAt(stamp) - this.manager.project.engine.compensationLatency.getValue()
     }
 
     #captureReset(): void {
         this.#captureEvents.length = 0
         this.#captureNoteOnCount.setValue(0)
         this.#captureOrigin = 0
+        this.#captureOriginTime = 0
         this.#captureOriginSet = false
         this.#capturePendingReset = false
         this.#captureBpmAtOrigin = 120.0
-        this.#captureLoopOffset = 0
-        this.#captureLastPosition = 0
     }
 
     #resolveNotes(): Array<ResolvedNote> {
-        const openNotes = new Map<byte, { velocity: unitValue, delta: number }>()
+        const openNotes = new Map<byte, { velocity: unitValue, time: number }>()
         const resolved: Array<ResolvedNote> = []
-        const toPosition = (delta: number): ppqn => {
-            if (this.#captureMode === "playing" || this.#capturePendingReset) {return delta}
-            return PPQN.secondsToPulses(delta / 1000, this.#captureBpmAtOrigin)
+        const toPosition = (time: number): ppqn => {
+            if (this.#captureMode === "playing" || this.#capturePendingReset) {
+                return this.#captureLog.advance(this.#captureOriginTime, time)
+            }
+            return PPQN.secondsToPulses(time - this.#captureOriginTime, this.#captureBpmAtOrigin)
         }
-        const commitDelta = this.#computeCaptureDelta()
+        const commitTime = this.#timeOf(undefined)
         for (const event of this.#captureEvents) {
             if (event.type === "on") {
-                openNotes.set(event.pitch, {velocity: event.velocity, delta: event.delta})
+                openNotes.set(event.pitch, {velocity: event.velocity, time: event.time})
             } else {
                 const open = openNotes.get(event.pitch)
                 if (!isDefined(open)) {continue}
                 openNotes.delete(event.pitch)
-                const position = toPosition(open.delta)
-                const duration = Math.max(MIN_NOTE_DURATION, toPosition(event.delta) - position)
+                const position = toPosition(open.time)
+                const duration = Math.max(MIN_NOTE_DURATION, toPosition(event.time) - position)
                 resolved.push({pitch: event.pitch, velocity: open.velocity, position, duration})
             }
         }
         for (const [pitch, open] of openNotes) {
-            const position = toPosition(open.delta)
-            const duration = Math.max(MIN_NOTE_DURATION, toPosition(commitDelta) - position)
+            const position = toPosition(open.time)
+            const duration = Math.max(MIN_NOTE_DURATION, toPosition(commitTime) - position)
             resolved.push({pitch, velocity: open.velocity, position, duration})
         }
         // Sort by position so notes[0] is the earliest press, not the first note-off.
@@ -272,44 +263,23 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
     }
 
     async #updateStream() {
-        const inputs = MidiDevices.inputDevices()
-        const explicit = this.deviceId.getValue().match({
-            none: () => inputs,
-            some: id => {
-                const filtered = inputs.filter(device => id === device.id)
-                if (filtered.length === 0 && inputs.length > 0) {
-                    console.warn(`Requested MIDI device '${id}' unavailable, listening to all devices`)
-                    return inputs
-                }
-                return filtered
-            }
-        })
         const activeNotes = new Int8Array(128)
         this.#stream.ifSome(terminable => terminable.terminate())
         this.#stream = Option.wrap(Terminable.many(
-            ...explicit.map(input => Events.subscribe(input, "midimessage", (event: MIDIMessageEvent) => {
-                const data = event.data
-                if (isDefined(data) &&
-                    this.#filterChannel.mapOr(channel => MidiData.readChannel(data) === channel, true)) {
-                    const pitch = MidiData.readPitch(data)
-                    if (MidiData.isNoteOn(data)) {
-                        activeNotes[pitch]++
-                        this.#notifier.notify(NoteSignal.fromEvent(event, this.uuid))
-                    } else if (MidiData.isNoteOff(data) && activeNotes[pitch] > 0) {
-                        activeNotes[pitch]--
-                        this.#notifier.notify(NoteSignal.fromEvent(event, this.uuid))
-                    }
+            this.#input.subscribe(this.deviceId.getValue(), ({data, timeStamp}) => {
+                if (!this.#filterChannel.mapOr(channel => MidiData.readChannel(data) === channel, true)) {return}
+                const pitch = MidiData.readPitch(data)
+                if (MidiData.isNoteOn(data)) {
+                    activeNotes[pitch]++
+                    this.#notifier.notify({type: "note-on", uuid: this.uuid, pitch, velocity: MidiData.readVelocity(data), timeStamp})
+                } else if (MidiData.isNoteOff(data) && activeNotes[pitch] > 0) {
+                    activeNotes[pitch]--
+                    this.#notifier.notify({type: "note-off", uuid: this.uuid, pitch, timeStamp})
                 }
-            })),
-            Terminable.create(() => activeNotes.forEach((count, index) => {
-                if (count > 0) {
-                    for (let channel = 0; channel < 16; channel++) {
-                        const event = new MessageEvent("midimessage", {data: MidiData.noteOff(channel, index)})
-                        const signal = NoteSignal.fromEvent(event, this.uuid)
-                        for (let i = 0; i < count; i++) {
-                            this.#notifier.notify(signal)
-                        }
-                    }
+            }),
+            Terminable.create(() => activeNotes.forEach((count, pitch) => {
+                for (let index = 0; index < count * 16; index++) {
+                    this.#notifier.notify({type: "note-off", uuid: this.uuid, pitch, timeStamp: performance.now()})
                 }
             }))))
     }

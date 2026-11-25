@@ -49,6 +49,38 @@ describe("SyncStream", () => {
         expect(spy).toHaveBeenCalled()
     })
 
+    // the audio thread writes once per block and the main thread reads once per frame, so no call may be wasted
+    it("delivers a state on every write and read call when the other side keeps up", () => {
+        const readerIO = makeIO()
+        const writerIO = makeIO()
+        const received: Array<number> = []
+        const reader = SyncStream.reader(readerIO, obj => received.push(obj.n))
+        let counter = 0
+        const writer = SyncStream.writer(writerIO, reader.buffer, obj => {obj.n = ++counter})
+        const results: Array<[boolean, boolean]> = []
+        for (let frame = 0; frame < 5; frame++) {results.push([writer.tryWrite(), reader.tryRead()])}
+        expect(results).toEqual(Array.from({length: 5}, () => [true, true]))
+        expect(received).toEqual([1, 2, 3, 4, 5])
+    })
+
+    it("does not overwrite a state the reader has not taken yet, nor read the same state twice", () => {
+        const readerIO = makeIO()
+        const writerIO = makeIO()
+        const received: Array<number> = []
+        const reader = SyncStream.reader(readerIO, obj => received.push(obj.n))
+        let counter = 0
+        const writer = SyncStream.writer(writerIO, reader.buffer, obj => {obj.n = ++counter})
+        expect(reader.tryRead()).toBe(false)
+        expect(writer.tryWrite()).toBe(true)
+        expect(writer.tryWrite()).toBe(false)
+        expect(writer.tryWrite()).toBe(false)
+        expect(reader.tryRead()).toBe(true)
+        expect(reader.tryRead()).toBe(false)
+        expect(writer.tryWrite()).toBe(true)
+        expect(reader.tryRead()).toBe(true)
+        expect(received).toEqual([1, 2])
+    })
+
     it("rejects buffers that are too small", () => {
         const io = makeIO()
         const tiny = new SharedArrayBuffer(1) // definitely smaller than bytesTotal + 1

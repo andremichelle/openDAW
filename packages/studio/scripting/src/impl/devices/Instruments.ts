@@ -23,6 +23,7 @@ import {CubedStep as CubedStepCodec, InstrumentFactories} from "@opendaw/studio-
 import {asInstanceOf, bipolar, clamp, float, int, isDefined, isNull, Nullable, panic, unitValue, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioEffect,
+    AnyGroove,
     AnyMIDIEffect,
     Apparat,
     AudioEffects,
@@ -64,6 +65,7 @@ import {Context} from "../Context"
 import {Accessors, Facade, Props} from "../Common"
 import {Fields, FieldSpec} from "../Fields"
 import {Guard} from "../Guard"
+import {GrooveImpls} from "../Grooves"
 import {AudioFiles} from "../AudioFiles"
 import {EffectChain} from "./EffectChain"
 import {DeviceBoxes} from "./DeviceBoxes"
@@ -364,13 +366,18 @@ export class NanoImpl extends InstrumentFacade<NanoDeviceBox> implements Nano {
     declare loopFade: float
     declare loopStart: unitValue
     declare loopEnd: unitValue
+    declare panning: bipolar
+    declare polyphone: boolean
+    declare oneShot: boolean
+    declare fixedPitch: boolean
 
     constructor(context: Context, box: NanoDeviceBox) {
         super(context, box)
         this.bind({
             volume: box.volume, octave: box.octave, tune: box.tune, rootKey: box.rootKey, attack: box.attack, release: box.release,
             sampleStart: box.sampleStart, sampleEnd: box.sampleEnd, loop: box.loop, loopFade: box.loopFade,
-            loopStart: box.loopStart, loopEnd: box.loopEnd
+            loopStart: box.loopStart, loopEnd: box.loopEnd, panning: box.panning, polyphone: box.polyphone,
+            oneShot: box.oneShot, fixedPitch: box.fixedPitch
         })
     }
 
@@ -589,6 +596,9 @@ export class CubedImpl extends InstrumentFacade<CubedDeviceBox> implements Cubed
         })
         this.patterns = Object.freeze(box.patterns.fields().map((pattern, index) => createCubedPattern(context, pattern, index)))
     }
+
+    get groove(): Nullable<AnyGroove> {return GrooveImpls.read(this.context, this.box.groove)}
+    set groove(value: Nullable<AnyGroove>) {GrooveImpls.write(this.context, this.box.groove, value)}
 }
 
 export class ApparatImpl extends InstrumentFacade<ApparatDeviceBox> implements Apparat {

@@ -17,7 +17,6 @@ export namespace Tubular {
     export const Detunes = Array.from({length: 15}, (_, index) => index === 7 ? "0" : index > 7 ? `+${index - 7}` : String(index - 7))
     export const LfoWaves = ["Triangle", "Saw Down", "Saw Up", "Square", "Sine", "S&H"]
     export const Switch = ["Off", "On"]
-    export const Engines = ["Mark I", "Modern"]
     // The 32 algorithms as msfa bus flags per operator in SYSEX order (OP6 first): bits 0-1 out bus (0 =
     // output), bit 2 add to bus, bits 4-5 in bus, bits 6-7 feedback. Mirrors `ALGORITHMS` in fm.rs.
     const ALGORITHMS: ReadonlyArray<ReadonlyArray<number>> = [
@@ -119,9 +118,9 @@ export class TubularDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     #wrapParameters(box: TubularDeviceBox) {
         const VoiceModes = [VoicingMode.Monophonic, VoicingMode.Polyphonic]
-        const byte = (field: ParameterField, max: number, name: string) =>
+        const byte = (field: ParameterField, max: number, name: string, resetValue?: number) =>
             this.#parametric.createParameter(field, ValueMapping.linearInteger(0, max),
-                StringMapping.numeric({unit: "", fractionDigits: 0}), name)
+                StringMapping.numeric({unit: "", fractionDigits: 0}), name, undefined, resetValue)
         const choice = (field: ParameterField, labels: ReadonlyArray<string>, name: string) =>
             this.#parametric.createParameter(field, ValueMapping.linearInteger(0, labels.length - 1),
                 StringMapping.indices("", labels), name)
@@ -144,7 +143,7 @@ export class TubularDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                 rateScaling: byte(fields.rateScaling, 7, `${prefix} Rate Scaling`),
                 ampModSens: byte(fields.ampModSens, 3, `${prefix} Amp Mod Sens`),
                 velocitySens: byte(fields.velocitySens, 7, `${prefix} Velocity Sens`),
-                outputLevel: byte(fields.outputLevel, 99, `${prefix} Level`),
+                outputLevel: byte(fields.outputLevel, 99, `${prefix} Level`, index === 0 ? 99 : undefined),
                 mode: choice(fields.mode, Tubular.Modes, `${prefix} Mode`),
                 coarse: byte(fields.coarse, 31, `${prefix} Coarse`),
                 fine: byte(fields.fine, 99, `${prefix} Fine`),

@@ -2,6 +2,7 @@
 
 $tab-width: 30px
 $window-width: 320px
+$window-width-wide: 640px
 $padding: 8px
 
 component
@@ -9,11 +10,15 @@ component
   right: 0
   top: 10%
   bottom: 10%
-  width: $tab-width + $window-width
+  --window-width: #{$window-width}
+  width: calc(#{$tab-width} + var(--window-width))
   z-index: 5000
-  transition: transform 0.25s ease-in-out
-  transform: translateX($window-width)
+  transition: transform 0.25s ease-in-out, width 0.25s ease-in-out
+  transform: translateX(var(--window-width))
   pointer-events: none
+
+  &.wide
+    --window-width: #{$window-width-wide}
 
   &.open
     transform: translateX(0)
@@ -35,6 +40,87 @@ component
       width: 16px
       height: 16px
       fill: var(--color-gray)
+
+  > .chat-tab::after
+    content: ""
+    position: absolute
+    top: 5px
+    right: 5px
+    width: 6px
+    height: 6px
+    border-radius: 50%
+    background-color: var(--color-green)
+    opacity: 0
+    transition: opacity 0.2s
+
+  &.call-live > .chat-tab::after
+    opacity: 1
+
+  > .call-dock
+    pointer-events: auto
+    position: absolute
+    left: 2px
+    width: $tab-width - 4px
+    bottom: calc(50% + 22px)
+    display: flex
+    flex-direction: column
+    align-items: center
+    row-gap: 6px
+    padding: 5px 0
+    border-radius: 13px
+    background-color: var(--color-panel-background-bright)
+    box-shadow: -2px 0 6px rgba(black, 0.4)
+    opacity: 0
+    visibility: hidden
+    transition: opacity 0.2s, visibility 0.2s
+
+    > button
+      appearance: none
+      outline: none
+      width: 20px
+      height: 20px
+      padding: 0
+      border: none
+      border-radius: 50%
+      display: flex
+      align-items: center
+      justify-content: center
+      cursor: pointer
+      color: var(--color-bright)
+      background-color: rgba(white, 0.1)
+
+      svg
+        width: 12px
+        height: 12px
+
+      &.off
+        color: white
+        background-color: color-mix(in srgb, var(--color-red) 75%, black)
+
+      &.dock-leave
+        color: white
+        background-color: var(--color-red)
+
+    > .dots
+      display: flex
+      flex-direction: column
+      align-items: center
+      row-gap: 5px
+
+      > .dot
+        width: 8px
+        height: 8px
+        border-radius: 50%
+        background-color: var(--user-color)
+        transform: scale(calc(1 + var(--level, 0) * 0.6))
+        box-shadow: 0 0 calc(var(--level, 0) * 10px) var(--user-color)
+
+        &.muted
+          opacity: 0.45
+
+  &.in-call:not(.open) > .call-dock
+    opacity: 1
+    visibility: visible
 
   > .chat-window
     pointer-events: auto

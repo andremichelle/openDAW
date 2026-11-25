@@ -3,6 +3,58 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.50](/compare/@opendaw/studio-p2p@0.0.49...@opendaw/studio-p2p@0.0.50) (2026-11-20)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.49](/compare/@opendaw/studio-p2p@0.0.48...@opendaw/studio-p2p@0.0.49) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.48](/compare/@opendaw/studio-p2p@0.0.47...@opendaw/studio-p2p@0.0.48) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.47](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.46...@opendaw/studio-p2p@0.0.47) (2026-11-10)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.46](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.45...@opendaw/studio-p2p@0.0.46) (2026-11-09)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.45](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.44...@opendaw/studio-p2p@0.0.45) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.44](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.43...@opendaw/studio-p2p@0.0.44) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.43](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.42...@opendaw/studio-p2p@0.0.43) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.42](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.41...@opendaw/studio-p2p@0.0.42) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.41](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.40...@opendaw/studio-p2p@0.0.41) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.40](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.39...@opendaw/studio-p2p@0.0.40) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.39](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.38...@opendaw/studio-p2p@0.0.39) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
+## [0.0.38](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.37...@opendaw/studio-p2p@0.0.38) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/studio-p2p
+
 ## [0.0.37](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-p2p@0.0.36...@opendaw/studio-p2p@0.0.37) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/studio-p2p

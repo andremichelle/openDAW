@@ -32,6 +32,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
     }
 
     get project(): Project {return this.#service.project}
+    protected get service(): StudioService {return this.#service}
     get capturing(): ElementCapturing<T> {return this.#capturing}
 
     // Instruments and unit presets are the timeline root's business (see AudioUnitsTimeline): a new unit

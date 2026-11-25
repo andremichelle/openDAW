@@ -3,6 +3,46 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.115](/compare/@opendaw/lib-fusion@0.0.114...@opendaw/lib-fusion@0.0.115) (2026-11-20)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
+## [0.0.114](/compare/@opendaw/lib-fusion@0.0.113...@opendaw/lib-fusion@0.0.114) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
+## [0.0.113](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.112...@opendaw/lib-fusion@0.0.113) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
+## [0.0.112](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.111...@opendaw/lib-fusion@0.0.112) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
+## [0.0.111](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.110...@opendaw/lib-fusion@0.0.111) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
+## [0.0.110](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.109...@opendaw/lib-fusion@0.0.110) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
+## [0.0.109](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.108...@opendaw/lib-fusion@0.0.109) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
+## [0.0.108](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.107...@opendaw/lib-fusion@0.0.108) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
+## [0.0.107](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.106...@opendaw/lib-fusion@0.0.107) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
+## [0.0.106](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.105...@opendaw/lib-fusion@0.0.106) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/lib-fusion
+
 ## [0.0.105](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-fusion@0.0.104...@opendaw/lib-fusion@0.0.105) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/lib-fusion

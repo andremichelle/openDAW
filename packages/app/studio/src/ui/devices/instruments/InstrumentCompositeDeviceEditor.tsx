@@ -11,6 +11,7 @@ import {InstrumentCompositeLayer} from "@/ui/devices/InstrumentCompositeLayer"
 import {AddLayerButton} from "@/ui/devices/AddLayerButton"
 import {InstrumentCompositeLayerDnD} from "@/ui/devices/InstrumentCompositeLayerDnD"
 import {StudioService} from "@/service/StudioService"
+import {DeviceDialog} from "@/ui/browse/DeviceDialog"
 import {IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "AudioEffectCompositeDeviceEditor")
@@ -24,14 +25,11 @@ type Construct = {
 
 export const InstrumentCompositeDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
-    const {editing, api} = project
     const rows = (rowLifecycle: Lifecycle): ReadonlyArray<Element> => adapter.cells.adapters()
         .map(layer => <InstrumentCompositeLayer lifecycle={rowLifecycle} service={service} layer={layer}/>)
     const footer: Option<HTMLElement> = Option.wrap(
-        <AddLayerButton select={factory => editing.modify(() => {
-            const attempt = api.createCompositeLayer(adapter.box, factory)
-            if (attempt.isFailure()) {console.debug(attempt.failureReason())}
-        })}/>
+        <AddLayerButton lifecycle={lifecycle}
+                        onClick={() => DeviceDialog.open(service, {type: "new-layer", host: deviceHost, composite: adapter.box})}/>
     )
     return (
         <DeviceEditor lifecycle={lifecycle}

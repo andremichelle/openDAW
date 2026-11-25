@@ -202,8 +202,8 @@ export namespace SharedFolderSync {
         const base = projectFolder(uuid)
         const projectData = await cloudHandler.download(`${base}/${ProjectPaths.ProjectFile}`)
         const project = await Project.loadAnyVersion(env, projectData)
-        const meta = JSON.parse(new TextDecoder()
-            .decode(await cloudHandler.download(`${base}/${ProjectPaths.ProjectMetaFile}`))) as ProjectMeta
+        const meta = ProjectMeta.fromJSON(JSON.parse(new TextDecoder()
+            .decode(await cloudHandler.download(`${base}/${ProjectPaths.ProjectMetaFile}`))))
         const projectFiles = await cloudHandler.list(base)
         const cover = projectFiles.includes(ProjectPaths.ProjectCoverFile)
             ? Option.wrap(await cloudHandler.download(`${base}/${ProjectPaths.ProjectCoverFile}`))

@@ -156,7 +156,8 @@ fn stub_device(kind: u32) -> DeviceReg {
     DeviceReg {
         process_index: 0, state_size: 64, kind, init_index: 0, parameter_changed_index: 0,
         field_changed_index: 0, sample_changed_index: 0, soundfont_changed_index: 0, reset_index: 0, terminate_index: 0,
-        midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0
+        midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0, record_collection_field: 0, buffer_collection_field: 0, data_changed_index: 0,
+        sidechain_collection_field: 0, release_all_index: 0
     }
 }
 
@@ -421,18 +422,18 @@ fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
     let mut unit = engine.build_unit(UNIT);
     engine.reconcile_one(&mut unit);
     assert!(matches!(unit.wired, Some(Wired::MidiOut(_))), "an unregistered box type no longer tears the unit down");
-    // The build's readAllParameters mirror: ONE initial CC (controller 74, round(0.5 * 127) = 64) at 0 ms.
+    // The build's readAllParameters mirror: ONE initial CC (controller 74, round(0.5 * 127) = 64) at the delay of 10 ms.
     {
         let midi = engine.midi_out.borrow();
         assert_eq!(midi.queued().len(), 1);
         let cc = &midi.queued()[0];
-        assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB2, 74, 64, 0.0));
+        assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB2, 74, 64, 10.0));
     }
     engine.midi_out.borrow_mut().drain_queue(|_| {});
     // A live note-on becomes a timed note-on record AND sets the unit's note-indicator bit.
     super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 60, velocity: 0.9});
     let stopped = abi::BlockFlags::create(false, false, false, false);
-    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, s0: 0, s1: 128, bpm: 120.0}];
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
     {
         let midi = engine.midi_out.borrow();
@@ -447,7 +448,7 @@ fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
     engine.midi_out.borrow_mut().drain_queue(|_| {});
     // The note-off releases the bit and emits the note-off record.
     super::note_signal_to_unit(&unit, super::NoteSignal::Off {pitch: 60});
-    let blocks = [abi::Block {index: 0, flags: stopped, p0: 5.0, p1: 10.0, s0: 0, s1: 128, bpm: 120.0}];
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: 5.0, p1: 10.0, anchor: 5.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
     {
         let midi = engine.midi_out.borrow();
@@ -469,7 +470,7 @@ fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
     // Hold a note, then edit the channel: the subscription flushes a note-off ON THE OLD channel.
     super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 64, velocity: 1.0});
     let stopped = abi::BlockFlags::create(false, false, false, false);
-    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, s0: 0, s1: 128, bpm: 120.0}];
+    let blocks = [abi::Block {index: 0, flags: stopped, p0: 0.0, p1: 5.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &blocks});
     engine.midi_out.borrow_mut().drain_queue(|_| {}); // drop the note-on
     engine.graph.transaction(&[Update::Primitive {
@@ -483,7 +484,7 @@ fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
         assert_eq!((flushed.status, flushed.data1, flushed.time_ms), (0x82, 64, 10.0), "note-off on the OLD channel at the delay");
     }
     engine.midi_out.borrow_mut().drain_queue(|_| {});
-    // A plain CC value edit surfaces at the next block, ON THE NEW channel, at 0 ms (TS default time).
+    // A plain CC value edit surfaces at the next block, ON THE NEW channel, at the block start plus the delay.
     engine.graph.transaction(&[Update::Primitive {
         address: Address::of(MIDI_PARAM, vec![super::MIDI_OUT_PARAM_VALUE_KEY]),
         old: FieldValue::Float32(0.5), new: FieldValue::Float32(1.0)
@@ -492,7 +493,7 @@ fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
     let midi = engine.midi_out.borrow();
     assert_eq!(midi.queued().len(), 1);
     let cc = &midi.queued()[0];
-    assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB5, 74, 127, 0.0));
+    assert_eq!((cc.status, cc.data1, cc.data2, cc.time_ms), (0xB5, 74, 127, 10.0));
 }
 
 #[test]
@@ -621,6 +622,67 @@ fn a_disabled_effect_is_bypassed_and_re_enabling_re_wires_it_edge_only() {
     let (_, audio_after) = leaf_nodes(&unit);
     assert_eq!(audio_after, vec![fx_a, fx_b], "same processor instances (edge-only re-wire, no rebuild)");
     assert!(node_in_path(&leaf_edges(&unit), fx_b), "FX_B is now wired into the signal path");
+}
+
+#[test]
+fn a_parameter_write_in_the_same_transaction_as_an_enabled_toggle_reaches_the_device() {
+    // Issue #459: an `enabled` toggle re-wires the chain (unit dirty), which skipped the plain parameter push,
+    // so a value written in the SAME transaction stayed in the box but never reached the surviving device.
+    use super::{DeviceParams, ParamNode};
+    const PATH: u16 = 11;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (PATH, FieldValue::Float32(0.5))
+        ]),
+        graph_box(FX_A, "TestEffect", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))), (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+            (DEVICE_ENABLED_KEY, FieldValue::Boolean(false))
+        ])
+    ]);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    // The native stub instrument declares no params, so bind one by hand on the surviving instrument member.
+    struct StubSink;
+    impl crate::param_automation::ParamSink for StubSink {
+        fn set_params(&mut self, _: alloc::vec::Vec<crate::param_automation::ParamHandle>, _: bool) {}
+        fn state_ptr(&self) -> u32 { 0 }
+    }
+    super::params::set_params_signal(Some(super::params::params_invalidate(&unit)));
+    let invalidate = super::params::automation_invalidate(&unit);
+    let (handles, field_subs, collections, _armed) = engine.observe_params(INSTR, &[alloc::vec![PATH]], &invalidate);
+    super::params::set_params_signal(None);
+    let reg = stub_device(DEVICE_KIND_INSTRUMENT);
+    super::params::refresh_params(&handles, reg, 0, 0.0);
+    let last = handles[0].last.clone();
+    match unit.wired.as_mut().expect("wired") {
+        Wired::Leaf(chain) => chain.instrument.params = Some(DeviceParams {
+            device_uuid: INSTR, reg, state_ptr: 0, sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
+            paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
+            observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(), sample_subs: Vec::new(),
+            param_hub_sub: None, sample_hub_sub: None, records: None, broadcast_slots: Vec::new(), groove_slots: Vec::new()
+        }),
+        _ => panic!("expected a leaf chain")
+    }
+    unit.params_dirty.set(false);
+    unit.automation_dirty.set(false);
+    assert_eq!(last.get(), 0.5, "the initial value is pushed");
+    let flip = |engine: &mut Engine, enabled: (bool, bool), value: (f32, f32)| engine.graph.transaction(&[
+        Update::Primitive {address: Address::of(FX_A, vec![DEVICE_ENABLED_KEY]), old: FieldValue::Boolean(enabled.0), new: FieldValue::Boolean(enabled.1)},
+        Update::Primitive {address: Address::of(INSTR, vec![PATH]), old: FieldValue::Float32(value.0), new: FieldValue::Float32(value.1)}
+    ], &engine.registry).expect("flip enabled + write param");
+    flip(&mut engine, (false, true), (0.5, 2.5));
+    engine.reconcile_one(&mut unit);
+    assert!(node_in_path(&leaf_edges(&unit), leaf_nodes(&unit).1[0]), "FX_A is wired in");
+    assert_eq!(last.get(), 2.5, "enabling + writing in one transaction pushes the new value");
+    flip(&mut engine, (true, false), (2.5, 0.5));
+    engine.reconcile_one(&mut unit);
+    assert!(!node_in_path(&leaf_edges(&unit), leaf_nodes(&unit).1[0]), "FX_A is bypassed");
+    assert_eq!(last.get(), 0.5, "disabling + writing in one transaction pushes the new value");
 }
 
 #[test]
@@ -1111,6 +1173,92 @@ fn arming_a_tape_drops_the_old_player_so_its_meter_re_registers() {
     assert_eq!(alive_meters, 1, "exactly one alive tape-device meter after arming (the fresh one, not the frozen old)");
 }
 
+#[test]
+fn effects_monitoring_keeps_the_unit_out_of_the_main_mix_and_its_sends() {
+    // #528: an EFFECTS-monitored unit returns through the monitor output only (plans/done/advanced-monitoring.md,
+    // TS AudioDeviceChain skipped the output bus and the aux sends while monitoring). It must neither sum into
+    // its output bus nor feed its aux sends, and both come back when monitoring ends.
+    use crate::monitor::MonitorEntry;
+    const SEND: Uuid = [56u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook),
+            (UNIT_AUDIO_KEY, FieldValue::Hook), (super::UNIT_AUX_SENDS_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+        graph_box(SEND, "AuxSendBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![super::UNIT_AUX_SENDS_KEY])))),
+            (super::SEND_TARGET_KEY, FieldValue::Pointer(None)),
+            (3, FieldValue::Int32(0)),
+            (super::SEND_ROUTING_KEY, FieldValue::Int32(super::SEND_ROUTING_POST)),
+            (super::SEND_GAIN_KEY, FieldValue::Float32(0.0)),
+            (super::SEND_PAN_KEY, FieldValue::Float32(0.0))
+        ])
+    ]);
+    engine.unit_changes.borrow_mut().added.push(UNIT);
+    engine.reconcile_units();
+    let routing = |engine: &Engine| {
+        let unit = engine.audio_units.iter().find(|unit| unit.unit == UNIT).expect("unit");
+        (unit.routed.is_some(), unit.sends.iter().map(|send| send.source.is_some()).collect::<Vec<_>>())
+    };
+    assert_eq!(routing(&engine), (true, vec![true]), "unmonitored: routed to the master and feeding its send");
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: 0, right: 1}]);
+    assert_eq!(routing(&engine), (false, vec![false]), "monitored with effects: no output bus, no aux send");
+    engine.set_monitoring_map(alloc::vec![]);
+    assert_eq!(routing(&engine), (true, vec![true]), "monitoring ends: output and send come back");
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: -1, right: -1}]);
+    assert_eq!(routing(&engine), (true, vec![true]), "an entry without a valid channel returns nothing, so the unit stays in the mix");
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: 0, right: 1}]);
+    engine.set_frozen_audio(UNIT, Rc::new(crate::frozen::FrozenData {frames: vec![0.0; 2], frame_count: 1, sample_rate: 48_000.0}));
+    assert_eq!(routing(&engine), (true, vec![true]), "a frozen unit keeps its routes while monitored (TS)");
+}
+
+#[test]
+fn aux_sends_follow_their_index_field() {
+    // An AuxSendBox stores its position in `index` (3); field 2 is its `target-bus` pointer.
+    const SEND_A: Uuid = [57u8; 16];
+    const SEND_B: Uuid = [58u8; 16];
+    let send = |uuid: Uuid, index: i32| graph_box(uuid, "AuxSendBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![super::UNIT_AUX_SENDS_KEY])))),
+        (super::SEND_TARGET_KEY, FieldValue::Pointer(None)),
+        (super::SEND_INDEX_KEY, FieldValue::Int32(index)),
+        (super::SEND_GAIN_KEY, FieldValue::Float32(0.0)),
+        (super::SEND_PAN_KEY, FieldValue::Float32(0.0))
+    ]);
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook),
+            (UNIT_AUDIO_KEY, FieldValue::Hook), (super::UNIT_AUX_SENDS_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+        send(SEND_A, 1),
+        send(SEND_B, 0)
+    ]);
+    let unit = engine.build_unit(UNIT);
+    assert_eq!(unit.aux_sends.sorted(), vec![SEND_B, SEND_A], "sends are ordered by their index field");
+    engine.graph.transaction(&[
+        Update::Primitive {address: Address::of(SEND_A, vec![super::SEND_INDEX_KEY]), old: FieldValue::Int32(1), new: FieldValue::Int32(0)},
+        Update::Primitive {address: Address::of(SEND_B, vec![super::SEND_INDEX_KEY]), old: FieldValue::Int32(0), new: FieldValue::Int32(1)}
+    ], &engine.registry).expect("reorder");
+    assert_eq!(unit.aux_sends.sorted(), vec![SEND_A, SEND_B], "a reorder follows the index field");
+    engine.teardown_unit(unit);
+}
+
+#[test]
+fn effects_monitoring_detaches_the_units_audio_sinks() {
+    use crate::monitor::MonitorEntry;
+    let mut engine = sink_leaf_engine(Some(bus_input()));
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT).iter().map(|(_, bus)| *bus).collect::<Vec<_>>(), vec![Some(SINK_BUS_BOX)]);
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: SINK_UNIT, left: 0, right: 1}]);
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT).iter().map(|(_, bus)| *bus).collect::<Vec<_>>(), vec![None],
+        "a monitored unit's sink does not feed its bus (#528)");
+    engine.set_monitoring_map(alloc::vec![]);
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT).iter().map(|(_, bus)| *bus).collect::<Vec<_>>(), vec![Some(SINK_BUS_BOX)],
+        "monitoring ends: the sink feeds its bus again");
+}
+
 // ---- Composite per-child lifecycle ----
 // A composite (Playfield) unit: adding a child slot must KEEP the existing slots' processors. Same
 // identity-by-NodeId proof as the leaf case, one level down.
@@ -1339,7 +1487,7 @@ fn cell_composite_layers_share_one_clip_advance() {
         count
     };
     let flags = engine_env::block_flags::BlockFlags::create(true, false, true, false);
-    let block = |p0: f64, p1: f64| engine_env::block::Block {index: 0, flags, p0, p1, s0: 0, s1: 128, bpm: 120.0};
+    let block = |p0: f64, p1: f64| engine_env::block::Block {index: 0, flags, p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
     let pull = |source: &engine_env::note_event_instrument::SharedNoteEventSource, from: f64, to: f64| {
         let mut starts: Vec<f64> = Vec::new();
         source.borrow_mut().process_notes(from, to, flags, &mut |event| {
@@ -1359,7 +1507,7 @@ fn cell_composite_layers_share_one_clip_advance() {
     assert_eq!(started(&mut engine), 1, "exactly one started notification for two layers");
     // A paused (non-transporting) block advances nothing.
     let paused = engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 3860.0, p1: 3890.0, s0: 0, s1: 128, bpm: 120.0};
+        p0: 3860.0, p1: 3890.0, anchor: 3860.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
     engine.advance_shared_clips(&[paused]);
     assert!(pull(&sources[0], 4790.0, 4810.0) == [4800.0], "ahead of the cursor the looping clip is predicted");
 }
@@ -2477,7 +2625,7 @@ fn a_device_param_automation_rebind_keeps_its_ui_broadcast_alive() {
         sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
         paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
         observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
-        param_hub_sub: None, sample_hub_sub: None, broadcast_slots: Vec::new()
+        param_hub_sub: None, sample_hub_sub: None, sample_subs: Vec::new(), records: None, broadcast_slots: Vec::new(), groove_slots: Vec::new()
     };
     let entry_ptr = |engine: &Engine| (0..engine.broadcasts.len()).find_map(|index| {
         let entry = engine.broadcasts.entry(index).expect("entry");
@@ -2596,11 +2744,8 @@ fn a_suspended_lane_still_receives_its_modulation() {
     let path = [5u16];
     let mut graph = deep_automation_graph(&path);
     let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
-    let state = Rc::new(ModulatorState {
-        enabled: core::cell::Cell::new(true), bipolar: core::cell::Cell::new(false),
-        amount: core::cell::Cell::new(1.0), kind: ModulatorKind::Macro(MacroState::new()),
-        broadcast: RefCell::new(None), broadcast_active: Rc::new(core::cell::Cell::new(false))
-    });
+    let state = Rc::new(ModulatorState::of(ModulatorKind::Macro(MacroState::new())));
+    state.bipolar.set(false);
     let chain: ModulationChain = Rc::from(alloc::vec![BoundModulation {
         modulator: state, depth: Rc::new(core::cell::Cell::new(0.5)),
         depth_handle: None, enabled: Rc::new(core::cell::Cell::new(true))
@@ -2676,6 +2821,23 @@ fn every_transport_exit_drops_the_manual_control() {
     engine.is_recording = true;
     engine.stop_recording();
     assert!(!suspended(), "ending a recording drops it");
+}
+
+// #537: the UI sees the engine stop only a frame later, so a write in between still sends a suspension. The
+// stopped engine must refuse it, else the lane would ignore its curve through the whole next playback.
+#[test]
+fn a_suspension_reaching_the_stopped_engine_is_ignored() {
+    let mut engine = engine_with_devices();
+    let suspended = || !unsafe { crate::SUSPENDED_AUTOMATION.get() }.is_empty();
+    engine.play();
+    engine.stop();
+    engine.suspend_automation(TRACK);
+    assert!(!suspended(), "a write after stop leaves the curve in charge");
+    engine.play();
+    assert!(!suspended(), "and the next playback reads the curve");
+    engine.suspend_automation(TRACK);
+    assert!(suspended(), "a write while playing still takes over");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
 }
 
 #[test]
@@ -3176,7 +3338,7 @@ fn a_value_track_on_the_mute_field_installs_the_strip_mute_automation() {
     let muted_at_zero = {
         let mute_source = unit.strip_automation.mute.borrow();
         let mute_source = mute_source.as_ref().expect("a mute value track installs the strip mute automation source");
-        mute_source(0.0, true) >= 0.5
+        mute_source(0.0, true, 0) >= 0.5
     };
     assert!(muted_at_zero, "the mute curve (event 1.0) resolves to muted at position 0");
     engine.teardown_unit(unit);
@@ -3189,9 +3351,9 @@ fn update_positions_gate_on_transporting_blocks() {
     // positions, so automated parameters HOLD their last value and the UI broadcast stays still (BUG:
     // paused automation kept executing and animating the knobs).
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 500.0, p1: 505.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 500.0, p1: 505.12, anchor: 500.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     let playing = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(true, false, true, false),
-        p0: 500.0, p1: 505.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 500.0, p1: 505.12, anchor: 500.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     {
         let pull = unsafe { crate::PULL.get() };
         pull.clock_armed = true;
@@ -3219,7 +3381,7 @@ fn update_positions_gate_on_transporting_blocks() {
 #[test]
 fn a_paused_locate_opens_the_update_clock_for_one_quantum() {
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 503.0, p1: 508.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 503.0, p1: 508.12, anchor: 503.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     {
         let pull = unsafe { crate::PULL.get() };
         pull.clock_armed = true;
@@ -3295,7 +3457,7 @@ fn a_paused_locate_delivers_the_automated_value_at_the_new_song_position() {
     let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
     let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
-        p0: 503.0, p1: 508.12, s0: 0, s1: 128, bpm: 120.0}];
+        p0: 503.0, p1: 508.12, anchor: 503.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0}];
     {
         let pull = unsafe { crate::PULL.get() };
         pull.params = handles;
@@ -3606,7 +3768,7 @@ fn render_mix(engine: &mut Engine, unit: &AudioUnitBinding) -> (f32, f32) {
     }
     composite_of(unit).set_audio_source(dc);
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     for _ in 0..16 {
         engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
     }
@@ -3640,7 +3802,7 @@ fn render_mix_live(engine: &mut Engine, unit_uuid: Uuid) -> (f32, f32) {
         composite.mix_output.clone()
     };
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     for _ in 0..16 {
         engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
     }
@@ -3765,7 +3927,7 @@ fn frequency_sine_rms_ratio(engine: &mut Engine, unit: &AudioUnitBinding, freq: 
     let src = shared_audio_buffer();
     composite_of(unit).set_audio_source(src.clone());
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     let step = 2.0 * core::f32::consts::PI * freq / 48_000.0;
     let mut phase = 0.0f32;
     let (mut energy_in, mut energy_out) = (0.0f64, 0.0f64);
@@ -3801,7 +3963,7 @@ fn dragging_a_low_crossover_through_the_engine_stays_bounded() {
     let src = shared_audio_buffer();
     composite_of(&unit).set_audio_source(src.clone());
     let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
-        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+        p0: 0.0, p1: 1.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
     let mut seed = 0x9e37_79b9u32;
     let mut current = 200.0f32;
     let mut peak = 0.0f32;
@@ -5471,4 +5633,163 @@ fn a_sink_inside_an_effect_composite_entry_taps_into_the_bus() {
     edit(&mut engine, Update::Pointer {address: Address::of(COMP, vec![HOST_KEY]), old: Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])), new: None});
     assert!(sinks_of(&mut engine, UNIT).is_empty());
     assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 0, "no stale tap survives the composite teardown");
+}
+
+#[test]
+fn script_records_deliver_one_sorted_snapshot_per_collection_and_follow_edits() {
+    use crate::native_data_changed::{take, Delivery};
+    use crate::script_device::DATA_RESET;
+    use core::cell::Cell;
+    const DEV: Uuid = [50u8; 16];
+    const RECORD_A: Uuid = [51u8; 16];
+    const RECORD_B: Uuid = [52u8; 16];
+    const VALUE_A0: Uuid = [53u8; 16];
+    const VALUE_B0: Uuid = [54u8; 16];
+    const VALUE_B1: Uuid = [55u8; 16];
+    const RECORD_C: Uuid = [56u8; 16];
+    const VALUE_C0: Uuid = [57u8; 16];
+    let record = |uuid: Uuid, owner: Option<Uuid>, collection: i32, order: i32| graph_box(uuid, "ScriptRecordBox", &[
+        (1, FieldValue::Pointer(owner.map(|device| Address::of(device, vec![14])))),
+        (3, FieldValue::Int32(collection)), (4, FieldValue::Int32(order)), (5, FieldValue::Hook)
+    ]);
+    let value = |uuid: Uuid, record: Option<Uuid>, field: i32, number: f32| graph_box(uuid, "ScriptValueBox", &[
+        (1, FieldValue::Pointer(record.map(|owner| Address::of(owner, vec![5])))),
+        (3, FieldValue::Int32(field)), (4, FieldValue::Float32(number))
+    ]);
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(DEV, "WerkstattDeviceBox", &[(14, FieldValue::Hook)]),
+        record(RECORD_A, Some(DEV), 0, 1), record(RECORD_B, Some(DEV), 0, 0),
+        value(VALUE_A0, Some(RECORD_A), 0, 0.25),
+        value(VALUE_B0, Some(RECORD_B), 0, 0.5), value(VALUE_B1, Some(RECORD_B), 1, 1.0),
+        record(RECORD_C, None, 1, 0), value(VALUE_C0, None, 0, 7.0)
+    ]);
+    let mut reg = stub_device(DEVICE_KIND_AUDIO_EFFECT);
+    reg.record_collection_field = 14;
+    reg.data_changed_index = 1;
+    let signals = Rc::new(Cell::new(0));
+    let counter = signals.clone();
+    let mut binding = engine.bind_script_records(DEV, reg, 64, Rc::new(move || counter.set(counter.get() + 1)));
+    let delivery = |collection: u32, records: u32, fields: u32, values: Vec<f32>| Delivery {state_ptr: 64, collection, records, fields, values};
+    let reset = delivery(DATA_RESET, 0, 0, Vec::new());
+    let first = take();
+    assert_eq!(first.len(), 2, "a reset, then the one present collection");
+    assert_eq!(first[0], reset);
+    assert_eq!((first[1].collection, first[1].records, first[1].fields), (0, 2, 2));
+    assert_eq!(first[1].values[..3], [0.5, 1.0, 0.25], "sorted by order, record-major");
+    assert!(first[1].values[3].is_nan(), "a record without a value box for a field delivers NaN");
+    // a value edit: signal, then exactly one snapshot on flush, none on a second flush
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(VALUE_A0, vec![4]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(0.75)}],
+        &engine.registry).expect("value edit");
+    assert_eq!(signals.get(), 1, "a value edit raises the signal");
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    let edited = take();
+    assert_eq!(edited.len(), 2);
+    assert_eq!(edited[1].values[2], 0.75);
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    assert!(take().is_empty(), "a clean binding delivers nothing");
+    // a record joins (structural): delivered, and its own values are watched from then on
+    engine.graph.transaction(&[
+        Update::Pointer {address: Address::of(RECORD_C, vec![1]), old: None, new: Some(Address::of(DEV, vec![14]))},
+        Update::Pointer {address: Address::of(VALUE_C0, vec![1]), old: None, new: Some(Address::of(RECORD_C, vec![5]))}
+    ], &engine.registry).expect("record joins");
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    let joined = take();
+    assert_eq!(joined.len(), 3, "reset + both collections");
+    assert_eq!(joined[2], delivery(1, 1, 1, vec![7.0]));
+    let before = signals.get();
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(VALUE_C0, vec![4]), old: FieldValue::Float32(7.0), new: FieldValue::Float32(8.0)}],
+        &engine.registry).expect("new value edit");
+    assert!(signals.get() > before, "the joined record's value is watched after the re-subscribe");
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    assert_eq!(take()[2].values, vec![8.0]);
+    // teardown: no more signals
+    engine.teardown_script_records(binding);
+    let after_teardown = signals.get();
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(VALUE_C0, vec![4]), old: FieldValue::Float32(8.0), new: FieldValue::Float32(9.0)}],
+        &engine.registry).expect("edit after teardown");
+    assert_eq!(signals.get(), after_teardown, "a torn-down binding is silent");
+}
+
+#[test]
+fn script_buffers_deliver_their_floats_with_the_buffer_flag_and_follow_edits() {
+    use crate::native_data_changed::take;
+    use crate::script_device::{BUFFER_FLAG, DATA_RESET};
+    use core::cell::Cell;
+    const DEV: Uuid = [60u8; 16];
+    const BUFFER: Uuid = [61u8; 16];
+    const CHUNK_A: Uuid = [62u8; 16];
+    const CHUNK_B: Uuid = [63u8; 16];
+    let bytes = |values: &[f32]| FieldValue::Bytes(values.iter().flat_map(|value| value.to_le_bytes()).collect());
+    let chunk = |uuid: Uuid, index: i32, values: &[f32]| graph_box(uuid, "ScriptBufferChunkBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(BUFFER, vec![5])))), (2, FieldValue::Int32(index)), (3, bytes(values))
+    ]);
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(DEV, "WerkstattDeviceBox", &[(14, FieldValue::Hook), (15, FieldValue::Hook)]),
+        graph_box(BUFFER, "ScriptBufferBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(DEV, vec![15])))), (3, FieldValue::Int32(2)), (4, bytes(&[])), (5, FieldValue::Hook)
+        ]),
+        chunk(CHUNK_B, 1, &[0.75]),
+        chunk(CHUNK_A, 0, &[0.5, -1.0])
+    ]);
+    let mut reg = stub_device(DEVICE_KIND_AUDIO_EFFECT);
+    reg.record_collection_field = 14;
+    reg.buffer_collection_field = 15;
+    reg.data_changed_index = 1;
+    let signals = Rc::new(Cell::new(0));
+    let counter = signals.clone();
+    let mut binding = engine.bind_script_records(DEV, reg, 64, Rc::new(move || counter.set(counter.get() + 1)));
+    let first = take();
+    assert_eq!(first.len(), 2, "a reset, then the buffer (no records)");
+    assert_eq!(first[0].collection, DATA_RESET);
+    assert_eq!((first[1].collection, first[1].records, first[1].fields), (BUFFER_FLAG | 2, 3, 1));
+    assert_eq!(first[1].values, vec![0.5, -1.0, 0.75], "the chunks concatenated in index order");
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(CHUNK_B, vec![3]), old: bytes(&[0.75]), new: bytes(&[0.25])}],
+        &engine.registry).expect("chunk edit");
+    assert_eq!(signals.get(), 1, "a chunk edit raises the signal");
+    engine.flush_record_binding(DEV, reg, 64, &mut binding);
+    assert_eq!(take()[1].values, vec![0.5, -1.0, 0.25]);
+    engine.teardown_script_records(binding);
+}
+
+#[test]
+fn a_script_buffer_saved_as_one_blob_is_read_until_it_has_chunks() {
+    use crate::native_data_changed::take;
+    use crate::script_device::BUFFER_FLAG;
+    const DEV: Uuid = [70u8; 16];
+    const BUFFER: Uuid = [71u8; 16];
+    let bytes = |values: &[f32]| FieldValue::Bytes(values.iter().flat_map(|value| value.to_le_bytes()).collect());
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(DEV, "WerkstattDeviceBox", &[(14, FieldValue::Hook), (15, FieldValue::Hook)]),
+        graph_box(BUFFER, "ScriptBufferBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(DEV, vec![15])))), (3, FieldValue::Int32(0)),
+            (4, bytes(&[0.5, 0.25, -0.75])), (5, FieldValue::Hook)
+        ])
+    ]);
+    let mut reg = stub_device(DEVICE_KIND_AUDIO_EFFECT);
+    reg.record_collection_field = 14;
+    reg.buffer_collection_field = 15;
+    reg.data_changed_index = 1;
+    let binding = engine.bind_script_records(DEV, reg, 64, Rc::new(|| {}));
+    let delivered = take();
+    assert_eq!(delivered[1].collection, BUFFER_FLAG);
+    assert_eq!(delivered[1].values, vec![0.5, 0.25, -0.75], "the legacy blob is delivered");
+    engine.teardown_script_records(binding);
+}
+
+
+#[test]
+fn a_bytes_field_is_delivered_as_bytes_with_its_length() {
+    let deliveries = || core::mem::take(unsafe { crate::FIELD_DELIVERIES.get() });
+    deliveries();
+    let bytes = FieldValue::Bytes(vec![0, 1, 127, 128, 255]);
+    params::deliver_field_value(&bytes, 7, 0, 3);
+    let FieldValue::Bytes(inner) = &bytes else {unreachable!()};
+    assert_eq!(deliveries(), vec![(3, abi::FIELD_KIND_BYTES, inner.as_ptr() as u32, 5)]);
+    params::deliver_field_value(&FieldValue::Bytes(vec![]), 7, 0, 4);
+    let delivered = deliveries();
+    assert_eq!(delivered.len(), 1);
+    assert_eq!((delivered[0].0, delivered[0].1, delivered[0].3), (4, abi::FIELD_KIND_BYTES, 0), "an empty field is an empty slice");
 }

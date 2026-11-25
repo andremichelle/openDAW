@@ -3,6 +3,62 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.2](/compare/@opendaw/studio-forge-boxes@0.2.1...@opendaw/studio-forge-boxes@0.2.2) (2026-11-20)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+## [0.2.1](/compare/@opendaw/studio-forge-boxes@0.2.0...@opendaw/studio-forge-boxes@0.2.1) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+# [0.2.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.1.8...@opendaw/studio-forge-boxes@0.2.0) (2026-11-10)
+
+### Features
+
+- add nested audio group model, routing and duplication ([b2599ee](https://github.com/andremichelle/openDAW/commit/b2599ee4b00ddf73688235fcb7abf775d289b852))
+
+## [0.1.8](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.1.7...@opendaw/studio-forge-boxes@0.1.8) (2026-11-09)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+## [0.1.7](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.1.6...@opendaw/studio-forge-boxes@0.1.7) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+## [0.1.6](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.1.5...@opendaw/studio-forge-boxes@0.1.6) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+## [0.1.5](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.1.4...@opendaw/studio-forge-boxes@0.1.5) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+## [0.1.4](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.1.3...@opendaw/studio-forge-boxes@0.1.4) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+## [0.1.3](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.1.2...@opendaw/studio-forge-boxes@0.1.3) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+## [0.1.2](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.1.1...@opendaw/studio-forge-boxes@0.1.2) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+## [0.1.1](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.1.0...@opendaw/studio-forge-boxes@0.1.1) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/studio-forge-boxes
+
+# [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.0.112...@opendaw/studio-forge-boxes@0.1.0) (2026-10-19)
+
+### Bug Fixes
+
+- preserve clip layout and add smooth horizontal scrolling ([f302d1d](https://github.com/andremichelle/openDAW/commit/f302d1d97849379043b468cb11e5ae5c12f4b0e9))
+
+### Features
+
+- resize timeline tracks from the control header ([acc7f24](https://github.com/andremichelle/openDAW/commit/acc7f2442e5421611e06749d8b84f97c28c60eff))
+
 ## [0.0.112](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-forge-boxes@0.0.111...@opendaw/studio-forge-boxes@0.0.112) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/studio-forge-boxes

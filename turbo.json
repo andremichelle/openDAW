@@ -33,6 +33,18 @@
         "dist/**"
       ]
     },
+    "@opendaw/studio-matchering#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/crates/matchering/**"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
     "@opendaw/app-studio#build": {
       "dependsOn": [
         "^build"

@@ -1,0 +1,182 @@
+# MIDI Sustain (issue #498)
+
+A sustain pedal on a MIDI keyboard should hold notes after the keys are released, like on a piano, while
+playing live, while recording and on playback.
+
+## How MIDI input works today
+
+1. `CaptureMidi` listens to the armed track's MIDI device and channel and forwards note-on and note-off only. Every
+   other message, CC64 (sustain) included, is dropped there.
+2. Live notes reach the engine as raw notes (`engine.noteSignal`). The Rust note sequencer starts them with an
+   infinite duration and ends them with a `NoteComplete` when the key's gate drops (`note_sequencer.rs`, RAW notes).
+3. MIDI effects (Velocity, Pitch, Arpeggio, Zeitgeist, Spielwerk) sit between the sequencer and the instrument and
+   see NOTE_ON and NOTE_OFF records. Instruments end a voice on NOTE_OFF.
+4. `RecordMidi` turns note-on and note-off pairs into notes with a duration. No CC is recorded, note regions have no
+   controller lanes.
+5. MIDI learn maps any CC onto any automatable parameter. It runs on the main thread as a box edit, coalesced per
+   animation frame, and `RecordAutomation` records such parameter moves while recording.
+6. No instrument has a sustain parameter, so MIDI learn has nothing to map CC64 to.
+
+## What sustain has to do
+
+1. While the pedal is down, a released key keeps sounding. Pedal up releases every held note at that moment.
+2. Pressing a held key again restrikes it: the held voice ends, a new one starts (no stacking of the same pitch).
+3. Transport stop, panic and a changed capture device release everything held.
+4. A recording plays back the way it sounded.
+
+## Solutions
+
+### A. Hold in the capture, bake it into the recording (TypeScript only)
+
+`CaptureMidi` reads CC64 (value >= 64 is down) on its device and channel and holds note-offs while the pedal is down,
+before they reach the engine and the recorder. Pedal up sends the held note-offs. Because the recorder gets the late
+note-offs too, recorded notes come out as long as they sounded.
+
+1. Pro: small, no engine, schema or ABI change. Works for every instrument, MIDI effects included.
+2. Pro: playback matches the performance, the sustain lives in the note lengths.
+3. Con: the pedal is gone after recording. You cannot change the sustain afterwards, only the note lengths, and the
+   piano roll shows long overlapping notes instead of what the hands played.
+4. Con: only live input. Notes drawn in the piano roll cannot be sustained.
+
+### B. A Sustain MIDI effect device
+
+A new stock MIDI effect with one parameter, Hold (on or off, automatable). While Hold is on it keeps NOTE_OFF records
+back and lets them through when Hold goes off. You put it on the track and MIDI-learn the pedal onto Hold.
+
+1. Pro: everything else exists already. MIDI learn takes the pedal, `RecordAutomation` records it as an automation
+   lane, playback sustains through the automation, and the pedal can be edited like any automation.
+2. Pro: works for drawn notes and for every instrument, and it is visible where it acts in the chain (before or
+   after an arpeggiator makes a difference).
+3. Con: setup per track, add the device and learn CC64, nothing happens on its own.
+4. Con: the pedal travels on another path than the notes. MIDI learn is a main-thread box edit coalesced per frame,
+   notes are engine signals. A quick pedal down and key up can arrive in the wrong order and the note is released.
+5. Con: a full device: schema, box, adapter, Rust crate, editor, factory entry, manual.
+
+### C. Built-in sustain per instrument track
+
+Every instrument track gets a sustain state, without a device.
+
+1. Live: `CaptureMidi` forwards CC64 as a sustain signal next to the note signals, on the same path, so the order
+   stays intact. The note sequencer holds the `NoteComplete` of released raw notes while sustain is down.
+2. Timeline: an automatable Sustain parameter on the track (a new field on the audio unit). The sequencer holds
+   sequenced notes too while it is on.
+3. Recording: the capture writes the pedal into the Sustain automation of the recorded track, notes keep the
+   lengths the hands played.
+4. Pro: plug in the pedal and it works, live, recorded and on playback, nothing to set up. The pedal is an editable
+   automation lane under the notes, the way DAWs show CC64.
+5. Pro: one ordered path for live input, no race.
+6. Con: the biggest change: engine (sequencer, a new signal), schema field with a default (old projects unchanged),
+   adapter and automation lane, capture and recording.
+7. Con: sustain acts before the MIDI effects. Holding after an arpeggiator would need B.
+8. Can ship in two steps: live plus baked recording first, the automation lane second.
+
+### D. Hand CC64 to instruments that understand it
+
+WebCLAP plugins and soundfonts have sustain of their own (half pedal, sostenuto, damper behaviour). The pedal could
+reach them as a MIDI controller (CLAP MIDI dialect) instead of holding note-offs on the host side.
+
+1. Pro: the most faithful sound for plugins that model a real damper.
+2. Con: only some instruments, the stock devices would still need A, B or C.
+3. Fits as an addition later: a track whose instrument handles sustain itself skips the host-side hold.
+
+### E. A community Spielwerk script
+
+Not possible today. When a source note ends, the Spielwerk bridge ends every note the script produced from it
+(`sourceToOutput` in `script-spielwerk.ts`), so a script cannot hold a note past its key. It would need an API change
+that lets a script detach an output from its source.
+
+### F. A sustain lane per instrument track with assignable targets
+
+A pedal lane without regions, like the tempo track (`TempoTrack.events` points to a `ValueEventCollectionBox`), one
+per instrument audio unit, plus a target that decides what the pedal does.
+
+How other DAWs do it: Logic, Ableton, Cubase, Bitwig and Reaper store CC64 as controller data inside the MIDI region
+or clip, and the instrument sustains, not the host. A synth that ignores CC64 does not sustain. Region data moves,
+copies and loops with the phrase, that is the reason for the convention.
+
+1. Lane: a new field on the audio unit pointing to a `ValueEventCollectionBox`, values 0 to 1, stepped. Continuous so
+   half pedal survives for targets that use it. Absent by default, old projects unchanged.
+2. Recording: the capture writes the (polarity corrected) pedal into the lane of the recorded track, notes keep the
+   lengths the hands played. Editable like tempo automation.
+3. Region edits: moving, copying and deleting note regions moves, copies and deletes the pedal events in their range
+   ("automation follows regions" in Logic, "automation follows events" in Cubase). Closes the main gap against region
+   data. Looped regions still need the pedal drawn across every repeat.
+4. Target "Hold" (default): the note sequencer holds note-offs while the pedal is down, live and on playback, for every
+   instrument. Same path as C, live pedal travels with the note signals so the order stays intact.
+5. Target "Parameter": any automatable parameter of the track. Released is the parameter's base value (its own
+   automation keeps working), pressed is a custom value, for example a long ADSR release.
+6. Target "Forward": CC64 goes to the WebCLAP plugin or soundfont as is (D).
+7. Pro: plug in and it works (Hold), one lane to edit, no setup, free assignment for sound design.
+8. Con: engine (sequencer hold, a sustain signal, a parameter switch), schema (lane field, target), editor lane,
+   capture and recording, region edits that carry the lane.
+9. Con: sustain acts before the MIDI effects, like C.
+
+Open for F:
+
+1. Does a parameter change reach voices already in release? Check every stock instrument's envelope. It decides
+   whether "Parameter" on the release time is a real alternative to "Hold".
+2. One target per track or several (Hold plus a parameter)?
+3. Where does the lane show: under the track like tempo, or as a lane of the track's automation list?
+
+## Edge cases for any solution
+
+1. Restrike of a held pitch, see above.
+2. Several capture devices on one track, and channel filters: the pedal of device X only holds notes of device X.
+3. Transport stop, loop wrap and locate release held notes, as the sequencer already does for retained notes.
+4. Composite layers and Playfield: a Composite passes the sustain to all layers, Playfield pads ignore it (one-shots).
+5. Live rooms: the sustain signal has to travel like the note signals.
+6. Offline render and freeze must match live playback (only for B and C, A bakes it).
+7. Half pedal: CC64 is continuous, all host-side solutions treat >= 64 as down.
+8. Inverted pedal: a normally closed pedal on a keyboard that expects normally open sends 127 at rest and 0 when
+   pressed (AKAI MPK mini with a switchable pedal: inverted in both switch positions and after a power cycle, the same
+   in Logic). Many keyboards detect polarity at power up, some not or wrongly, see the links below.
+
+## Sustain polarity per input device
+
+A per-device setting "Sustain polarity" next to the MIDI input device preferences, with three modes:
+
+1. **Auto (default).** MIDI cannot ask a keyboard for a controller's current value, CC64 only arrives on change. The
+   first CC64 of a device is taken as a press: if it says up (< 64), the device is inverted. Decided once per device
+   and remembered, a later message never flips it.
+2. **As is.** CC64 as sent.
+3. **Inverted.** CC64 read as `127 - value`.
+
+The capture applies it before any solution sees CC64, so live hold, recording and the automation lane all get the
+corrected pedal.
+
+1. Applies to A, B (MIDI learn sees the corrected value) and C alike, and to D (the forwarded CC64 is inverted too).
+2. Stored per device id in the preferences, not in the project, a project opened on another setup must not inherit it.
+3. Auto guesses wrong when the pedal is held while the device connects (the first message is the release) or when a
+   keyboard sends all its controller values on power up (the first message is the resting state). As is and Inverted
+   override it. The detected polarity is shown next to the setting.
+4. The test page `opendaw.studio/midi-test.html` has the same three modes and shows what Auto detected, users can
+   confirm it fixes their pedal before reporting.
+5. Few hosts have it: Logic needs a Transformer in the Environment, Pianoteq reverses the CC64 range, Native
+   Instruments Kontrol Mk3 users report re-setting normal/invert each session.
+
+References:
+
+1. [Arturia: sustain pedal acts reversely](https://support.arturia.com/hc/en-us/articles/4405741267602-My-sustain-pedal-acts-reversely-How-to-invert-it)
+2. [Akai MPC Key 61: pedal working in reverse](https://support.akaipro.com/en/support/solutions/articles/69000859246-akai-pro-mpc-key-61-my-pedal-is-working-in-reverse)
+3. [NI k61 mk3: always reverse polarity with 3 pedals](https://community.native-instruments.com/discussion/40104/k61-mk3-sustain-pedal-always-reverse-polarity-3-different-pedals)
+4. [Yamaha checks pedal polarity at boot (PSR Tutorial forum)](https://www.psrtutorial.com/forum/index.php/topic,66436.msg502841.html)
+5. [Cantabile: polarity flips from a half seated plug](https://community.cantabilesoftware.com/t/sustain-pedal-changing-polarity-and-back-mystery/8773)
+6. [Pianoteq: reverse the CC64 range](https://forum.modartt.com/viewtopic.php?id=5065)
+
+## Test page
+
+`packages/app/studio/public/midi-test.html`, deployed with the studio as `/midi-test.html`. Web MIDI only, no studio
+code: piano roll with notes held by the pedal, lanes for sustain, pitch bend, mod wheel and aftertouch, all CCs, a raw
+message log, the sustain polarity modes and "Copy report" for bug reports. Separates "the studio does it wrong" from "the device sends it so".
+
+## Recommendation for the discussion
+
+F (proposed 2026-10-26). It takes C's ordered live path and Hold, stores the pedal as an editable lane like tempo,
+carries it with region edits, and adds Parameter and Forward targets (D included). A, B and C are superseded.
+
+Order:
+
+1. Polarity setting and capture of CC64 (live Hold only, no lane).
+2. The lane, recording into it and playback Hold.
+3. Region edits carry the lane.
+4. Parameter and Forward targets.

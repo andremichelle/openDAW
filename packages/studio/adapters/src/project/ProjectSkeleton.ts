@@ -45,12 +45,13 @@ export namespace ProjectSkeleton {
         console.debug(`New Project created on ${isoString}`)
         boxGraph.beginTransaction()
         const grooveShuffleBox = GrooveShuffleBox.create(boxGraph, UUID.generate(), box => {
-            box.label.setValue("Groove Shuffle")
+            box.label.setValue("Global Shuffle")
         })
         const rootBox = RootBox.create(boxGraph, UUID.generate(), box => {
             box.groove.refer(grooveShuffleBox)
             box.created.setValue(isoString)
         })
+        grooveShuffleBox.collection.refer(rootBox.grooves)
         const primaryAudioBus = AudioBusBox.create(boxGraph, UUID.generate(), box => {
             box.collection.refer(rootBox.audioBusses)
             box.label.setValue("Output")

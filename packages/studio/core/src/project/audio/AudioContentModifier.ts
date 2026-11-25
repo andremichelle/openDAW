@@ -5,7 +5,6 @@ import {
     isInstanceOf,
     isNotNull,
     Option,
-    quantizeRound,
     RuntimeNotifier,
     UUID
 } from "@opendaw/lib-std"
@@ -19,7 +18,14 @@ import {
     TransientMarkerBox,
     WarpMarkerBox
 } from "@opendaw/studio-boxes"
-import {AudioContentBoxAdapter, AudioPlayMode, AudioRegionBoxAdapter, WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    AudioContentBoxAdapter,
+    AudioPlayMode,
+    AudioRegionBoxAdapter,
+    SampleLength,
+    SampleMetaData,
+    WarpMarkerBoxAdapter
+} from "@opendaw/studio-adapters"
 import {AudioContentHelpers} from "./AudioContentHelpers"
 import {Workers} from "../../Workers"
 import {Pointers} from "@opendaw/studio-enums"
@@ -138,16 +144,10 @@ export namespace AudioContentModifier {
         ? adapter.loopDuration
         : adapter.duration
 
-    // The sample's own musical length, quantised exactly as `AudioContentFactory` does at creation time.
-    const musicalPulses = (seconds: seconds, bpm: number): ppqn => {
-        const pulses = PPQN.secondsToPulses(seconds, bpm)
-        return pulses >= PPQN.SemiQuaver ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses
-    }
-
     // Read from the loader already holding this sample rather than from storage, so the conversion stays one
     // synchronous transaction with no window in which the region can be deleted underneath it.
-    const sampleBpm = (adapter: AudioContentBoxAdapter): number =>
-        adapter.optFile.mapOr(file => file.getOrCreateLoader().meta.mapOr(({bpm}) => bpm, 0.0), 0.0)
+    const sampleMeta = (adapter: AudioContentBoxAdapter): Option<SampleMetaData> =>
+        adapter.optFile.flatMap(file => file.getOrCreateLoader().meta)
 
     // Growing a region must never push it into its neighbour: that is how the "regions overlap" family starts.
     // The span is clamped to the gap instead of clipping whatever sits there, which the user never asked for.
@@ -179,11 +179,11 @@ export namespace AudioContentModifier {
         none: () => {
             const audible = audibleSeconds(adapter)
             const seconds = audible > 0.0 ? audible : contentSeconds(adapter)
-            const bpm = sampleBpm(adapter)
             // A known tempo defines the mapping outright: it is the one statement about how many bars this
             // audio IS, and it holds however the region has been sized since. Only when the sample has no
             // tempo does the region's own span have to stand in.
-            const measured = bpm > 0.0 ? musicalPulses(seconds, bpm) : 0
+            const measured = sampleMeta(adapter).mapOr(({bpm, origin}) =>
+                bpm > 0.0 ? SampleLength.musicalPulses(seconds, bpm, origin) : 0, 0)
             const pulses = measured > 0 ? measured : contentPulses(adapter)
             AudioContentHelpers.addDefaultWarpMarkers(boxGraph, newBox, pulses, seconds)
             // Resizing is the separate question. A region still covering its audio has no length worth

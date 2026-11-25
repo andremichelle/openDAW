@@ -7,7 +7,7 @@ describe("Devices", () => {
     it("adds every midi effect with defaults", () => {
         const {project} = createFixture()
         const unit = project.addInstrumentUnit("Vaporisateur")
-        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "Velocity", "Zeitgeist", "Spielwerk"]
+        const keys: ReadonlyArray<keyof MIDIEffects> = ["Arpeggio", "Pitch", "NoteFilter", "ScaleMatrix", "Velocity", "Zeitgeist", "Spielwerk"]
         keys.forEach((key, index) => {
             const effect = unit.addMIDIEffect(key)
             expect(effect.key).toBe(key)
@@ -17,6 +17,22 @@ describe("Devices", () => {
         })
         expect(unit.midiEffects.map(effect => effect.key)).toEqual(keys)
         expect(() => unit.addMIDIEffect("Delay" as any)).toThrow(RangeError)
+    })
+
+    it("edits the Scale Matrix grid", () => {
+        const {project} = createFixture()
+        const matrix = project.addInstrumentUnit("Vaporisateur").addMIDIEffect("ScaleMatrix")
+        expect([matrix.root, matrix.scale, matrix.follow]).toEqual([0, 0, false])
+        expect(matrix.custom).toEqual(new Array(12).fill(0))
+        matrix.scale = 15
+        matrix.follow = true
+        matrix.setCustom([0, -1, 0, 1, 0, 0, 12])
+        expect(matrix.custom.slice(0, 7)).toEqual([0, -1, 0, 1, 0, 0, 12])
+        matrix.setCustom([20])
+        expect(matrix.custom[0]).toBe(12)
+        expect(() => matrix.setCustom(new Array(13).fill(0))).toThrow(RangeError)
+        matrix.root = 14
+        expect(matrix.root).toBe(11)
     })
 
     it("adds every audio effect with defaults", () => {
@@ -112,9 +128,34 @@ describe("Devices", () => {
         expect(pitch.octaves).toBe(-7)
         const arp = unit.addMIDIEffect("Arpeggio", {mode: 1, rate: 3})
         expect(arp.mode).toBe(1)
-        expect(() => arp.mode = 3 as any).toThrow(RangeError)
+        arp.mode = 17
+        expect(arp.mode).toBe(17)
+        expect(() => arp.mode = 18).toThrow(RangeError)
         arp.octaves = 0
         expect(arp.octaves).toBe(1)
+        const arpFull = unit.addMIDIEffect("Arpeggio", {order: 1, hold: true, retrigger: 2, offset: 3, seed: 4711, patternLength: 8})
+        expect([arpFull.order, arpFull.hold, arpFull.retrigger, arpFull.offset, arpFull.seed, arpFull.patternLength])
+            .toEqual([1, true, 2, 3, 4711, 8])
+        expect(arpFull.steps.length).toBe(64)
+        expect(arpFull.steps[0]).toEqual({kind: 0, velocity: 100, gate: 100, transpose: 0, octave: 0, chance: 100, ratchet: 1})
+        arpFull.steps[5].kind = 2
+        arpFull.steps[5].ratchet = 7
+        arpFull.steps[5].transpose = -12
+        expect(arpFull.steps[5].kind).toBe(2)
+        expect(arpFull.steps[5].ratchet).toBe(7)
+        expect(arpFull.steps[5].transpose).toBe(-12)
+        expect(() => arpFull.steps[5].kind = 4).toThrow(RangeError)
+        arpFull.steps[5].ratchet = 8
+        expect(arpFull.steps[5].ratchet).toBe(7)
+        arpFull.patternLength = 65
+        expect(arpFull.patternLength).toBe(64)
+        arpFull.offset = 16
+        expect(arpFull.offset).toBe(15)
+        expect(() => arpFull.retrigger = 4).toThrow(RangeError)
+        const arpSteps = unit.addMIDIEffect("Arpeggio", {steps: [{kind: 3}, {velocity: 40, gate: 150}]})
+        expect(arpSteps.steps[0].kind).toBe(3)
+        expect(arpSteps.steps[1].velocity).toBe(40)
+        expect(arpSteps.steps[1].gate).toBe(150)
         const zeitgeist = unit.addMIDIEffect("Zeitgeist")
         expect(zeitgeist.groove.duration).toBe(480)
         zeitgeist.groove.amount = 0.3
@@ -318,7 +359,6 @@ describe("Devices", () => {
         expect(deep.composite).toBe(inner.instrument)
         expect(deep.instrument.audioUnit).toBe(unit)
         expect(() => composite.addLayer("Tape" as "Nano")).toThrow()
-        expect(() => composite.addLayer("MIDIOutput" as "Nano")).toThrow()
         expect(composite.layers.length).toBe(3)
         bass.remove()
         expect(composite.layers).toEqual([pad, inner])

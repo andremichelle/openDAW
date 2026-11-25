@@ -139,6 +139,62 @@ describe("Project", () => {
         expect(project.signatureTrack.events.length).toBe(0)
     })
 
+    it("manages the key and key changes", () => {
+        const {project} = createFixture()
+        const {keyTrack} = project
+        const major = 0b101010110101, minor = 0b010110101101
+        expect(keyTrack.keyAt(0)).toEqual({root: 0, scale: major})
+        keyTrack.root = 2
+        expect(keyTrack.keyAt(PPQN.Bar)).toEqual({root: 2, scale: major})
+        const change = keyTrack.addEvent({position: PPQN.Bar * 4})
+        expect(change.root).toBe(2)
+        change.root = 9
+        change.scale = minor
+        expect(keyTrack.keyAt(PPQN.Bar * 3)).toEqual({root: 2, scale: major})
+        expect(keyTrack.keyAt(PPQN.Bar * 4)).toEqual({root: 9, scale: minor})
+        expect(() => keyTrack.addEvent({position: PPQN.Bar * 4})).toThrow(RangeError)
+        keyTrack.enabled = false
+        expect(keyTrack.keyAt(PPQN.Bar * 4)).toEqual({root: 2, scale: major})
+        keyTrack.enabled = true
+        change.root = 20
+        expect(change.root).toBe(11)
+        expect(() => {change.scale = 0}).not.toThrow()
+        expect(change.scale).toBe(1)
+        keyTrack.clearEvents()
+        expect(keyTrack.events.length).toBe(0)
+    })
+
+    it("manages chords that follow the key", () => {
+        const {project} = createFixture()
+        const {chordTrack, keyTrack} = project
+        const first = chordTrack.addEvent()
+        expect([first.position, first.duration, first.degree]).toEqual([0, PPQN.Bar, 1])
+        const fifth = chordTrack.addEvent({position: PPQN.Bar, degree: 5, notes: 4})
+        expect(chordTrack.chordAt(0)).toEqual({root: 0, notes: [0, 4, 7], name: "C"})
+        expect(chordTrack.chordAt(PPQN.Bar)).toEqual({root: 7, notes: [0, 4, 7, 10], name: "G7"})
+        expect(chordTrack.chordAt(PPQN.Bar * 2)).toBeNull()
+        keyTrack.addEvent({position: PPQN.Bar, root: 5})
+        expect(chordTrack.chordAt(PPQN.Bar)?.name).toBe("C7")
+        fifth.inversion = 1
+        expect(chordTrack.chordAt(PPQN.Bar)?.name).toBe("C7/E")
+        const cover = chordTrack.addEvent({position: PPQN.Bar / 2, duration: PPQN.Bar, degree: 6})
+        expect(first.duration).toBe(PPQN.Bar / 2)
+        expect(fifth.position).toBe(PPQN.Bar * 3 / 2)
+        expect(fifth.duration).toBe(PPQN.Bar / 2)
+        chordTrack.addEvent({position: 0, duration: PPQN.Bar * 2})
+        expect(first.attached || cover.attached || fifth.attached).toBe(false)
+        expect(chordTrack.events.length).toBe(1)
+        chordTrack.addEvent({position: PPQN.Bar / 2, duration: PPQN.Bar / 2, degree: 4})
+        expect(chordTrack.events.map(({position, duration, degree}) => [position, duration, degree]))
+            .toEqual([[0, PPQN.Bar / 2, 1], [PPQN.Bar / 2, PPQN.Bar / 2, 4], [PPQN.Bar, PPQN.Bar, 1]])
+        expect(chordTrack.chordAt(PPQN.Bar * 1.5)?.name).toBe("F")
+        chordTrack.enabled = false
+        expect(chordTrack.chordAt(0)).toBeNull()
+        expect(() => chordTrack.addEvent({duration: 0})).toThrow(RangeError)
+        chordTrack.clearEvents()
+        expect(chordTrack.events.length).toBe(0)
+    })
+
     it("opens in the studio and validates", () => {
         const {project, host} = createFixture()
         project.addInstrumentUnit("Vaporisateur")

@@ -6,6 +6,7 @@ export class MIDISender {
     readonly #port: MessagePort
     readonly #indices: Uint32Array
     readonly #ring: Uint32Array
+    readonly #times: Float64Array
     readonly #ringMask: int
 
     readonly #deviceIdToNum = new Map<string, number>()
@@ -15,9 +16,11 @@ export class MIDISender {
         this.#port = port
         this.#indices = new Uint32Array(sab, 0, 2)
         this.#ring = new Uint32Array(sab, 8)
-        this.#ringMask = (this.#ring.length >> 1) - 1
+        this.#times = new Float64Array(sab, 8)
+        this.#ringMask = this.#times.length / 2 - 1
     }
 
+    // timeMs is the context time in ms at which the message is due
     send(deviceId: string, data: Uint8Array, timeMs: number): boolean {
         let deviceNum = this.#deviceIdToNum.get(deviceId)
         if (isUndefined(deviceNum)) {
@@ -43,10 +46,8 @@ export class MIDISender {
         const data1 = data[1] ?? 0
         const data2 = data[2] ?? 0
         const packed1 = (length << 30) | (deviceNum << 24) | (status << 16) | (data1 << 8) | data2
-        const packed2 = timeMs | 0
-        const offset = writeIdx << 1
-        this.#ring[offset] = packed1
-        this.#ring[offset + 1] = packed2
+        this.#ring[writeIdx << 2] = packed1
+        this.#times[(writeIdx << 1) + 1] = timeMs
         Atomics.store(this.#indices, 0, nextIdx)
         this.#port.postMessage(null) // signals the MIDIReceiver to read messages from the ring buffer
         return true

@@ -1,4 +1,5 @@
 @use "@/colors"
+@use "@/mixins"
 
 component
   flex: 1 0 0
@@ -19,16 +20,21 @@ component
       width: max-content
       padding: 0.5em
       display: grid
-      grid-template-rows: auto auto auto auto 40px 1fr auto
+      grid-template-rows: var(--group-rail-height, 0px) auto auto auto auto 40px 1fr auto
       grid-auto-flow: column dense
       justify-content: start
-      row-gap: 4px
+      --mixer-row-gap: 4px
+      row-gap: var(--mixer-row-gap)
       column-gap: 8px
+
+      > [data-unit]
+        grid-row: 2 / 9
 
       > div.headers
         display: grid
         grid-template-rows: subgrid
-        grid-row: span 7
+        grid-row: 2 / 9
+        grid-column: 1
         padding: 0 0.5em 0.5em 1em
         border-radius: 0.125em
         background-color: rgba(white, 0.01)
@@ -40,3 +46,32 @@ component
           justify-content: right
           color: rgba(white, 0.4)
           pointer-events: none
+  [data-unit].group-drop-inside
+    position: relative
+
+    &:after
+      content: ""
+      position: absolute
+      inset: 0
+      @include mixins.drop-corners
+      pointer-events: none
+      z-index: 7
+
+  [data-unit].group-drop-before, [data-unit].group-drop-after
+    position: relative
+
+    &:after
+      content: ""
+      position: absolute
+      top: calc(-1 * var(--group-rail-height, 0px) + var(--drop-indent, 0px) - var(--mixer-row-gap))
+      bottom: 0
+      width: 2px
+      background: var(--color-blue)
+      pointer-events: none
+      z-index: 7
+
+  [data-unit].group-drop-before:after
+    left: -5px
+
+  [data-unit].group-drop-after:after
+    right: -5px

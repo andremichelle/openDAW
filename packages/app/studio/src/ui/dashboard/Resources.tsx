@@ -13,6 +13,7 @@ import {StudioService} from "@/service/StudioService"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Colors} from "@opendaw/studio-enums"
 import {DemoProjectsList} from "@/ui/dashboard/DemoProjectsList"
+import {WclapUpdateNotice} from "@/ui/dashboard/WclapUpdateNotice"
 
 const className = Html.adoptStyleSheet(css, "Resources")
 
@@ -37,7 +38,10 @@ export const Resources = ({lifecycle, service}: Construct) => {
                             {value: Scope.Demos, element: (<h3>Demos</h3>)},
                             {value: Scope.Samples, element: (<h3>Samples</h3>)},
                             {value: Scope.Soundfonts, element: (<h3>Soundfonts</h3>)},
-                            {value: Scope.WebClap, element: (<h3>WebCLAP</h3>)}
+                            {value: Scope.WebClap, element: (
+                                <h3 className="webclap">WebCLAP<WclapUpdateNotice
+                                    lifecycle={lifecycle} service={service}/></h3>
+                                )}
                         ]}/>
             <div className="content" onInit={element => {
                 const scopeLifeCycle = lifecycle.own(new Terminator())

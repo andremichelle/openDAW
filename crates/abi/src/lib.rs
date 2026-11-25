@@ -131,6 +131,8 @@ impl BlockFlags {
 /// `f64`s so `p0`/`p1` stay 8-aligned (no implicit padding mid-struct); `s0`/`s1` are sample indices as
 /// `u32` (the host casts to `usize` to slice). A device pulls each block's events with
 /// `pull_events(p0, p1, flags, ...)` and may honour `[s0, s1)` for sub-block timing or ignore it.
+/// `anchor` is the pulse the transport counts this block's frames from and `anchor_frame` its frame in the
+/// same coordinates as `s0`, so `dsp::ppqn::frame_at` places a pulse exactly (#536).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Block {
@@ -138,6 +140,8 @@ pub struct Block {
     pub flags: BlockFlags,
     pub p0: f64,
     pub p1: f64,
+    pub anchor: f64,
+    pub anchor_frame: i64,
     pub s0: u32,
     pub s1: u32,
     pub bpm: f32
@@ -152,6 +156,7 @@ pub struct Block {
 extern "C" {
     fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32;
     fn host_pulse_to_offset(pulse: f64) -> u32;
+    fn host_block_at(pulse: f64, out_ptr: u32) -> u32;
     fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32;
     fn host_bind_broadcast(path_ptr: u32, path_len: u32, len: u32, package_type: u32) -> u32;
     fn host_broadcast_ptr(id: u32) -> u32;
@@ -168,6 +173,13 @@ extern "C" {
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
     fn host_base_frequency() -> f32;
+    fn host_bar_at(pulse: f64, out_ptr: u32);
+    fn host_harmony_at(pulse: f64, out_ptr: u32);
+    fn host_observe_groove(path_ptr: u32, path_len: u32) -> u32;
+    fn host_groove_warp(slot: u32, pulse: f64) -> f64;
+    fn host_groove_unwarp(slot: u32, pulse: f64) -> f64;
+    fn host_loop_area(out_ptr: u32) -> u32;
+    fn host_set_latency(frames: u32);
     // NAM BRIDGE (NeuralAmp only). JS closures the loader binds into `env` (script-bridge style): the DSP is
     // the `@opendaw/nam-wasm` Emscripten module (NeuralAmpModelerCore) instantiated NEXT TO the engine in the
     // worklet; the bridge copies each chunk between the two memories. See the `nam_*` wrappers below.
@@ -187,10 +199,15 @@ extern "C" {
                           bpm: f32, position: f64, flags: u32) -> u32;
     fn host_wclap_input(handle: u32, index: u32, left_ptr: u32, right_ptr: u32, frames: u32);
     fn host_wclap_note(handle: u32, on: u32, key: u32, velocity: f32);
+    fn host_wclap_process_notes(handle: u32, serial: u32, in_ptr: u32, in_count: u32, out_ptr: u32, out_max: u32,
+                                frames: u32, bpm: f32, position: f64, flags: u32) -> i32;
     fn host_wclap_param(handle: u32, clap_param_id: u32, kind: u32, value: f32, modulation: f32);
     fn host_wclap_state(handle: u32, base64_ptr: u32, base64_len: u32);
+    fn host_wclap_state_bytes(handle: u32, ptr: u32, len: u32);
     fn host_wclap_reset(handle: u32);
+    fn host_wclap_latency(handle: u32) -> u32;
     fn host_wclap_release(handle: u32);
+    fn host_wclap_sample(handle: u32, key: u32, sample_handle: u32, present: u32);
     // SCRIPT BRIDGE (Werkstatt / Apparat / Spielwerk only). `host_self_uuid` is an engine export like the rest;
     // the `host_script_*` family are JS closures the loader binds into `env` (see the `script_*` wrappers below).
     fn host_self_uuid(out16_ptr: u32);
@@ -204,10 +221,14 @@ extern "C" {
     fn host_script_sample(handle: u32, index: u32, sample_handle: u32, present: u32);
     fn host_script_notes(handle: u32, in_ptr: u32, in_count: u32, out_ptr: u32, out_max: u32,
                          from: f64, to: f64, bpm: f32, flags: u32, s0: u32, s1: u32) -> u32;
+    fn host_script_release_notes(handle: u32, out_ptr: u32, out_max: u32, position: f64) -> u32;
     // Release the bridge (its Processor instance + limiter + runtime) when THIS device's instance dies (a
     // genuine removal, never a chain-edit survivor). Without this every rebind orphaned a bridge (no uuid
     // dedup on create either — see the JS side).
     fn host_script_release(handle: u32);
+    fn host_script_latency(handle: u32) -> u32;
+    // WASM CONTRACT: one `@collection` snapshot (f32 record-major, NaN = no value box); collection u32::MAX resets all
+    fn host_script_data(handle: u32, collection: u32, ptr: u32, records: u32, fields: u32);
     // PANIC deposit: copies a device panic's message into the ENGINE's readable panic buffer (the engine
     // export `host_panic`), so the worklet can name the trap after catching the RuntimeError.
     fn host_panic(msg_ptr: u32, msg_len: u32);
@@ -249,6 +270,20 @@ pub fn pull_events(from: f64, to: f64, flags: u32, out: &mut [EventRecord]) -> u
     { let _ = (from, to, flags, out.len()); 0 }
 }
 
+/// The block of the current quantum holding `pulse`, with the quantum's serial (never 0), so a device pulled
+/// more than once per block tells a repeat from a new quantum. Native stub returns `None`.
+#[inline]
+pub fn block_at(pulse: f64) -> Option<(Block, u32)> {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 0, bpm: 0.0};
+        let serial = unsafe { host_block_at(pulse, &mut block as *mut Block as u32) };
+        if serial == 0 { None } else { Some((block, serial)) }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = pulse; None }
+}
+
 /// Map a pulse position to its sample offset within the current quantum (the host resolves it against the
 /// block containing `pulse`). A generative device (e.g. an arpeggiator placing notes on a rate grid) uses
 /// this to time the events it emits. Native stub returns 0.
@@ -276,6 +311,179 @@ pub fn base_frequency() -> f32 {
     { unsafe { host_base_frequency() } }
     #[cfg(not(target_family = "wasm"))]
     { f32::from_bits(NATIVE_BASE_FREQUENCY.load(core::sync::atomic::Ordering::Relaxed)) }
+}
+
+/// A bar of the project's signature track: its start, length and beat length in pulses.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bar {
+    pub start: f64,
+    pub length: f64,
+    pub beat: f64
+}
+
+/// The bar holding `pulse` on the project's signature track. Native builds assume 4/4.
+#[inline]
+pub fn bar_at(pulse: f64) -> Bar {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = [0.0f64; 3];
+        unsafe { host_bar_at(pulse, out.as_mut_ptr() as u32) };
+        Bar {start: out[0], length: out[1], beat: out[2]}
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        Bar {start: math::floor(pulse / 3840.0) * 3840.0, length: 3840.0, beat: 960.0}
+    }
+}
+
+/// The project's harmony at a pulse: the key (root pitch class + 12-bit scale mask) and, when the chord
+/// track has a chord there, its root pitch class and voicing (a mask of semitones 0..31 above that root).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Harmony {
+    pub root: i32,
+    pub bits: i32,
+    pub chord: Option<(i32, i32)>
+}
+
+// The native harmony behind `harmony_at` (root, bits, chord root or -1, chord bits); wasm builds ask the engine.
+#[cfg(not(target_family = "wasm"))]
+static NATIVE_HARMONY: [core::sync::atomic::AtomicI32; 4] = [
+    core::sync::atomic::AtomicI32::new(0), core::sync::atomic::AtomicI32::new(math::harmony::MAJOR_BITS),
+    core::sync::atomic::AtomicI32::new(-1), core::sync::atomic::AtomicI32::new(0)];
+
+/// Native TEST SEAM: set what [`harmony_at`] returns (C major without a chord by default).
+#[cfg(not(target_family = "wasm"))]
+pub fn set_native_harmony(harmony: Harmony) {
+    let (chord_root, chord_bits) = harmony.chord.unwrap_or((-1, 0));
+    for (cell, value) in NATIVE_HARMONY.iter().zip([harmony.root, harmony.bits, chord_root, chord_bits]) {
+        cell.store(value, core::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// The harmony at `pulse` on the project's key and chord tracks. Native builds return `set_native_harmony` (C major).
+#[inline]
+pub fn harmony_at(pulse: f64) -> Harmony {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = [0i32; 4];
+        unsafe { host_harmony_at(pulse, out.as_mut_ptr() as u32) };
+        Harmony {root: out[0], bits: out[1], chord: if out[2] < 0 {None} else {Some((out[2], out[3]))}}
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let _ = pulse;
+        let [root, bits, chord_root, chord_bits] = NATIVE_HARMONY.each_ref().map(|cell| cell.load(core::sync::atomic::Ordering::Relaxed));
+        Harmony {root, bits, chord: if chord_root < 0 {None} else {Some((chord_root, chord_bits))}}
+    }
+}
+
+/// Follow the groove THIS device's pointer field at PATH targets (e.g. `[10]` for Zeitgeist's `groove`),
+/// returning a slot for [`groove_warp`] / [`groove_unwarp`]. The host keeps the slot on the pointer's current
+/// target, an unbound pointer passes positions through. A device calls this from `init`. Native stub returns 0.
+#[inline]
+pub fn observe_groove(path: &[u16]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_observe_groove(path.as_ptr() as u32, path.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = path; 0 }
+}
+
+/// The grooved position of a straight `pulse` through the slot's groove. Native builds pass it through.
+#[inline]
+pub fn groove_warp(slot: u32, pulse: f64) -> f64 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_groove_warp(slot, pulse) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = slot; pulse }
+}
+
+/// The straight position of a grooved `pulse` through the slot's groove. Native builds pass it through.
+#[inline]
+pub fn groove_unwarp(slot: u32, pulse: f64) -> f64 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_groove_unwarp(slot, pulse) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = slot; pulse }
+}
+
+/// The loop area `(from, to)` the transport wraps at, or `None` when playback does not wrap. Native stub: `None`.
+#[inline]
+pub fn loop_area() -> Option<(f64, f64)> {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = [0.0f64; 2];
+        if unsafe { host_loop_area(out.as_mut_ptr() as u32) } == 0 { None } else { Some((out[0], out[1])) }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { None }
+}
+
+// block ends drift from the loop end by accumulated float error (1e-10 after a bar)
+const GROOVE_WRAP_TOLERANCE: f64 = 1e-3;
+
+/// A device's groove pointer, followed block by block: which straight range sounds in a block, kept inside the
+/// loop, and where a straight position sounds. An unbound pointer passes every position through.
+#[derive(Clone, Copy)]
+pub struct GrooveFollower {
+    slot: u32,
+    last_to: f64,
+    wrapped: bool
+}
+
+impl GrooveFollower {
+    /// Call from `init`, PATH is the device's groove pointer field.
+    pub fn observe(path: &[u16]) -> Self {
+        Self {slot: observe_groove(path), last_to: f64::NAN, wrapped: false}
+    }
+
+    /// The straight range whose positions the groove moves into `[from, to)`.
+    pub fn straight(&mut self, from: f64, to: f64, discontinuous: bool) -> (f64, f64) {
+        let area = loop_area();
+        if discontinuous {
+            self.wrapped = area.is_some_and(|(loop_from, loop_to)|
+                from == loop_from && (self.last_to - loop_to).abs() < GROOVE_WRAP_TOLERANCE);
+        }
+        self.wrapped = groove_still_wrapped(self.wrapped, area, from);
+        self.last_to = to;
+        groove_clip(groove_unwarp(self.slot, from), groove_unwarp(self.slot, to), area, from, self.wrapped)
+    }
+
+    /// Where the straight `pulse` sounds.
+    pub fn warp(&self, pulse: f64) -> f64 {groove_warp(self.slot, pulse)}
+}
+
+/// A wrap holds while the block lies inside the loop, a loop moved away from the playhead ends it.
+pub fn groove_still_wrapped(wrapped: bool, area: Option<(f64, f64)>, from: f64) -> bool {
+    wrapped && area.is_some_and(|(loop_from, loop_to)| from >= loop_from && from < loop_to)
+}
+
+/// Limits the straight range `[u0, u1]` to the loop `area`: never past its end while the block lies before it,
+/// never before its start after a wrap.
+pub fn groove_clip(u0: f64, u1: f64, area: Option<(f64, f64)>, from: f64, wrapped: bool) -> (f64, f64) {
+    let Some((loop_from, loop_to)) = area else {return (u0, u1)};
+    let limit = |position: f64| {
+        let position = if from < loop_to && position > loop_to {loop_to} else {position};
+        if wrapped && position < loop_from {loop_from} else {position}
+    };
+    (limit(u0), limit(u1))
+}
+
+/// WASM CONTRACT: report the frames this device delays its output by, from `init`, `parameter_changed` or `process`.
+#[inline]
+pub fn set_latency(frames: u32) {
+    #[cfg(target_family = "wasm")]
+    unsafe { host_set_latency(frames) }
+    #[cfg(not(target_family = "wasm"))]
+    NATIVE_LATENCY.store(frames, core::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(not(target_family = "wasm"))]
+static NATIVE_LATENCY: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Native TEST SEAM: the latency the last [`set_latency`] call reported.
+#[cfg(not(target_family = "wasm"))]
+pub fn native_latency() -> u32 {
+    NATIVE_LATENCY.load(core::sync::atomic::Ordering::Relaxed)
 }
 
 /// Native TEST SEAM: set what [`base_frequency`] returns (a device test detunes, then restores 440).
@@ -409,6 +617,7 @@ pub const FIELD_KIND_FLOAT: u32 = 1;
 pub const FIELD_KIND_BOOL: u32 = 2;
 pub const FIELD_KIND_STRING: u32 = 3;
 pub const FIELD_KIND_INT_ARRAY: u32 = 4;
+pub const FIELD_KIND_BYTES: u32 = 5;
 
 /// A PLAIN box-field value handed to a device's [`Instrument::field_changed`], ALREADY TYPED (the analog of
 /// [`ParamValue`] for observed fields, not parameters). Mirrors the box graph's field primitives one-to-one:
@@ -422,7 +631,8 @@ pub enum FieldValue<'a> {
     Float(f32),
     Bool(bool),
     String(&'a str),
-    Ints(&'a [i32])
+    Ints(&'a [i32]),
+    Bytes(&'a [u8])
 }
 
 impl<'a> FieldValue<'a> {
@@ -444,6 +654,7 @@ impl<'a> FieldValue<'a> {
                 FieldValue::String(core::str::from_utf8(bytes).expect("field string is not valid UTF-8"))
             }
             FIELD_KIND_INT_ARRAY => FieldValue::Ints(slice::from_raw_parts(bits as *const i32, len as usize)),
+            FIELD_KIND_BYTES => FieldValue::Bytes(slice::from_raw_parts(bits as *const u8, len as usize)),
             _ => panic!("unknown field kind")
         }
     }
@@ -861,6 +1072,15 @@ pub fn script_note_off(handle: u32, id: u32) {
     { let _ = (handle, id); }
 }
 
+/// The frames the user `Processor` declares through `this.latency` (0 when unset). Native stub 0.
+#[inline]
+pub fn script_latency(handle: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    unsafe { host_script_latency(handle) }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; 0 }
+}
+
 /// Tell the user `Processor` to reset (transport stop). Native stub no-op.
 #[inline]
 pub fn script_reset(handle: u32) {
@@ -908,6 +1128,15 @@ pub fn script_sample(handle: u32, index: u32, sample_handle: u32, present: bool)
     { let _ = (handle, index, sample_handle, present); }
 }
 
+/// Hand one `@collection` snapshot to the JS bridge (`data_changed` forwards it), see `host_script_data`.
+#[inline]
+pub fn script_data(handle: u32, collection: u32, ptr: u32, records: u32, fields: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_data(handle, collection, ptr, records, fields) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, collection, ptr, records, fields); }
+}
+
 /// Run the user note-transform generator + all stateful tracking (Spielwerk) over the pulled input events,
 /// writing output `EventRecord`s into `out` and returning the count. Native stub returns 0.
 #[inline]
@@ -917,6 +1146,15 @@ pub fn script_notes(handle: u32, input: &[EventRecord], out: &mut [EventRecord],
     { unsafe { host_script_notes(handle, input.as_ptr() as u32, input.len() as u32, out.as_mut_ptr() as u32, out.len() as u32, from, to, bpm, flags, s0, s1) as usize } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, input, out.len(), from, to, bpm, flags, s0, s1); 0 }
+}
+
+/// End every note the Spielwerk script started at `position` and forget its held and scheduled notes. Native stub returns 0.
+#[inline]
+pub fn script_release_notes(handle: u32, out: &mut [EventRecord], position: f64) -> usize {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_release_notes(handle, out.as_mut_ptr() as u32, out.len() as u32, position) as usize } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, out.len(), position); 0 }
 }
 
 // ---- NAM BRIDGE wrappers ----------------------------------------------------------------------------------
@@ -1035,7 +1273,7 @@ pub fn wclap_input(handle: u32, index: u32, input: [&[f32]; 2]) {
 }
 
 /// Run `frames` stereo samples through the plugin with the block's transport (tempo, pulse position, playing).
-/// `false` = not ready, the device must pass its input through.
+/// `false` = no plugin output, the device must pass its input through.
 #[inline]
 pub fn wclap_process(handle: u32, inputs: [&[f32]; 2], outputs: [&mut [f32]; 2], frames: usize, block: &Block) -> bool {
     #[cfg(target_family = "wasm")]
@@ -1060,6 +1298,26 @@ pub fn wclap_note(handle: u32, on: bool, key: u32, velocity: f32) {
     { unsafe { host_wclap_note(handle, on as u32, key, velocity) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, on, key, velocity); }
+}
+
+/// Run a note effect over `frames` samples from pulse `position`: the `input` notes carry their sample
+/// `offset` within the span, the plugin's notes come back into `output` the same way (kind, pitch,
+/// velocity, offset). A repeat of the same `serial` and `position` (a composite cell's replica of a unit
+/// effect) gets the same notes without processing again. `None` = no plugin, the device passes its input
+/// on. Native stub returns `None`.
+#[inline]
+pub fn wclap_process_notes(handle: u32, serial: u32, input: &[EventRecord], output: &mut [EventRecord], frames: usize,
+                           bpm: f32, position: f64, flags: BlockFlags) -> Option<usize> {
+    #[cfg(target_family = "wasm")]
+    {
+        let count = unsafe {
+            host_wclap_process_notes(handle, serial, input.as_ptr() as u32, input.len() as u32, output.as_mut_ptr() as u32,
+                                     output.len() as u32, frames as u32, bpm, position, flags.0)
+        };
+        if count < 0 { None } else { Some((count as usize).min(output.len())) }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, serial, input, output, frames, bpm, position, flags); None }
 }
 
 /// Queue a resolved parameter change for the plugin's next process call, the last one per id wins within a
@@ -1088,6 +1346,35 @@ pub fn wclap_state(handle: u32, base64: &str) {
     { unsafe { host_wclap_state(handle, base64.as_ptr() as u32, base64.len() as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, base64); }
+}
+
+/// Hand the saved `clap_plugin_state` blob as raw bytes (empty = none) to the bridge, same contract as
+/// [`wclap_state`] without the base64. Native stub no-op.
+#[inline]
+pub fn wclap_state_bytes(handle: u32, bytes: &[u8]) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_wclap_state_bytes(handle, bytes.as_ptr() as u32, bytes.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, bytes); }
+}
+
+/// The frames the loaded plugin reports through `clap.latency` (0 until it is ready). Native stub 0.
+#[inline]
+pub fn wclap_latency(handle: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    unsafe { host_wclap_latency(handle) }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; 0 }
+}
+
+/// Deliver a sample slot's resolved handle (or unbind, `present` false) to the plugin by its key
+/// (`opendaw.samples/1`): the bridge copies the frames into the plugin once they are resident. Native stub no-op.
+#[inline]
+pub fn wclap_sample(handle: u32, key: u32, sample_handle: u32, present: bool) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_wclap_sample(handle, key, sample_handle, present as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, key, sample_handle, present); }
 }
 
 /// Transport stop: `clap_plugin.reset`. Native stub no-op.
@@ -1426,7 +1713,8 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
     for event in events {
         let offset = (event.offset as usize).clamp(s0, s1);
         if offset > cursor {
-            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
+            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, anchor: block.anchor,
+                anchor_frame: block.anchor_frame - cursor as i64, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
             CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
             I::process_audio(state, [&mut out_left[cursor..offset], &mut out_right[cursor..offset]], &sub);
             cursor = offset;
@@ -1441,7 +1729,8 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
         }
     }
     if cursor < s1 {
-        let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
+        let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, anchor: block.anchor,
+            anchor_frame: block.anchor_frame - cursor as i64, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
         CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
         I::process_audio(state, [&mut out_left[cursor..s1], &mut out_right[cursor..s1]], &sub);
     }
@@ -1567,7 +1856,7 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
         while position < block.p1 {
             let offset = (pulse_to_offset(position) as usize).clamp(s0, s1);
             if offset > cursor {
-                let sub = Block {index: block.index, flags, p0: chunk_p0, p1: position, s0: cursor as u32, s1: offset as u32, bpm: block.bpm};
+                let sub = Block {p0: chunk_p0, p1: position, s0: cursor as u32, s1: offset as u32, flags, ..*block};
                 E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
                 cursor = offset;
                 chunk_p0 = position;
@@ -1577,7 +1866,7 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
             position = next_update_position(position);
         }
         if cursor < s1 {
-            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: cursor as u32, s1: s1 as u32, bpm: block.bpm};
+            let sub = Block {p0: chunk_p0, s0: cursor as u32, s1: s1 as u32, flags, ..*block};
             E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
         }
     }
@@ -1624,26 +1913,39 @@ const MIDI_PULL_SCRATCH: usize = 256;
 pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
     let state = unsafe { &mut *(state_ptr as *mut M::State) };
     let out = unsafe { slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    render_sub_ranges(state, from, to, flags, out, first_update_position(from),
+        &mut |sub_from, sub_to, flags, scratch| pull_events(sub_from, sub_to, flags, scratch),
+        &mut |state, boundary| {
+            apply_param_changes::<M::State>(state, boundary, M::parameter_changed);
+            next_update_position(boundary)
+        },
+        &mut |state, _sub_from, _sub_to, _flags, input, output| M::transform(state, input, output)) as u32
+}
+
+/// Split `[from, to)` at the update boundaries (the first is INCLUSIVE, `advance` applies the parameter changes and
+/// returns the next), pull each sub-range and `transform` it. The one-shot flags reach only the first sub-range.
+pub fn render_sub_ranges<S>(state: &mut S, from: f64, to: f64, flags: u32, out: &mut [EventRecord], first_boundary: f64,
+                            pull: &mut dyn FnMut(f64, f64, u32, &mut [EventRecord]) -> usize,
+                            advance: &mut dyn FnMut(&mut S, f64) -> f64,
+                            transform: &mut dyn FnMut(&mut S, f64, f64, u32, &[EventRecord], &mut [EventRecord]) -> usize) -> usize {
     let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
     let mut count = 0;
     let mut sub_from = from;
-    // The seed is INCLUSIVE (a boundary exactly on `from` fires); the loop then advances STRICTLY. When the fx
-    // has no automation, `boundary` is INFINITY, so this is ONE pull over `[from, to)` — the previous behaviour.
-    let mut boundary = first_update_position(from);
+    let mut flags = BlockFlags(flags);
+    let mut boundary = first_boundary;
     loop {
         let sub_to = if boundary < to {boundary} else {to};
         let mut scratch = [blank; MIDI_PULL_SCRATCH];
-        let pulled = pull_events(sub_from, sub_to, flags, &mut scratch);
-        count += M::transform(state, &scratch[..pulled], &mut out[count..]);
+        let pulled = pull(sub_from, sub_to, flags.0, &mut scratch);
+        count += transform(state, sub_from, sub_to, flags.0, &scratch[..pulled], &mut out[count..]);
+        flags.clear_event_flags();
         if sub_to >= to {
             break;
         }
-        // refresh this fx's parameters at the update boundary, before the next sub-range transforms.
-        apply_param_changes::<M::State>(state, boundary, M::parameter_changed);
+        boundary = advance(state, boundary);
         sub_from = sub_to;
-        boundary = next_update_position(boundary);
     }
-    count as u32
+    count
 }
 
 #[cfg(test)]
@@ -1690,7 +1992,7 @@ mod tests {
     }
 
     fn block(s0: u32, s1: u32, p0: f64, p1: f64, bpm: f32) -> Block {
-        Block {index: 0, flags: BlockFlags(0), p0, p1, s0, s1, bpm}
+        Block {index: 0, flags: BlockFlags(0), p0, p1, anchor: p0, anchor_frame: s0 as i64, s0, s1, bpm}
     }
 
     #[test]
@@ -1738,7 +2040,7 @@ mod tests {
         let mut state = Recorder::default();
         let (mut left, mut right) = ([0.0f32; 128], [0.0f32; 128]);
         let flags = BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::DISCONTINUOUS);
-        let block = Block {index: 0, flags, p0: 0.0, p1: 128.0, s0: 0, s1: 128, bpm: 120.0};
+        let block = Block {index: 0, flags, p0: 0.0, p1: 128.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
         dispatch_range::<Recorder>(&mut state, [&mut left[..], &mut right[..]], &[note_on(64, 64.0, 60)], &block);
         assert_eq!(state.chunks.len(), 2);
         assert!(state.chunks[0].flags & BlockFlags::DISCONTINUOUS != 0, "the first chunk keeps the one-shot flag");
@@ -1810,5 +2112,39 @@ mod modulation_tests {
         assert_eq!(unit_value(ParamValue::Float(LINEAR.y(0.75)), &LINEAR), 0.75);
         let modulated = unit_value(ParamValue::Modulated {base: LINEAR.y(0.25), kind: PARAM_KIND_FLOAT, sum: 0.5}, &LINEAR);
         assert!((modulated - 0.75).abs() < 1.0e-5, "normalize, add, clamp; got {modulated}");
+    }
+}
+
+#[cfg(test)]
+mod groove_tests {
+    use super::{groove_clip, groove_still_wrapped};
+
+    #[test]
+    fn without_a_loop_the_range_stays() {
+        assert_eq!(groove_clip(-240.0, 4000.0, None, 0.0, true), (-240.0, 4000.0));
+    }
+
+    #[test]
+    fn nothing_after_the_loop_end_is_read_while_the_block_lies_before_it() {
+        let area = Some((0.0, 3840.0));
+        assert_eq!(groove_clip(3800.0, 4100.0, area, 3500.0, false), (3800.0, 3840.0));
+        assert_eq!(groove_clip(3900.0, 4100.0, area, 3600.0, false), (3840.0, 3840.0));
+        assert_eq!(groove_clip(3900.0, 4100.0, area, 3840.0, false), (3900.0, 4100.0));
+    }
+
+    #[test]
+    fn nothing_before_the_loop_start_is_read_after_a_wrap() {
+        let area = Some((3840.0, 7680.0));
+        assert_eq!(groove_clip(3600.0, 3900.0, area, 3840.0, true), (3840.0, 3900.0));
+        assert_eq!(groove_clip(3600.0, 3700.0, area, 3840.0, true), (3840.0, 3840.0));
+        assert_eq!(groove_clip(3600.0, 3900.0, area, 3840.0, false), (3600.0, 3900.0));
+    }
+
+    #[test]
+    fn a_loop_moved_away_from_the_playhead_ends_the_wrap() {
+        // wrapped in bars 1 to 4, then the loop moved to bars 9 to 12 while the playhead is in bar 3
+        assert!(!groove_still_wrapped(true, Some((30720.0, 46080.0)), 8000.0));
+        assert!(groove_still_wrapped(true, Some((0.0, 15360.0)), 8000.0));
+        assert!(!groove_still_wrapped(true, None, 8000.0));
     }
 }

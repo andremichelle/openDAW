@@ -1,7 +1,8 @@
 import css from "./WclapBrowser.sass?inline"
 import {
-    Bytes, DefaultObservableValue, EmptyProcedure, Lifecycle, RuntimeNotifier, StringComparator, Terminator
+    Bytes, DefaultObservableValue, EmptyProcedure, Lifecycle, Option, RuntimeNotifier, StringComparator, Terminator, UUID
 } from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -10,7 +11,10 @@ import {WclapPluginInfo} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
-import {OpenWclapAPI, WclapIndexFolder} from "@/opendaw-api"
+import {StorageInspector} from "@/storage/StorageInspector"
+import {StorageReport} from "@/storage/StorageReport"
+import {StorageScan} from "@opendaw/studio-core"
+import {WclapCatalog, WclapIndexEntry, WclapIndexFolder} from "@/opendaw-api"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 import {ResourceFolderItem} from "@/ui/browse/ResourceFolderItem"
@@ -27,24 +31,26 @@ type Construct = {
     service: StudioService
 }
 
-type Entry = {
-    id: string, name: string, bundle: string, type: string, vendor: string, license: string, size: number, local: boolean
-}
+type Credits = Pick<WclapIndexEntry, "license" | "credits">
+
+type Entry = Credits & {id: string, name: string, bundle: string, type: string, vendor: string, size: number, local: boolean}
+
+const NoCredits: Credits = {license: "", credits: ""}
 
 const {describe, kindOf, shortKind} = WclapDescriber
 
 const location = new DefaultObservableValue(AssetLocation.OpenDAW)
 
-const toEntries = (id: string, size: number, local: boolean, license: string,
+const toEntries = (id: string, size: number, local: boolean, {license, credits}: Credits,
                    plugins: ReadonlyArray<WclapPluginInfo>): ReadonlyArray<Entry> => {
     if (plugins.length === 0) {
         const name = `Unknown bundle ${id.substring(0, 8)}`
-        return [{id, size, local, license, name, bundle: name, type: "", vendor: ""}]
+        return [{id, size, local, license, credits, name, bundle: name, type: "", vendor: ""}]
     }
     const bundle = plugins.map(({name}) => name).join(", ")
     const shortNames = WclapNames.distinct(plugins.map(({name}) => name))
     return plugins.map((plugin, index) => ({
-        id, size, local, license, bundle, name: shortNames[index], type: shortKind(kindOf(plugin)), vendor: plugin.vendor
+        id, size, local, license, credits, bundle, name: shortNames[index], type: shortKind(kindOf(plugin)), vendor: plugin.vendor
     }))
 }
 
@@ -53,15 +59,15 @@ const expandedKeys = new Set<string>()
 const byName = (a: Entry, b: Entry): number => StringComparator(a.name.toLowerCase(), b.name.toLowerCase())
 
 const loadLocal = async (): Promise<ResourceFolder<Entry>> => {
-    const [ids, cloud] = await Promise.all([WclapStorage.list(), OpenWclapAPI.get().all()])
+    const [ids, cloud] = await Promise.all([WclapStorage.list(), WclapCatalog.get().all()])
     // a bundle imported from disk carries no license we know of, one from the cloud carries the published one
-    const licenses = new Map(cloud.map(({uuid, license}) => [uuid, license]))
+    const published = new Map(cloud.map(({uuid, license, credits}) => [uuid, {license, credits}]))
     const items = await Promise.all(ids.map(async id => {
         const [archive, plugins] = await Promise.all([
             WclapStorage.loadId(id),
             describe(WclapStorage.urlOf(id)).catch(() => [])
         ])
-        return toEntries(id, archive.byteLength, true, licenses.get(id) ?? "", plugins)
+        return toEntries(id, archive.byteLength, true, published.get(id) ?? NoCredits, plugins)
     }))
     return {name: "", folders: [], items: items.flat().toSorted(byName)}
 }
@@ -71,12 +77,12 @@ const loadCloud = async (): Promise<ResourceFolder<Entry>> => {
     const toFolder = (folder: WclapIndexFolder): ResourceFolder<Entry> => ({
         name: folder.name,
         folders: folder.folders?.map(toFolder) ?? [],
-        items: folder.wclaps?.flatMap(({uuid, size, license, plugins}) => toEntries(uuid, size, false, license, plugins)) ?? []
+        items: folder.wclaps?.flatMap(entry => toEntries(entry.uuid, entry.size, false, entry, entry.plugins)) ?? []
     })
-    return {name: "", folders: (await OpenWclapAPI.get().tree()).folders.map(toFolder), items: []}
+    return {name: "", folders: (await WclapCatalog.get().tree()).folders.map(toFolder), items: []}
 }
 
-export const WclapBrowser = ({lifecycle}: Construct) => {
+export const WclapBrowser = ({lifecycle, service}: Construct) => {
     const entries: HTMLElement = (
         <div className="scrollable" onConnect={scrollable => lifecycle.own(installScrollbars(scrollable))}/>
     )
@@ -84,6 +90,34 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
     const filter = new DefaultObservableValue("")
     const loaded: { root: ResourceFolder<Entry> } = {root: {name: "", folders: [], items: []}}
     const remove = async ({id, bundle}: Entry): Promise<void> => {
+        const dialog = RuntimeNotifier.progress({headline: "Checking WebCLAP Usages"})
+        const scanned = await Promises.tryCatch(StorageInspector.scan(EmptyProcedure, EmptyProcedure))
+        dialog.terminate()
+        if (scanned.status === "rejected") {
+            return RuntimeNotifier.info({headline: "Could not check the usages", message: String(scanned.error)})
+        }
+        const openProjectId: Option<string> = service.projectProfileService.getValue().map(profile => UUID.toString(profile.uuid))
+        const report = service.projectProfileService.getValue().match({
+            none: () => scanned.value,
+            some: profile => StorageReport.withOpenProject(scanned.value, UUID.toString(profile.uuid),
+                StorageScan.referencesOf(profile.project.boxGraph).refs)
+        })
+        const usedBy = report.assets.find(asset => StorageReport.isSame(asset, {kind: "wclap", id}))?.usedBy ?? []
+        if (usedBy.some(ref => ref.kind === "project" && openProjectId.contains(ref.id))) {
+            return RuntimeNotifier.info({
+                headline: "In Use", message: `'${bundle}' is used by the open project. Remove it there first.`
+            })
+        }
+        if (usedBy.length > 0) {
+            const users = usedBy.map(ref => report.items.find(item => StorageReport.isSame(item, ref))?.name ?? ref.id)
+            const proceed = await RuntimeNotifier.approve({
+                headline: "Still In Use",
+                message: `'${bundle}' is used by ${users.join(", ")}. They will miss it after the deletion.`,
+                approveText: "Continue",
+                cancelText: "Cancel"
+            })
+            if (!proceed) {return}
+        }
         const approved = await RuntimeNotifier.approve({
             headline: "Delete WebCLAP Bundle",
             message: `Delete "${bundle}" from this device and from your cloud backup? Projects using it will pass audio through.`,
@@ -99,7 +133,9 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
             <div className="entry">
                 <span className="name"><Icon symbol={IconSymbol.WebClap}/>{entry.name}</span>
                 <span>{entry.type}</span>
-                <span>{entry.vendor}</span>
+                <span>{entry.credits.length > 0
+                    ? <a href={entry.credits} target="_blank" rel="noopener" title={entry.credits}>{entry.vendor}</a>
+                    : entry.vendor}</span>
                 <span>{entry.license.length > 0 ? entry.license : "-"}</span>
                 <span className="right">{Bytes.toString(entry.size)}</span>
             </div>

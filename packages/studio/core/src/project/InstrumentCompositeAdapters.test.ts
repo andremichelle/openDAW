@@ -77,18 +77,18 @@ describe("Instrument Composite adapters", () => {
         project.terminate()
     })
 
-    it("only note instruments the engine can build in a layer are accepted", async () => {
+    it("only note instruments are accepted in a layer", async () => {
         const project = await createProject()
         const {instrumentBox} = project.editing.modify(() =>
             project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite)).unwrap()
         const composite = instrumentBox as InstrumentCompositeBox
         project.editing.modify(() => {
             expect(project.api.createCompositeLayer(composite, InstrumentFactories.Tape).isFailure()).toBe(true)
-            expect(project.api.createCompositeLayer(composite, InstrumentFactories.MIDIOutput).isFailure()).toBe(true)
+            expect(project.api.createCompositeLayer(composite, InstrumentFactories.MIDIOutput).isSuccess()).toBe(true)
             expect(project.api.createCompositeLayer(composite, InstrumentFactories.Playfield).isSuccess()).toBe(true)
             expect(project.api.createCompositeLayer(composite, InstrumentFactories.InstrumentComposite).isSuccess()).toBe(true)
         })
-        expect(composite.cells.pointerHub.incoming().length, "a rejected factory creates nothing").toBe(2)
+        expect(composite.cells.pointerHub.incoming().length, "a rejected factory creates nothing").toBe(3)
         project.terminate()
     })
 

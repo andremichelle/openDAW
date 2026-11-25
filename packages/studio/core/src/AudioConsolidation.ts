@@ -95,11 +95,18 @@ export namespace AudioConsolidation {
         }
         const sample = importResult.value
         const sampleUuid = UUID.parse(sample.uuid)
+        dialog.message = "Detecting transients..."
+        const modifierResult = await Promises.tryCatch(AudioFileBoxFactory.createModifier(
+            Workers.Transients, project.boxGraph, audioData, sampleUuid, sample.name))
         dialog.terminate()
-        const audioFileBoxModifier = await AudioFileBoxFactory.createModifier(
-            Workers.Transients, project.boxGraph, audioData, sampleUuid, sample.name)
+        if (modifierResult.status === "rejected") {
+            console.warn(modifierResult.error)
+            RuntimeNotifier.notify({message: "Flatten failed.", icon: "Warning"})
+            return
+        }
+        if (abortController.signal.aborted || !trackBoxAdapter.box.isAttached()) {return}
         project.editing.modify(() => {
-            const audioFileBox = audioFileBoxModifier()
+            const audioFileBox = modifierResult.value()
             allRegionsInRange.forEach(region => region.box.delete())
             AudioContentFactory.createNotStretchedRegion({
                 boxGraph: project.boxGraph,

@@ -7,8 +7,13 @@ pub(crate) struct ValueClipSpec {
     pub(crate) collection: Uuid,
     pub(crate) duration: f64,
     pub(crate) looped: bool,
-    pub(crate) mute: bool
+    pub(crate) mute: bool,
+    pub(crate) groove: Option<Uuid>
 }
+
+// WASM CONTRACT: the `groove` pointer keys of ValueRegionBox and ValueClipBox
+pub(crate) const VALUE_REGION_GROOVE_KEY: u16 = 17;
+pub(crate) const VALUE_CLIP_GROOVE_KEY: u16 = 14;
 
 /// The VALUE clips attached to a track's `clips` hub (key 4), each with its event collection, duration
 /// (key 10, pulses), `triggerMode.loop` (path [4, 1], default TRUE) and `mute` (key 11).
@@ -27,7 +32,8 @@ pub(crate) fn value_clips_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<Va
                 collection,
                 duration: region_pulses(graph, clip_uuid, 10),
                 looped: graph.field_value(&Address::of(clip_uuid, vec![4, 1])).and_then(|value| value.as_bool()).unwrap_or(true),
-                mute: graph.field_value(&Address::of(clip_uuid, vec![CLIP_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false)
+                mute: graph.field_value(&Address::of(clip_uuid, vec![CLIP_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false),
+                groove: groove_of(graph, clip_uuid, VALUE_CLIP_GROOVE_KEY)
             });
         }
     }
@@ -44,7 +50,8 @@ pub(crate) struct RegionSpec {
     pub(crate) duration: f64,
     pub(crate) loop_offset: f64,
     pub(crate) loop_duration: f64,
-    pub(crate) mute: bool
+    pub(crate) mute: bool,
+    pub(crate) groove: Option<Uuid>
 }
 
 // ValueRegionBox `mute` (WASM CONTRACT: mirror the TS ValueRegionBox schema — key 14, like audio regions).
@@ -71,7 +78,8 @@ pub(crate) fn value_regions_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<
                 duration: region_pulses(graph, region_uuid, 11),
                 loop_offset: region_pulses(graph, region_uuid, 12),
                 loop_duration: region_pulses(graph, region_uuid, 13),
-                mute: graph.field_value(&Address::of(region_uuid, vec![VALUE_REGION_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false)
+                mute: graph.field_value(&Address::of(region_uuid, vec![VALUE_REGION_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false),
+                groove: groove_of(graph, region_uuid, VALUE_REGION_GROOVE_KEY)
             });
         }
     }

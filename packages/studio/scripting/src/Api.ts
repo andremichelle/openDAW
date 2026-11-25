@@ -36,6 +36,8 @@ export interface Sample {
     readonly bpm: number
     /** Sample rate in Hz */
     readonly sample_rate: number
+    /** Where the sample came from, a recording keeps its exact length when placed */
+    readonly origin?: "openDAW" | "recording" | "import"
 }
 
 /**
@@ -220,8 +222,12 @@ export interface SideChainable {
 export interface ArpeggioEffect extends MIDIEffect {
     /** Always "Arpeggio" */
     readonly key: "Arpeggio"
-    /** Playback direction: 0 = Up, 1 = Down, 2 = UpDown (default 0) */
-    mode: 0 | 1 | 2
+    /**
+     * Walk through the held notes (default 0): 0 Up, 1 Down, 2 UpDown, 3 DownUp, 4 Up & Down, 5 Down & Up,
+     * 6 Converge, 7 Diverge, 8 Con & Diverge, 9 Pinky Up, 10 Pinky UpDown, 11 Thumb Up, 12 Thumb UpDown,
+     * 13 Random, 14 Random Other, 15 Shuffle, 16 Random Once, 17 Walk
+     */
+    mode: int
     /** Octave range (1 to 5, default 1) */
     octaves: int
     /** Step rate index (0-16): 1/1, 1/2, 1/3, 1/4, 3/16, 1/6, 1/8, 3/32, 1/12, 1/16, 3/64, 1/24, 1/32, 1/48, 1/64, 1/96, 1/128 (default 9 = 1/16) */
@@ -232,6 +238,43 @@ export interface ArpeggioEffect extends MIDIEffect {
     repeat: int
     /** Velocity change per repeat (-1.0 to 1.0, default 0.0) */
     velocity: bipolar
+    /** Note order: 0 = as played, 1 = by pitch (default 0) */
+    order: int
+    /** Keep playing the last notes after they are released (default false) */
+    hold: boolean
+    /** Restart the pattern: 0 = never, 1 = on the first note, 2 = every bar, 3 = every beat (default 0) */
+    retrigger: int
+    /** Steps the walk starts later (0 to 15, default 0) */
+    offset: int
+    /** While playing, a chord on the project's chord track replaces the held notes (default false) */
+    followChords: boolean
+    /** Seed of the random walks and the step chance (0 to 999999, default 0) */
+    seed: int
+    /** Number of steps the sequencer plays (1 to 64, default 16) */
+    patternLength: int
+    /** The 64 sequencer steps */
+    readonly steps: ReadonlyArray<ArpeggioStep>
+}
+
+/**
+ * One step of the Arpeggio sequencer
+ * @group Effect Parts
+ */
+export interface ArpeggioStep {
+    /** 0 = note, 1 = rest, 2 = tie (extends the previous note), 3 = chord (plays every held note) (default 0) */
+    kind: int
+    /** Velocity in percent (0 to 100, default 100) */
+    velocity: int
+    /** Gate in percent, multiplies the device gate (0 to 200, default 100) */
+    gate: int
+    /** Semitones (-12 to 12, default 0) */
+    transpose: int
+    /** Octaves (-2 to 2, default 0) */
+    octave: int
+    /** Chance to play in percent (0 to 100, default 100) */
+    chance: int
+    /** Equal hits within the step (1 to 7, default 1) */
+    ratchet: int
 }
 
 /**
@@ -247,6 +290,47 @@ export interface PitchEffect extends MIDIEffect {
     semiTones: int
     /** Cent shift (-50 to 50, default 0) */
     cents: float
+}
+
+/**
+ * Passes a key range and transposes the passing notes or sets them to one key
+ * @group MIDI Effects
+ */
+export interface NoteFilterEffect extends MIDIEffect {
+    /** Always "NoteFilter" */
+    readonly key: "NoteFilter"
+    /** Lowest passing key, included (0 to 127, default 0) */
+    min: int
+    /** Highest passing key, included (0 to 127, default 127) */
+    max: int
+    /** false adds {@link transpose}, true plays every passing note as {@link targetKey} (default false) */
+    set: boolean
+    /** Semitones added when {@link set} is false, a result outside 0 to 127 is ignored (-127 to 127, default 0) */
+    transpose: int
+    /** Key every passing note plays as when {@link set} is true (0 to 127, default 60) */
+    targetKey: int
+}
+
+/**
+ * Moves every note onto the nearest key of a scale (ties go down), or through a custom grid
+ * @group MIDI Effects
+ */
+export interface ScaleMatrixEffect extends MIDIEffect {
+    /** Always "ScaleMatrix" */
+    readonly key: "ScaleMatrix"
+    /** Root pitch class (0 to 11, 0 = C, default 0) */
+    root: int
+    /**
+     * Scale (0 to 15, default 0): Major, Natural Minor, Harmonic Minor, Melodic Minor, Dorian, Phrygian, Lydian,
+     * Mixolydian, Locrian, Pentatonic Major, Pentatonic Minor, Blues, Whole Tone, Diminished, Augmented, 15 Custom
+     */
+    scale: int
+    /** Uses the key of the project's key track at the note's position instead of root and scale (default false) */
+    follow: boolean
+    /** The custom grid, used when scale is 15: per note above the root its offset in semitones (-6 to 11), 12 mutes it */
+    readonly custom: ReadonlyArray<int>
+    /** Replace the custom grid, up to 12 offsets starting at the root */
+    setCustom(offsets: ReadonlyArray<int>): void
 }
 
 /**
@@ -277,8 +361,8 @@ export interface VelocityEffect extends MIDIEffect {
 export interface ZeitgeistEffect extends MIDIEffect {
     /** Always "Zeitgeist" */
     readonly key: "Zeitgeist"
-    /** The shuffle groove driving this effect */
-    readonly groove: GrooveShuffle
+    /** The groove driving this effect, null when set to none */
+    readonly groove: Nullable<AnyGroove>
 }
 
 /**
@@ -299,6 +383,10 @@ export interface MIDIEffects {
     "Arpeggio": ArpeggioEffect
     /** {@link PitchEffect} */
     "Pitch": PitchEffect
+    /** {@link NoteFilterEffect} */
+    "NoteFilter": NoteFilterEffect
+    /** {@link ScaleMatrixEffect} */
+    "ScaleMatrix": ScaleMatrixEffect
     /** {@link VelocityEffect} */
     "Velocity": VelocityEffect
     /** {@link ZeitgeistEffect} */
@@ -334,6 +422,8 @@ export interface AutotuneEffect extends AudioEffect {
     shift: float
     /** Smoothing (0.0 to 1.0, default 0.6) */
     smooth: unitValue
+    /** Uses the key of the project's key track instead of scaleKey and scale (default false) */
+    follow: boolean
 }
 
 /**
@@ -1158,7 +1248,7 @@ export interface Playfield extends Instrument {
  * Instruments that can live in a layer of an {@link InstrumentComposite}: everything that plays notes inside the unit
  * @group Instruments
  */
-export type LayerInstruments = Omit<Instruments, "Tape" | "MIDIOutput">
+export type LayerInstruments = Omit<Instruments, "Tape">
 
 /**
  * One layer of an {@link InstrumentComposite}: an instrument with its own MIDI and audio effect chains and its own strip
@@ -1204,7 +1294,7 @@ export interface InstrumentComposite extends Instrument {
     readonly layers: ReadonlyArray<InstrumentCompositeLayer>
     /**
      * Add a layer playing the given instrument
-     * @param key - Instrument type (everything except Tape and MIDIOutput)
+     * @param key - Instrument type (everything except Tape)
      * @param props - Instrument settings
      * @param layer - Layer settings
      * @example
@@ -1254,6 +1344,14 @@ export interface Nano extends Instrument {
     loopStart: unitValue
     /** Loop end as a fraction of the sample, clamped inside the region (default 1) */
     loopEnd: unitValue
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    panning: bipolar
+    /** Several notes at once (default true). Mono fades the sounding note out in 5 ms on each new note. */
+    polyphone: boolean
+    /** Ignore the note-off and play to the region end (default false). A loop still ends on the note-off. */
+    oneShot: boolean
+    /** Every note plays at the root key, ignoring the played key (default false). */
+    fixedPitch: boolean
 }
 
 /**
@@ -1603,6 +1701,8 @@ export interface Cubed extends Instrument {
     patternIndex: int
     /** 16 patterns */
     readonly patterns: ReadonlyArray<CubedPattern>
+    /** The groove its pattern plays through, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**
@@ -1747,7 +1847,8 @@ export interface InstrumentAudioUnit<K extends keyof Instruments = keyof Instrum
     /** The instrument */
     readonly instrument: Instruments[K]
     /**
-     * Replace the instrument with another type (keeps tracks and effects)
+     * Replace the instrument with another type (keeps effects and automation, and keeps note or audio tracks
+     * unless the new instrument takes the other input, which replaces them with one empty track)
      * @example
      * ```ts
      * const nano = synth.setInstrument("Nano", {release: 0.5})
@@ -1979,6 +2080,8 @@ export interface NoteEventOwner {
 export interface NoteRegion extends LoopableRegion, NoteEventOwner {
     /** The note track this region belongs to */
     readonly track: NoteTrack
+    /** The groove its notes play through, running on from where its loop starts, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**
@@ -1988,6 +2091,8 @@ export interface NoteRegion extends LoopableRegion, NoteEventOwner {
 export interface NoteClip extends Clip, NoteEventOwner {
     /** The note track this clip belongs to */
     readonly track: NoteTrack
+    /** The groove its notes play through, running on the timeline grid the clip repeats on, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**
@@ -2078,6 +2183,8 @@ export interface ValueEventOwner {
 export interface ValueRegion extends LoopableRegion, ValueEventOwner {
     /** The automation track this region belongs to */
     readonly track: ValueTrack
+    /** The groove its curve plays through, running on from where its loop starts, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**
@@ -2087,6 +2194,8 @@ export interface ValueRegion extends LoopableRegion, ValueEventOwner {
 export interface ValueClip extends Clip, ValueEventOwner {
     /** The automation track this clip belongs to */
     readonly track: ValueTrack
+    /** The groove its curve plays through, running on the timeline grid the clip repeats on, null for none. Set a groove of the project or null. */
+    groove: Nullable<AnyGroove>
 }
 
 /**
@@ -2359,6 +2468,122 @@ export interface SignatureTrack {
 }
 
 /**
+ * A key change on the key track
+ * @group Timeline
+ */
+export interface KeyEvent {
+    /** Unique id */
+    readonly uuid: string
+    /** Position in PPQN, the key applies from here to the next key change */
+    position: ppqn
+    /** Root pitch class (0 to 11, 0 = C) */
+    root: int
+    /** Scale as a 12-bit mask, bit i set when the note i semitones above the root is in the scale (Major = 0b101010110101) */
+    scale: int
+    /** Remove the event */
+    remove(): void
+}
+
+/**
+ * Settings accepted by {@link KeyTrack.addEvent}
+ * @group Timeline
+ */
+export type KeyEventProps = Partial<Pick<KeyEvent, "position" | "root" | "scale">>
+
+/**
+ * A key, as returned by {@link KeyTrack.keyAt}
+ * @group Timeline
+ */
+export type Key = Readonly<{
+    /** Root pitch class (0 to 11, 0 = C) */
+    root: int
+    /** Scale as a 12-bit mask, see {@link KeyEvent.scale} */
+    scale: int
+}>
+
+/**
+ * The key of the song: a project key plus key changes along the timeline
+ * @group Timeline
+ */
+export interface KeyTrack {
+    /** Enable the key changes. Without them the project key applies everywhere */
+    enabled: boolean
+    /** Root pitch class of the project key (0 to 11), applies before the first key change */
+    root: int
+    /** Scale mask of the project key, applies before the first key change */
+    scale: int
+    /** All key changes sorted by position */
+    readonly events: ReadonlyArray<KeyEvent>
+    /** Add a key change. Root and scale default to the key that applies at the position */
+    addEvent(props?: KeyEventProps): KeyEvent
+    /** The key at a position */
+    keyAt(position: ppqn): Key
+    /** Remove all key changes */
+    clearEvents(): void
+}
+
+/**
+ * A chord on the chord track, a step of the key at its position
+ * @group Timeline
+ */
+export interface ChordEvent {
+    /** Unique id */
+    readonly uuid: string
+    /** Position in PPQN */
+    position: ppqn
+    /** Duration in PPQN */
+    duration: ppqn
+    /** Step of the key (1 to 7) */
+    degree: int
+    /** Lowers (-1) or raises (1) the root by a semitone (default 0) */
+    shift: int
+    /** Fixed chord type as a 12-bit mask above the root, 0 stacks the notes from the scale (default 0) */
+    shape: int
+    /** Notes stacked from the scale: 3 triad, 4 7th, 5 9th (default 3) */
+    notes: int
+    /** How many of the lowest notes move an octave up (0 to 4, default 0) */
+    inversion: int
+    /** Remove the event */
+    remove(): void
+}
+
+/**
+ * Settings accepted by {@link ChordTrack.addEvent}
+ * @group Timeline
+ */
+export type ChordEventProps = Partial<Pick<ChordEvent, "position" | "duration" | "degree" | "shift" | "shape" | "notes" | "inversion">>
+
+/**
+ * A resolved chord, as returned by {@link ChordTrack.chordAt}
+ * @group Timeline
+ */
+export type ResolvedChord = Readonly<{
+    /** Root pitch class (0 to 11) */
+    root: int
+    /** Semitones above the root as voiced, inversion included. Play a note as 60 + root + note */
+    notes: ReadonlyArray<int>
+    /** Display name, for example "Am7" or "C/E" */
+    name: string
+}>
+
+/**
+ * The chord progression of the song, as steps of the key
+ * @group Timeline
+ */
+export interface ChordTrack {
+    /** Enable the chords */
+    enabled: boolean
+    /** All chords sorted by position */
+    readonly events: ReadonlyArray<ChordEvent>
+    /** Add a chord (one bar on step 1 by default). Chords it covers are shortened or removed */
+    addEvent(props?: ChordEventProps): ChordEvent
+    /** The chord sounding at a position in the key that applies there, null where no chord sits */
+    chordAt(position: ppqn): Nullable<ResolvedChord>
+    /** Remove all chords */
+    clearEvents(): void
+}
+
+/**
  * Transport loop range
  * @group Essentials
  */
@@ -2383,17 +2608,94 @@ export interface TimeSignature {
 }
 
 /**
- * Global shuffle groove
- * @group Essentials
+ * Groove types
+ * @group Grooves
  */
-export interface GrooveShuffle {
+export type GrooveKind = "Shuffle" | "Power" | "S-Curve" | "Random" | "Offset" | "Stack"
+
+/**
+ * Common surface of all grooves
+ * @group Grooves
+ */
+export interface Groove {
+    /** The groove type */
+    readonly kind: GrooveKind
     /** Custom label */
     label: string
+}
+
+/**
+ * Shuffle / swing groove
+ * @group Grooves
+ */
+export interface GrooveShuffle extends Groove {
+    /** Always "Shuffle" */
+    readonly kind: "Shuffle"
     /** Shuffle amount (0.0 to 1.0, default 0.6) */
     amount: unitValue
     /** Shuffle grid in PPQN (default 1/8) */
     duration: ppqn
 }
+
+/**
+ * Power or S-curve groove
+ * @group Grooves
+ */
+export interface GrooveFunction extends Groove {
+    /** "Power" or "S-Curve" */
+    readonly kind: "Power" | "S-Curve"
+    /** Amount (0.0 to 1.0, default 0.75): 0.5 is straight, below bends the inverse curve */
+    amount: unitValue
+    /** Cell duration in PPQN (default 1/4) */
+    duration: ppqn
+}
+
+/**
+ * Random groove
+ * @group Grooves
+ */
+export interface GrooveRandom extends Groove {
+    /** Always "Random" */
+    readonly kind: "Random"
+    /** Amount (0.0 to 1.0, default 0.75): 0.5 is straight, below bends the inverse curve */
+    amount: unitValue
+    /** Cell duration in PPQN (default 1 bar) */
+    duration: ppqn
+    /** Random seed (0 to 999999, default 1) */
+    seed: int
+    /** Roughness (0.0 to 1.0, default 1.0) */
+    roughness: unitValue
+    /** Steps per cell (2 to 64, default 64) */
+    steps: int
+}
+
+/**
+ * Moves every position by a fixed number of ticks
+ * @group Grooves
+ */
+export interface GrooveOffset extends Groove {
+    /** Always "Offset" */
+    readonly kind: "Offset"
+    /** Ticks (-480 to 480, an eighth note either way, default 0): negative plays earlier */
+    offset: int
+}
+
+/**
+ * A groove chaining its members in order
+ * @group Grooves
+ */
+export interface GrooveStack extends Groove {
+    /** Always "Stack" */
+    readonly kind: "Stack"
+    /** The members in the order they apply */
+    readonly members: ReadonlyArray<AnyGroove>
+}
+
+/**
+ * Any groove
+ * @group Grooves
+ */
+export type AnyGroove = GrooveShuffle | GrooveFunction | GrooveRandom | GrooveOffset | GrooveStack
 
 /**
  * Descriptive project metadata
@@ -2602,8 +2904,10 @@ export interface Project {
     readonly loop: LoopArea
     /** Project metadata */
     readonly meta: ProjectMeta
-    /** Global shuffle groove */
-    readonly groove: GrooveShuffle
+    /** The global groove, a shuffle unless its type was changed */
+    readonly groove: AnyGroove
+    /** The project's groove list, the global groove included */
+    readonly grooves: ReadonlyArray<AnyGroove>
     /** Primary output unit */
     readonly output: OutputAudioUnit
     /** All units ordered by index */
@@ -2639,6 +2943,10 @@ export interface Project {
     readonly tempoTrack: TempoTrack
     /** Time signature changes */
     readonly signatureTrack: SignatureTrack
+    /** The key of the song and its key changes */
+    readonly keyTrack: KeyTrack
+    /** The chord progression */
+    readonly chordTrack: ChordTrack
     /** All modulators ordered by index */
     readonly modulators: ReadonlyArray<AnyModulator>
     /**

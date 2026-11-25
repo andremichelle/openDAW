@@ -13,7 +13,7 @@ use bindings::value_collection::ValueCurve;
 use boxgraph::address::Uuid;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
 use value::region::{global_to_local, RegionCollection, Span};
-use crate::modulation::{modulation_sum_split, ModulationChain};
+use crate::modulation::ModulationChain;
 
 /// A parameter's stable identifier: the field-key path to its box field (e.g. `[16, 10]` for
 /// `lowPass.frequency`). The same keys the box schema and the device use — never a packed encoding — so it
@@ -54,11 +54,28 @@ impl ParamHandle {
     /// While PAUSED the automation reads the FROZEN song position (a static curve there is the hold TS gets
     /// from its silent update clock) while the modulation follows the free-running position.
     pub(crate) fn resolve_split(&self, automation_position: f64, modulation_position: f64) -> (f32, u32, f32) {
-        let (value, kind) = self.resolve_base(automation_position);
-        let modulation = modulation_sum_split(self.modulation.as_ref(),
-            automation_position, modulation_position);
+        self.resolve_lagged(&crate::playhead_history::Lagged {
+            automation: automation_position, modulation: modulation_position, quanta_back: 0})
+    }
+
+    pub(crate) fn resolve_lagged(&self, lagged: &crate::playhead_history::Lagged) -> (f32, u32, f32) {
+        let (value, kind) = self.resolve_base(lagged.automation);
+        let modulation = crate::modulation::modulation_sum_lagged(self.modulation.as_ref(),
+            lagged.automation, lagged.modulation, lagged.quanta_back);
         self.publish(modulation);
         (value, kind, modulation)
+    }
+
+    /// Like `resolve_held` for a reader whose audio is `lag` frames late: the curves and modulators as they
+    /// were when that audio was rendered (#482).
+    pub(crate) fn resolve_held_lagged(&self, position: f64, transporting: bool, lag: u32) -> (f32, u32, f32) {
+        if lag == 0 {
+            return self.resolve_held(position, transporting);
+        }
+        match crate::playhead_lagged(position, lag) {
+            Some(lagged) => self.resolve_lagged(&lagged),
+            None => self.resolve_held(position, transporting)
+        }
     }
 
     /// `[0]` the automated unit value (NaN when no curve applies, so the knob keeps showing its storage
@@ -126,7 +143,17 @@ pub(crate) struct ValueBoundRegion {
     pub(crate) loop_offset: f64,
     pub(crate) loop_duration: f64,
     pub(crate) mute: bool,
+    pub(crate) groove: Option<Uuid>,
     pub(crate) curve: ValueCurve
+}
+
+fn ungrooved<U: Fn(f64) -> f64>(unwarp: U, position: f64, origin: f64, length: f64, low: f64, high: f64) -> f64 {
+    let straight = unwarp(position - origin);
+    let straight = if straight < low {low} else if straight > high {high} else {straight};
+    if length <= 0.0 {return straight}
+    // held at the end of a pass, the curve is read at the loop end instead of wrapping back to its start
+    let content = math::mod_euclid(straight, length);
+    if straight >= high && content == 0.0 {length} else {content}
 }
 
 impl Span for ValueBoundRegion {
@@ -147,7 +174,15 @@ impl ValueBoundRegion {
 
     /// `None` when the curve is empty (the caller falls back to the field's STORED value, like TS).
     fn value_at(&self, position: f64) -> Option<f32> {
-        self.curve.value_at_opt(self.local(position))
+        match &self.groove {
+            None => self.curve.value_at_opt(self.local(position)),
+            Some(groove) => {
+                // the groove runs on from where the region's loop starts
+                let origin = self.position - self.loop_offset;
+                self.curve.value_at_opt(ungrooved(|straight| crate::unwarp_through(groove, straight), position, origin, self.loop_duration,
+                    self.loop_offset, self.loop_offset + self.duration))
+            }
+        }
     }
 
     /// The region's INCOMING value, for a position BEFORE the track's first region (mirrors TS
@@ -166,6 +201,7 @@ impl ValueBoundRegion {
     /// "automation doesn't keep its last value when the region ends" bug). TS: `(complete - offset) %
     /// loopDuration === 0` with `offset = position - loopOffset`, i.e. `(duration + loopOffset) % loopDuration`.
     fn outgoing_value(&self) -> Option<f32> {
+        if self.groove.is_some() {return self.value_at(self.position + self.duration)}
         let ends_on_loop_pass = self.loop_duration > 0.0
             && ((self.duration + self.loop_offset) % self.loop_duration).abs() < 1.0e-6;
         if ends_on_loop_pass {
@@ -195,6 +231,7 @@ pub(crate) struct BoundValueClip {
     pub(crate) duration: f64,
     pub(crate) looped: bool,
     pub(crate) mute: bool,
+    pub(crate) groove: Option<Uuid>,
     pub(crate) curve: ValueCurve
 }
 
@@ -255,7 +292,11 @@ impl ParamCurve {
                     if section.from == position {
                         clips.iter().find(|bound| bound.clip_uuid == clip)
                             .filter(|bound| bound.duration > 0.0 && !bound.mute)
-                            .and_then(|bound| bound.curve.value_at_opt(position % bound.duration))
+                            .and_then(|bound| bound.curve.value_at_opt(match &bound.groove {
+                                None => position % bound.duration,
+                                Some(groove) => ungrooved(|straight| crate::unwarp_through(groove, straight), position, 0.0,
+                                    bound.duration, f64::NEG_INFINITY, f64::INFINITY)
+                            }))
                     } else {
                         None
                     }
@@ -282,5 +323,27 @@ impl ParamCurve {
             Some(region) if position < region.position + region.duration => region.value_at(position),
             Some(region) => region.outgoing_value()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ungrooved;
+
+    #[test]
+    fn a_groove_pulling_earlier_holds_the_curve_end_instead_of_wrapping() {
+        // a region of one 3840 pass, the groove reads 30 later: the last 30 ticks stay at the loop end
+        let read = |position: f64| ungrooved(|straight| straight + 30.0, position, 0.0, 3840.0, 0.0, 3840.0);
+        assert_eq!(read(3800.0), 3830.0);
+        assert_eq!(read(3820.0), 3840.0);
+        assert_eq!(read(3839.0), 3840.0);
+    }
+
+    #[test]
+    fn the_groove_runs_on_across_loop_passes() {
+        // a 1000 loop played twice, the groove reads 30 later: the second pass reads its content 30 later too
+        let read = |position: f64| ungrooved(|straight| straight + 30.0, position, 0.0, 1000.0, 0.0, 2000.0);
+        assert_eq!(read(1100.0), 130.0);
+        assert_eq!(read(980.0), 10.0);
     }
 }

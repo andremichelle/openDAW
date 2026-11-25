@@ -14,6 +14,7 @@ export class DefaultSoundfontLoader implements SoundfontLoader {
 
     #meta: Option<SoundfontMetaData> = Option.None
     #soundfont: Option<SoundFont2> = Option.None
+    #file: Option<ArrayBuffer> = Option.None
     #state: SoundfontLoaderState = {type: "progress", progress: 0.0}
 
     constructor(manager: GlobalSoundfontLoaderManager, uuid: UUID.Bytes) {
@@ -36,11 +37,13 @@ export class DefaultSoundfontLoader implements SoundfontLoader {
         this.#state = {type: "progress", progress: 0.0}
         this.#meta = Option.None
         this.#soundfont = Option.None
+        this.#file = Option.None
         this.#get()
     }
 
     get uuid(): UUID.Bytes {return this.#uuid}
     get soundfont(): Option<SoundFont2> {return this.#soundfont}
+    get file(): Option<ArrayBuffer> {return this.#file}
     get meta(): Option<SoundfontMetaData> {return this.#meta}
     get state(): SoundfontLoaderState {return this.#state}
 
@@ -61,14 +64,14 @@ export class DefaultSoundfontLoader implements SoundfontLoader {
             },
             (error: any) => {
                 if (error instanceof Error && error.message.startsWith("timeoout")) {
-                    this.#setState({type: "error", reason: error.message})
+                    this.#setState({type: "error", reason: error.message, cause: error})
                     return console.warn(`Soundfont ${UUID.toString(this.#uuid)} timed out.`)
                 } else {
                     return this.#fetch()
                 }
             }).catch(error => {
             console.warn("Failed to load soundfont:", error)
-            this.#setState({type: "error", reason: error instanceof Error ? error.message : String(error)})
+            this.#setState({type: "error", reason: error instanceof Error ? error.message : String(error), cause: error})
         })
     }
 
@@ -79,22 +82,19 @@ export class DefaultSoundfontLoader implements SoundfontLoader {
             const error = fetchResult.error
             console.warn(error)
             const reason = error instanceof Error ? error.message : String(error)
-            this.#setState({type: "error", reason})
+            this.#setState({type: "error", reason, cause: error})
             return
         }
         const [file, meta] = fetchResult.value
-        const storeResult = await Promises.tryCatch(SoundfontStorage.get().save({uuid: this.#uuid, file, meta}))
-        if (storeResult.status === "resolved") {
-            const {status, value: SoundFont2, error} = await ExternalLib.SoundFont2()
-            if (status === "rejected") return console.warn(error)
-            this.#soundfont = Option.wrap(new SoundFont2(new Uint8Array(file)))
-            this.#meta = Option.wrap(meta)
-            this.#setState({type: "loaded"})
-        } else {
-            const error = storeResult.error
-            console.warn(error)
-            const reason = error instanceof Error ? error.message : String(error)
-            this.#setState({type: "error", reason})
+        const stored = await Promises.tryCatch(SoundfontStorage.get().save({uuid: this.#uuid, file, meta}, true))
+        if (stored.status === "rejected") {
+            console.warn(`Soundfont ${UUID.toString(this.#uuid)} plays from memory, it could not be stored`, stored.error)
         }
+        const {status, value: SoundFont2, error} = await ExternalLib.SoundFont2()
+        if (status === "rejected") return console.warn(error)
+        this.#soundfont = Option.wrap(new SoundFont2(new Uint8Array(file)))
+        this.#file = stored.status === "rejected" ? Option.wrap(file) : Option.None
+        this.#meta = Option.wrap(meta)
+        this.#setState({type: "loaded"})
     }
 }

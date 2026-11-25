@@ -6,6 +6,7 @@ import {
     isDefined,
     isInstanceOf,
     Lifecycle,
+    panic,
     Terminable,
     Terminator,
     UUID
@@ -20,7 +21,7 @@ import {NoteEventBox} from "@opendaw/studio-boxes"
 import {PianoRoll} from "@/ui/timeline/editors/notes/pitch/PianoRoll.tsx"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
 import {PitchEditorHeader} from "@/ui/timeline/editors/notes/pitch/PitchEditorHeader.tsx"
-import {FilteredSelection, NoteEventBoxAdapter, NoteSignal, NoteStreamReceiver} from "@opendaw/studio-adapters"
+import {FilteredSelection, NoteEventBoxAdapter, NoteSignal, NoteStreamReceiver, TrackType} from "@opendaw/studio-adapters"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {PropertyEditor} from "./property/PropertyEditor.tsx"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
@@ -46,15 +47,24 @@ type Construct = {
 }
 
 const scale = new ScaleConfig()
+const followKey = new DefaultObservableValue(false)
 const pitchPositioner = new PitchPositioner()
 
 export const NoteEditor =
     ({lifecycle, service, menu: {editMenu, viewMenu}, range, snapping, reader}: Construct) => {
         const {project} = service
         const {captureDevices, editing, engine, boxGraph, boxAdapters} = project
-        const resolveCapture = (): CaptureMidi => reader.trackBoxAdapter
-            .flatMap((adapter) => captureDevices.get(adapter.audioUnit.address.uuid))
-            .map(capture => isInstanceOf(capture, CaptureMidi) ? capture : null).unwrap("No CaptureMidi available")
+        const resolveCapture = (): CaptureMidi => {
+            const track = reader.trackBoxAdapter.unwrap("No CaptureMidi available: event owner has no track")
+            const {audioUnit} = track
+            const captureBoxName = audioUnit.capture.targetVertex.mapOr(({box}) => box.name, "none")
+            console.debug(`resolveCapture unit: ${UUID.toString(audioUnit.address.uuid)}, track type: ${TrackType[track.type]}`)
+            const capture = captureDevices.get(audioUnit.address.uuid)
+                .unwrap(`No CaptureMidi available: unit has no capture device (capture box: ${captureBoxName})`)
+            return isInstanceOf(capture, CaptureMidi)
+                ? capture
+                : panic(`No CaptureMidi available: unit holds ${captureBoxName}`)
+        }
         const captureRef = {current: resolveCapture()}
         const noteReceiver = lifecycle.own(new NoteStreamReceiver(project.liveStreamReceiver))
         const trackBindings = lifecycle.own(new Terminator())
@@ -96,6 +106,18 @@ export const NoteEditor =
         lifecycle.own(reader.subscribeTrackChange(() => {
             if (reader.trackBoxAdapter.nonEmpty()) {bindToTrack()}
         }))
+        const {keyTrack} = project.timelineBoxAdapter
+        const applyProjectKey = () => {
+            if (!followKey.getValue()) {return}
+            const {root, bits} = keyTrack.keyAt(engine.position.getValue())
+            scale.key = root
+            scale.setBits(bits)
+        }
+        lifecycle.ownAll(
+            followKey.catchupAndSubscribe(applyProjectKey),
+            engine.position.subscribe(applyProjectKey),
+            keyTrack.subscribe(applyProjectKey)
+        )
         const stepRecording = lifecycle.own(new DefaultObservableValue(false))
         const modifyContext = new ObservableModifyContext<NoteModifier>()
         const propertyOwner = new DefaultObservableValue<PropertyAccessor>(NotePropertyVelocity)
@@ -112,7 +134,8 @@ export const NoteEditor =
                                    selection={selection}
                                    editing={editing}
                                    modifyContext={modifyContext}
-                                   scale={scale}/>
+                                   scale={scale}
+                                   followKey={followKey}/>
                 <PianoRoll lifecycle={lifecycle}
                            positioner={pitchPositioner}
                            scale={scale}
@@ -151,7 +174,8 @@ export const NoteEditor =
                 selection: selection,
                 events: reader.content.events,
                 stepRecording,
-                api: project.api
+                api: project.api,
+                keyAt: position => keyTrack.keyAt(position + reader.offset)
             })),
             installEditorBody({element: pitchBody, range, reader}),
             Html.watchResize(pitchBody, (() => {

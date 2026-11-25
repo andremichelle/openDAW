@@ -19,11 +19,13 @@ import {
     unitValue,
     UUID
 } from "@opendaw/lib-std"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
+import {Interpolation, ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioClipBox,
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
     AudioRegionBox,
     AudioUnitBox,
     CaptureAudioBox,
@@ -47,9 +49,11 @@ import {
     AudioRegionBoxAdapter,
     AudioUnitBoxAdapter,
     AudioUnitFactory,
+    AudioUnitGroups,
     CaptureBox,
     ColorCodes,
     DeviceAccepts,
+    Devices,
     DeviceBoxUtils,
     EffectPointerType,
     IndexedAdapterCollectionListener,
@@ -59,9 +63,9 @@ import {
     InstrumentOptions,
     InstrumentProduct,
     InterpolationFieldAdapter,
-    isModulatorBox,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
+    PresetDecoder,
     ProjectQueries,
     RegionAdapters,
     RegionOverlap,
@@ -72,6 +76,7 @@ import {
 import {Project} from "./Project"
 import {ProjectModulation} from "./ProjectModulation"
 import {EffectFactory} from "../EffectFactory"
+import {EffectFactories} from "../EffectFactories"
 import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
 import {NoteMidiExport} from "./NoteMidiExport"
@@ -79,6 +84,11 @@ import {AudioWavExport} from "./AudioWavExport"
 import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
 import {BoxGraphCopy} from "../BoxGraphCopy"
 import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
+
+export type AudioUnitInsertion = {
+    readonly before: Option<UUID.Bytes>
+    readonly parent: Option<UUID.Bytes>
+}
 
 export type CompositeLayerProduct<INST extends InstrumentBox> = {
     cellBox: InstrumentCompositeCellBox
@@ -150,12 +160,12 @@ export class ProjectApi {
     createInstrument<A, INST extends InstrumentBox>(
         {create, defaultIcon, defaultName, trackType}: InstrumentFactory<A, INST>,
         options: InstrumentOptions<A> = {} as any): InstrumentProduct<INST> {
-        const {name, icon, index} = options
+        const {name, icon, index, destination} = options
         const {boxGraph, rootBox, userEditingManager} = this.#project
         assert(rootBox.isAttached(), "rootBox not attached")
         const existingNames = ProjectQueries.existingInstrumentNames(rootBox)
         const audioUnitBox = AudioUnitFactory.create(this.#project.skeleton,
-            AudioUnitType.Instrument, this.#trackTypeToCapture(boxGraph, trackType), index)
+            AudioUnitType.Instrument, this.#trackTypeToCapture(boxGraph, trackType), index, destination)
         const uniqueName = Strings.getUniqueName(existingNames, name ?? defaultName)
         const iconSymbol = icon ?? defaultIcon
         const instrumentBox = create(boxGraph, audioUnitBox.input, uniqueName, iconSymbol, options.attachment)
@@ -171,6 +181,67 @@ export class ProjectApi {
 
     createAnyInstrument(factory: InstrumentFactory<any, any>): InstrumentProduct<InstrumentBox> {
         return this.createInstrument(factory)
+    }
+
+    createInstrumentAfterSelection(factory: InstrumentFactory): InstrumentProduct<InstrumentBox> {
+        return this.createInstrumentAt(factory, this.insertionAfterSelection())
+    }
+
+    insertionAfterSelection(): AudioUnitInsertion {
+        const {audioUnitSelection, audioUnitLayout} = this.#project
+        const selected = AudioUnitGroups.roots(audioUnitSelection.selected())
+        const anchor = audioUnitLayout.snapshot.visibleRows.findLast(row => selected.includes(row.unit))?.unit
+        return this.insertionAfter(Option.wrap(anchor))
+    }
+
+    insertionAfterEditing(): AudioUnitInsertion {
+        return this.insertionAfter(this.#project.userEditingManager.audioUnit.get()
+            .flatMap(vertex => vertex.box instanceof AudioUnitBox ? Option.wrap(vertex.box) : Option.None))
+    }
+
+    insertionAfter(anchor: Option<AudioUnitBox>): AudioUnitInsertion {
+        const parent = anchor.flatMap(AudioUnitGroups.parent)
+        const siblings = AudioUnitGroups.children(this.#project.rootBox, parent.unwrapOrUndefined())
+        const before = anchor.flatMap(unit => Option.wrap(siblings[siblings.indexOf(unit) + 1]))
+        return {before: before.map(unit => unit.address.uuid), parent: parent.map(unit => unit.address.uuid)}
+    }
+
+    insertionBefore(anchor: Option<UUID.Bytes>): AudioUnitInsertion {
+        return {before: anchor, parent: anchor.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(AudioUnitGroups.parent).map(unit => unit.address.uuid)}
+    }
+
+    createInstrumentAt(factory: InstrumentFactory, insertion: AudioUnitInsertion): InstrumentProduct<InstrumentBox> {
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => AudioUnitGroups.isGroup(unit) ? Option.wrap(unit) : Option.None)
+        const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
+        const product = this.createInstrument(factory, {destination})
+        this.placeAudioUnitsAt([product.audioUnitBox], insertion)
+        const {audioUnitSelection} = this.#project
+        audioUnitSelection.deselectAll()
+        audioUnitSelection.select(product.audioUnitBox)
+        return product
+    }
+
+    importAudioUnitsAt(bytes: ArrayBuffer, insertion: AudioUnitInsertion): ReadonlyArray<AudioUnitBox> {
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => AudioUnitGroups.isGroup(unit) ? Option.wrap(unit) : Option.None)
+        const destination = parent.flatMap(AudioUnitGroups.bus).unwrapOrUndefined()
+        const imported = PresetDecoder.decode(bytes, this.#project.skeleton, undefined, destination)
+        this.placeAudioUnitsAt(AudioUnitGroups.roots(imported), insertion)
+        return imported
+    }
+
+    placeAudioUnitsAt(units: ReadonlyArray<AudioUnitBox>, insertion: AudioUnitInsertion): void {
+        if (insertion.parent.isEmpty() && insertion.before.isEmpty()) {return}
+        const parent = insertion.parent.flatMap(uuid => this.#audioUnit(uuid)).flatMap(unit => AudioUnitGroups.isGroup(unit) ? Option.wrap(unit) : Option.None)
+        const before = insertion.before.flatMap(uuid => this.#audioUnit(uuid))
+            .flatMap(unit => AudioUnitGroups.parent(unit).equals(parent) ? Option.wrap(unit) : Option.None)
+        this.#project.grouping.move(units, parent.unwrapOrUndefined(), before.unwrapOrUndefined())
+    }
+
+    #audioUnit(uuid: UUID.Bytes): Option<AudioUnitBox> {
+        return this.#project.boxGraph.findBox(uuid).flatMap(box => box instanceof AudioUnitBox ? Option.wrap(box) : Option.None)
     }
 
     // Moves a unit to `slot`, an index among the units BEFORE the move (as a drop between two units names it).
@@ -274,6 +345,24 @@ export class ProjectApi {
         return Attempts.ok({cellBox, instrumentBox})
     }
 
+    // re-hosts by pointer, nothing is copied: automation lanes keep their targets
+    wrapEffectsIntoComposite(effects: ReadonlyArray<EffectBox>): Attempt<AudioEffectCompositeBox, string> {
+        if (effects.length === 0) {return Attempts.err("No effects to wrap")}
+        if (!effects.every(box => box.tags.deviceType === "audio-effect")) {return Attempts.err("Only audio effects can be wrapped")}
+        const field = effects[0].host.targetVertex.unwrap("effect.host") as Field<EffectPointerType>
+        if (!effects.every(box => box.host.targetVertex.mapOr(vertex => vertex === field, false))) {
+            return Attempts.err("The effects are not in the same chain")
+        }
+        const index = Math.min(...effects.map(box => box.index.getValue()))
+        const composite = asInstanceOf(EffectFactories.AudioEffectComposite.create(this.#project, field, index), AudioEffectCompositeBox)
+        const cellBox = AudioEffectCompositeCellBox.create(this.#project.boxGraph, UUID.generate(), box => {
+            box.composite.refer(composite.entries)
+            box.index.setValue(0)
+        })
+        this.moveEffects(cellBox.audioEffects, effects, 0)
+        return Attempts.ok(composite)
+    }
+
     pasteAudioUnitAsLayer(composite: InstrumentCompositeBox, data: ArrayBufferLike,
                           notes: AudioUnitAsLayer.Notes = "append"): Attempt<CompositeLayerProduct<InstrumentBox>, string> {
         return AudioUnitAsLayer.paste(this.#project, composite, data, notes)
@@ -330,7 +419,7 @@ export class ProjectApi {
                 }
                 return DevicesClipboard.mapModulationPointer(pointer, address, boxGraph)
             },
-            keepUuid: isModulatorBox,
+            keepUuid: DevicesClipboard.keepUuid,
             excludeBox: box => DevicesClipboard.excludeExistingModulator(box, boxGraph)
         })
         const topLevel = copies
@@ -628,7 +717,7 @@ export class ProjectApi {
             .flatMap(vertex => this.#project.parameterFieldAdapters.opt(vertex.address))
             .map(parameter => {
                 const dial = parameter.getControlledUnitValue()
-                const interpolation = InterpolationFieldAdapter.map(parameter.type)
+                const interpolation = parameter.valueMapping.floating() ? Interpolation.Linear : Interpolation.None
                 const preceding = trackAdapter.regions.collection.lowerEqual(position)
                 if (isDefined(preceding) && preceding.isValueRegion()) {
                     return {value: preceding.outgoingValue(dial), interpolation}
@@ -659,6 +748,7 @@ export class ProjectApi {
     deleteAudioUnit(audioUnitBox: AudioUnitBox): void {
         // The output unit is mandatory; deleting it desyncs the engine (it rejects the transaction).
         if (audioUnitBox.type.getValue() === AudioUnitType.Output) {return}
+        if (AudioUnitGroups.isGroup(audioUnitBox)) {this.#project.grouping.deleteGroup(audioUnitBox); return}
         const {rootBox} = this.#project
         IndexedBox.removeOrder(rootBox.audioUnits, audioUnitBox.index.getValue())
         audioUnitBox.delete()
@@ -679,18 +769,7 @@ export class ProjectApi {
         const blockEnd = notes.reduce((max, {position, duration}) => Math.max(max, position + duration), -Infinity)
         const shift = blockEnd - blockStart
         if (shift <= 0) {return []}
-        const {boxGraph, boxAdapters} = this.#project
-        return notes.map(adapter => {
-            const copy = NoteEventBox.create(boxGraph, UUID.generate(), box => {
-                const events = adapter.box.events.targetVertex.unwrap("events.target")
-                box.events.refer(events)
-                box.position.setValue(adapter.position + shift)
-                box.duration.setValue(adapter.duration)
-                box.pitch.setValue(adapter.pitch)
-                box.velocity.setValue(adapter.velocity)
-            })
-            return boxAdapters.adapterFor(copy, NoteEventBoxAdapter)
-        })
+        return notes.map(adapter => adapter.copyTo({position: adapter.position + shift}))
     }
 
     #createTrack({field, target, trackType, insertIndex}: {

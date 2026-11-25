@@ -102,7 +102,7 @@ fn an_automated_pass_level_retargets_at_the_update_clock_inside_the_quantum() {
     // unity before it, ramping toward -inf after it.
     let params = Rc::new(SendParams::new());
     let automation = Rc::new(StripAutomation::new());
-    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool| if position < 10.0 {0.0} else {f32::NEG_INFINITY}));
+    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool, _lag: u32| if position < 10.0 {0.0} else {f32::NEG_INFINITY}));
     let mut sink = sink(&params, automation);
     let input = shared_audio_buffer();
     {
@@ -110,7 +110,7 @@ fn an_automated_pass_level_retargets_at_the_update_clock_inside_the_quantum() {
         for index in 0..RENDER_QUANTUM { buffer.left[index] = 1.0; buffer.right[index] = 1.0; }
     }
     sink.set_audio_source(input);
-    let block = Block {index: 0, flags: BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING), p0: 8.0, p1: 13.12, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0};
+    let block = Block {index: 0, flags: BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING), p0: 8.0, p1: 13.12, anchor: 8.0, anchor_frame: 0, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0};
     sink.process(&ProcessInfo {blocks: &[block]});
     let output = sink.audio_output();
     let buffer = output.borrow();

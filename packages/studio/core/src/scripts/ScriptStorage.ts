@@ -4,6 +4,7 @@ import {OpfsProtocol} from "@opendaw/lib-fusion"
 import {Workers} from "../Workers"
 import {ScriptMeta} from "./ScriptMeta"
 import {ScriptPaths} from "./ScriptPaths"
+import {TrashList} from "../TrashList"
 
 export type StockScript = {
     uuid: UUID.String
@@ -66,17 +67,10 @@ export class ScriptStorage {
     }
 
     async delete(uuid: UUID.Bytes): Promise<void> {
-        const trashed = await this.loadTrashedIds()
-        const id = UUID.toString(uuid)
-        if (!trashed.includes(id)) {trashed.push(id)}
-        await this.#files.write(ScriptPaths.TrashFile, new TextEncoder().encode(JSON.stringify(trashed)))
-        await this.#files.delete(ScriptPaths.scriptFolder(uuid))
+        return TrashList.deleteRecorded(this.#files, ScriptPaths.TrashFile, UUID.toString(uuid), ScriptPaths.scriptFolder(uuid))
     }
 
-    async loadTrashedIds(): Promise<Array<UUID.String>> {
-        const {status, value} = await Promises.tryCatch(this.#files.read(ScriptPaths.TrashFile))
-        return status === "rejected" ? [] : JSON.parse(new TextDecoder().decode(value))
-    }
+    async loadTrashedIds(): Promise<Array<UUID.String>> {return TrashList.read(this.#files, ScriptPaths.TrashFile)}
 
     // Stock scripts ship with the app: a newer build replaces older copies, deleted ones stay deleted
     async syncStock(stock: ReadonlyArray<StockScript>): Promise<void> {

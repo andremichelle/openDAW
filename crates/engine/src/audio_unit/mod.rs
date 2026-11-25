@@ -18,14 +18,14 @@
 //! `params` (device parameter automation) + `tests` (the whole suite, whitebox over every submodule).
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
-use abi::{DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, FIELD_KIND_BOOL, FIELD_KIND_FLOAT, FIELD_KIND_INT, FIELD_KIND_INT_ARRAY, FIELD_KIND_STRING, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
+use abi::{DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, FIELD_KIND_BOOL, FIELD_KIND_FLOAT, FIELD_KIND_INT, FIELD_KIND_BYTES, FIELD_KIND_INT_ARRAY, FIELD_KIND_STRING, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
 use bindings::indexed_collection::IndexedCollection;
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
@@ -65,7 +65,7 @@ use crate::audio_region_player::AudioRegionPlayer;
 use crate::midi_output::{self, CcBinding, MidiOutControls, MidiOutProcessor};
 use crate::time_stretch::{TimeStretchConfig, TransientPlayMode};
 use crate::tempo_map::{SharedTempoMap, TempoMap};
-use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, call_device_terminate, CompositeSpec, DeviceReg, Engine, FieldObs, PullLink, BIND, BROADCAST_BINDS, DEVICE_BROADCASTS, DEVICE_BROADCAST_FREE, FIELD_OBS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, call_device_terminate, CompositeSpec, DeviceReg, Engine, FieldObs, PullLink, BIND, BROADCAST_BINDS, DEVICE_BROADCASTS, DEVICE_BROADCAST_FREE, FIELD_OBS, GROOVE_BINDS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
 
 mod wiring;
 mod routing;
@@ -96,6 +96,7 @@ const UNIT_MIDI_KEY: u16 = 21;     // midi-effect chain host
 const UNIT_INPUT_KEY: u16 = 22;    // instrument (input) host
 const UNIT_AUDIO_KEY: u16 = 23;    // audio-effect chain host
 const UNIT_AUX_SENDS_KEY: u16 = 24; // the unit's `auxSends` collection (parallel post-FX / pre-fader sends)
+const UNIT_MASTERING_KEY: u16 = 27; // mastering host: one device after the audio chain, built only if its plugin is linked
 const UNIT_OUTPUT_KEY: u16 = 25;   // the unit's `output` pointer -> the AudioBusBox `input` it feeds (or the root)
 // RootBox.audio-units hub (unit membership) — a different box, same ordinal.
 const ROOT_AUDIO_UNITS_KEY: u16 = 20;
@@ -111,7 +112,7 @@ const BUS_ENABLED_KEY: u16 = 4; // AudioBusBox.enabled: a disabled bus sums noth
 // The MIDI-output instrument (engine-side like the tape: it emits MIDI messages, no audio).
 // WASM CONTRACT: MIDIOutputDeviceBox field keys — enabled 4, channel 11, parameters 13 (hub), device 14
 // (pointer -> MIDIOutputBox); MIDIOutputParameterBox — controller 3 (Int32), value 4 (unipolar Float32).
-const MIDI_OUT_BOX_TYPE: &str = "MIDIOutputDeviceBox";
+pub(crate) const MIDI_OUT_BOX_TYPE: &str = "MIDIOutputDeviceBox";
 const MIDI_OUT_CHANNEL_KEY: u16 = 11;
 const MIDI_OUT_PARAMETERS_KEY: u16 = 13;
 const MIDI_OUT_DEVICE_KEY: u16 = 14;
@@ -120,6 +121,7 @@ const MIDI_OUT_PARAM_VALUE_KEY: u16 = 4;
 // AuxSendBox fields: targetBus (2, pointer -> the bus's `input`), routing (4, Int32: AudioSendRouting Pre=0 /
 // Post=1), sendGain (5, dB), sendPan (6, bipolar).
 const SEND_TARGET_KEY: u16 = 2;
+const SEND_INDEX_KEY: u16 = 3;
 const SEND_ROUTING_KEY: u16 = 4;
 const SEND_GAIN_KEY: u16 = 5;
 const SEND_PAN_KEY: u16 = 6;
@@ -203,6 +205,24 @@ pub(crate) struct MidiOutWired {
     pub(crate) cc_subs: Vec<SubscriptionId>,        // the CC parameters' field / automation observations
     pub(crate) cc_collections: Vec<ValueCollection>,
     pub(crate) monitor_node: Option<NodeId>
+}
+
+/// A MIDI Output device's node and box observations, shared by a unit (`MidiOutWired`) and a composite layer.
+pub(crate) struct MidiOutDevice {
+    pub(crate) node: Rc<RefCell<MidiOutProcessor>>,
+    pub(crate) node_id: NodeId,
+    pub(crate) instrument_uuid: Uuid,
+    pub(crate) controls: Rc<MidiOutControls>,
+    pub(crate) subs: Vec<SubscriptionId>,
+    pub(crate) cc_subs: Vec<SubscriptionId>,
+    pub(crate) cc_collections: Vec<ValueCollection>
+}
+
+/// What a composite slot's instrument is: a plugin, or the engine-side MIDI Output.
+#[derive(Clone, Copy)]
+pub(crate) enum SlotInstrument {
+    Plugin(DeviceReg),
+    MidiOut
 }
 
 /// A FROZEN unit's wiring (TS `AudioDeviceChain.#wire`'s frozen branch): the pre-rendered PCM player
@@ -313,6 +333,8 @@ pub(crate) struct TapeWired {
 /// `set_pull_chain`) without recreating it.
 pub(crate) enum ProcHandle {
     Instrument(Rc<RefCell<PluginInstrument>>),
+    // A MIDI Output hosted by a composite layer (a unit-level one is `Wired::MidiOut`).
+    MidiOut(Box<MidiOutDevice>),
     Audio(Rc<RefCell<PluginAudioEffect>>),
     Midi(Rc<PluginMidiEffect>),
     // A parallel EFFECT COMPOSITE: not one plugin but a whole sub-graph (distributor -> entries -> wet sum ->
@@ -539,14 +561,21 @@ pub(crate) struct DeviceParams {
     // device without that collection. The per-child param/sample subscriptions live in `field_subs`/`observe_subs`.
     pub(crate) param_hub_sub: Option<SubscriptionId>,
     pub(crate) sample_hub_sub: Option<SubscriptionId>,
+    // the per-child `file` / `index` subscriptions of the `samples` hub, re-made on every `rebind_one` (a slot added
+    // or removed re-binds): kept apart from `observe_subs`, which a re-bind leaves alone
+    pub(crate) sample_subs: Vec<SubscriptionId>,
+    // SCRIPTABLE devices: the `@collection` records, flushed by the unit reconcile; `None` without a records hub
+    pub(crate) records: Option<crate::script_device::RecordBinding>,
     // The device's LIVE-DATA broadcast slots (`host_bind_broadcast`): (global registry id, slot). The Rc keeps
     // the table entry alive (Weak-swept on drop); teardown zeroes the registry ptr + frees the id.
-    pub(crate) broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>
+    pub(crate) broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>,
+    // the groove slots the device observed (`observe_groove`), freed on teardown
+    pub(crate) groove_slots: Vec<u32>
 }
 
 /// A device node that takes resolved sidechain buffers: an audio effect, or an instrument with an audio input.
 pub(crate) trait SidechainSink {
-    fn set_sidechains(&mut self, sources: &[(u32, SharedAudioBuffer)]);
+    fn set_sidechains(&mut self, sources: &[(u32, NodeId, SharedAudioBuffer)]);
 }
 
 /// A persistent sidechain binding kept by the owning unit: a device that declared sidechain ports, the
@@ -557,18 +586,28 @@ pub(crate) struct SidechainBinding {
     pub(crate) sink: Rc<RefCell<dyn SidechainSink>>,
     pub(crate) node_id: NodeId,
     pub(crate) device_uuid: Uuid,
-    pub(crate) ports: Vec<SidechainPort>
+    pub(crate) ports: Vec<SidechainPort>,
+    pub(crate) collection: Option<SidechainCollection>
 }
 
-/// One declared sidechain port: its id (2+), the device-relative pointer path to follow, the source node it
+/// A scriptable device's hub of `WerkstattSidechainBox` children: each child is one port, synced on resolve.
+pub(crate) struct SidechainCollection {
+    pub(crate) hub_field: u16,
+    pub(crate) bound_count: u32,
+    pub(crate) hub_sub: SubscriptionId,
+    pub(crate) signal: Rc<dyn Fn()>
+}
+
+/// One declared sidechain port: its id (2+), the pointer address to follow, the source node it
 /// is currently wired to (`None` = unresolved, kept so the resolve pass can diff + tear down the old edge),
 /// and a TARGETED `This` monitor on the device's sidechain pointer field so a re-point / detach enqueues the
 /// owning unit (no all-updates listener).
 pub(crate) struct SidechainPort {
     pub(crate) port_id: u32,
-    pub(crate) path: Vec<u16>,
+    pub(crate) address: Address,
     pub(crate) resolved: Option<NodeId>,
-    pub(crate) pointer_sub: SubscriptionId
+    pub(crate) pointer_sub: SubscriptionId,
+    pub(crate) child: Option<(Uuid, SubscriptionId)> // a collection port: its child box + `index` monitor
 }
 
 /// Where bound parameters are pushed: an audio node (instrument / audio-fx, mutated through its
@@ -616,6 +655,7 @@ pub(crate) struct AudioUnitBinding {
     pub(crate) input: IndexedCollection,
     pub(crate) midi: IndexedCollection,
     pub(crate) audio: IndexedCollection,
+    pub(crate) mastering: IndexedCollection,
     // SEND/RETURN: the unit's `output` (25) pointer monitor (a re-point enqueues the unit so `resolve_outputs`
     // re-routes it) + the CURRENT output route (which bus sum the strip feeds), and the `auxSends` (24)
     // collection + its built parallel sends. `routed` persists across rewires so a route can be torn down even
@@ -656,6 +696,13 @@ pub(crate) fn advance_shared_clips(units: &[AudioUnitBinding], clips: &Rc<RefCel
 }
 
 impl AudioUnitBinding {
+    /// The audio-effect chain in processing order: the `audio-effects` members by index, then the mastering device.
+    pub(crate) fn audio_chain(&self) -> Vec<Uuid> {
+        let mut chain = self.audio.sorted();
+        chain.extend(self.mastering.sorted());
+        chain
+    }
+
     pub(crate) fn shares_clip_read(&self) -> bool {
         matches!(&self.wired, Some(Wired::Composite(composite)) if composite.binding.cell_based())
     }
@@ -669,22 +716,22 @@ impl AudioUnitBinding {
     /// `useInstrumentOutput` (the instrument / tape player / composite sum / bus sum output — pre-fx by
     /// construction, since the fx write their OWN buffers), the pre-strip (post-fx) buffer for
     /// `skipChannelStrip`, else the channel-strip output.
-    pub(crate) fn stem_tap(&self, entry: &crate::StemEntry) -> Option<SharedAudioBuffer> {
+    pub(crate) fn stem_tap(&self, entry: &crate::StemEntry) -> Option<(NodeId, SharedAudioBuffer)> {
         let wired = self.wired.as_ref()?;
         if entry.use_instrument_output {
             return Some(match wired {
-                Wired::Leaf(chain) => chain.instrument.output.clone()?,
-                Wired::Tape(tape) => tape.player.borrow().audio_output(),
-                Wired::Composite(composite) => composite.binding.sum_buffer.clone(),
-                Wired::Bus(bus) => bus.sum_buffer.clone(),
-                Wired::Frozen(frozen) => frozen.pre_strip.clone(),
-                Wired::MidiOut(midi) => midi.node.borrow().audio_output() // silent by construction
+                Wired::Leaf(chain) => (chain.instrument.node_id?, chain.instrument.output.clone()?),
+                Wired::Tape(tape) => (tape.player_id, tape.player.borrow().audio_output()),
+                Wired::Composite(composite) => (composite.binding.sum_id, composite.binding.sum_buffer.clone()),
+                Wired::Bus(bus) => (bus.sum_node.unwrap_or(bus.pre_strip_node), bus.sum_buffer.clone()),
+                Wired::Frozen(frozen) => (frozen.player_id, frozen.pre_strip.clone()),
+                Wired::MidiOut(midi) => (midi.node_id, midi.node.borrow().audio_output()) // silent by construction
             });
         }
         if entry.skip_channel_strip {
-            return Some(wired.pre_strip().1);
+            return Some(wired.pre_strip());
         }
-        Some(wired.strip().1)
+        Some(wired.strip())
     }
 }
 
@@ -730,7 +777,14 @@ impl Engine {
         let stems = core::mem::take(&mut self.stem_exports);
         for (index, entry) in stems.iter().enumerate() {
             let Some(unit) = self.audio_units.iter().find(|unit| unit.unit == entry.uuid) else { continue };
-            let Some(tap) = unit.stem_tap(entry) else { continue };
+            let Some((_, tap)) = unit.stem_tap(entry) else { continue };
+            let tap = match self.stem_compensation.get_mut(index).and_then(Option::as_mut) {
+                Some(compensation) => {
+                    compensation.process(&tap);
+                    compensation.output()
+                }
+                None => tap
+            };
             let buffer = tap.borrow();
             let base = index * 2 * engine_env::RENDER_QUANTUM;
             self.stem_staging[base..base + engine_env::RENDER_QUANTUM].copy_from_slice(&buffer.left);
@@ -809,6 +863,7 @@ impl Engine {
             self.resolve_outputs(); // route each unit's strip to its OUTPUT bus (or the master fallback)
             self.resolve_sends();   // wire each parallel aux send: pre-fader tap -> target bus
             self.resolve_sinks();   // wire each audio sink's tap -> target bus (no master fallback)
+            self.resolve_feedback();
             self.broadcasts.sweep(); // drop telemetry entries whose processor was torn down (generation bump)
             self.solo_dirty.set(true); // routing may have changed: the solo walk must re-resolve
         }
@@ -918,7 +973,7 @@ impl Engine {
         let mut changed = false;
         for unit in &self.audio_units {
             let soloed = match unit.strip_automation.solo.borrow().as_ref() {
-                Some(source) => source(position, true) >= 0.5, // TS `ValueMapping.bool.y`
+                Some(source) => source(position, true, 0) >= 0.5, // TS `ValueMapping.bool.y`
                 None => continue
             };
             if unit.strip_params.solo.get() != soloed {
@@ -956,7 +1011,7 @@ impl Engine {
         // mid-bind) raises the LIGHT flag through this cell instead of the heavy automation invalidate.
         set_params_signal(Some(params_invalidate(unit)));
         // `wiring_dirty` (a device `enabled` toggle) re-wires the chain edge-only without a membership change.
-        let unit_dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | unit.wiring_dirty.replace(false);
+        let unit_dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | unit.mastering.take_dirty() | unit.wiring_dirty.replace(false);
         if unit_dirty {
             // The unit's own chain changed (instrument swapped, or a unit-level fx joined / left): reconcile the
             // whole chain (a composite instrument is rebuilt; a leaf reconciles per member). Survivors untouched.
@@ -1002,10 +1057,14 @@ impl Engine {
             unit.wired = wired;
         }
         // A plain FIELD edit (knob drag): the value cells are already updated by their subscriptions, so a
-        // single refresh pushes exactly the changed values — no unsubscribe / re-observe churn. Skipped when a
-        // heavier path already ran (a rebuild / re-bind pushes on its own).
-        if params_changed && !unit_dirty && !automation_changed {
+        // single refresh pushes exactly the changed values — no unsubscribe / re-observe churn. Skipped after an
+        // automation re-bind (it pushes on its own), NOT after a chain reconcile: that leaves survivors untouched.
+        if params_changed && !automation_changed {
             self.refresh_unit_params(unit);
+        }
+        // a record / value edit raised the light flag: deliver each dirty `@collection` snapshot once
+        if params_changed || automation_changed {
+            self.flush_unit_records(unit);
         }
         set_params_signal(None);
         crate::set_current_unit_note_bits(None);
@@ -1042,6 +1101,7 @@ impl Engine {
         binding.input.terminate(&mut self.graph);
         binding.midi.terminate(&mut self.graph);
         binding.audio.terminate(&mut self.graph);
+        binding.mastering.terminate(&mut self.graph);
         binding.aux_sends.terminate(&mut self.graph);
     }
 
@@ -1176,14 +1236,17 @@ impl Engine {
             self.teardown_sink(*binding);
             return;
         }
+        if let ProcHandle::MidiOut(device) = member.proc {
+            self.graph.unsubscribe(member.enabled_sub);
+            self.teardown_midi_out_device(*device);
+            return;
+        }
         self.output_registry.remove(&Address::of(member.uuid, vec![]));
         if let Some(node_id) = member.node_id {
             self.context.remove_processor(node_id);
         }
         if let Some(sidechain) = member.sidechain {
-            for port in sidechain.ports {
-                self.graph.unsubscribe(port.pointer_sub);
-            }
+            self.teardown_sidechain(sidechain);
         }
         self.graph.unsubscribe(member.enabled_sub);
         if let Some(params) = member.params {
@@ -1218,15 +1281,17 @@ impl Engine {
         let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_INPUT_KEY]), 0);
         let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_MIDI_KEY]), EFFECT_INDEX_KEY);
         let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUDIO_KEY]), EFFECT_INDEX_KEY);
+        let mastering = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_MASTERING_KEY]), 0);
         // A chain edit (add / remove / reorder a device) enqueues this unit for a targeted reconcile. Wired
         // after `observe` so the catch-up members do not fire it; the new unit enqueues itself once below.
         input.set_on_dirty(mark.signal());
         midi.set_on_dirty(mark.signal());
         audio.set_on_dirty(mark.signal());
+        mastering.set_on_dirty(mark.signal());
         // SEND/RETURN: the `auxSends` (24) collection (parallel sends, ordered by index but order is not audible)
         // + a monitor on `output` (25) so a re-point of the unit's destination bus enqueues it. Both wired AFTER
         // observe so the catch-up members / value do not fire (the new unit enqueues itself once below).
-        let aux_sends = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUX_SENDS_KEY]), EFFECT_INDEX_KEY);
+        let aux_sends = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUX_SENDS_KEY]), SEND_INDEX_KEY);
         aux_sends.set_on_dirty(mark.signal());
         let output_mark = mark.clone();
         let output_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, vec![UNIT_OUTPUT_KEY]),
@@ -1269,7 +1334,7 @@ impl Engine {
             audio_track_sets: Rc::new(RefCell::new(Vec::new())), audio_tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub, solo_sub],
             strip_automation: Rc::new(StripAutomation::new()), strip_param_subs: Vec::new(), strip_param_collections: Vec::new(),
-            note_bits, input, midi, audio, output_sub, routed: None, aux_sends, sends: Vec::new(),
+            note_bits, input, midi, audio, mastering, output_sub, routed: None, aux_sends, sends: Vec::new(),
             wired: None, automation_dirty, params_dirty, wiring_dirty, mark
         }
     }

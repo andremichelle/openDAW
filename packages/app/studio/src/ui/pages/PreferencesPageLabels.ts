@@ -1,6 +1,7 @@
 import {NestedLabels} from "@/ui/PreferencePanel"
 import {FpsOptions, OverlappingRegionsBehaviourOptions, StudioSettings, WclapZoomOptions} from "@opendaw/studio-core"
 import {EngineSettings} from "@opendaw/studio-adapters"
+import {ColorSchemes} from "@opendaw/studio-enums"
 
 export namespace PreferencesPageLabels {
     export const StudioSettingsLabels: NestedLabels<StudioSettings> = {
@@ -21,6 +22,8 @@ export namespace PreferencesPageLabels {
                 "markers": "Show markers track",
                 "tempo": "Show tempo track",
                 "signature": "Show signature track",
+                "key": "Show key track",
+                "chords": "Show chords track",
                 "clips": "Show clips",
                 "follow-cursor": "Follow cursor"
             }
@@ -28,8 +31,8 @@ export namespace PreferencesPageLabels {
         "appearance": {
             label: "Appearance",
             fields: {
-                "neutral-hue": "Neutral hue (0-360)",
-                "neutral-saturation": "Neutral saturation (%)"
+                "color-scheme": "Color scheme",
+                "clamp-to-60fps": "Limit animations to 60 fps (for slower computers)"
             }
         },
         "time-display": {
@@ -63,7 +66,8 @@ export namespace PreferencesPageLabels {
             label: "Editing",
             fields: {
                 "overlapping-regions-behaviour": "Overlapping regions behaviour",
-                "show-clipboard-menu": "Show clipboard menu (Cut, Copy, Paste)"
+                "show-clipboard-menu": "Show clipboard menu (Cut, Copy, Paste)",
+                "new-instrument-note-region": "Create and edit a note region for a new instrument"
             }
         },
         "webclap": {
@@ -81,12 +85,6 @@ export namespace PreferencesPageLabels {
                 "footer-show-build-infos": "Show Build Information",
                 "enable-beta-features": "Enable Experimental Features",
                 "enable-debug-menu": "Enable Debug Menu"
-            }
-        },
-        "storage": {
-            label: "Storage",
-            fields: {
-                "auto-delete-orphaned-samples": "Auto-delete orphaned samples"
             }
         }
     }
@@ -107,6 +105,15 @@ export namespace PreferencesPageLabels {
         },
         "webclap": {
             "default-zoom": WclapZoomOptions.map(value => ({value, label: `${value}%`}))
+        }
+    }
+
+    export const StudioSettingsDropdowns = {
+        "appearance": {
+            "color-scheme": ColorSchemes.map(value => ({
+                value,
+                label: value === "classic" ? "Classic" : value === "modern" ? "Modern" : "High Contrast"
+            }))
         }
     }
 

@@ -22,7 +22,7 @@ export class Recovery {
             Workers.Opfs.read(`${Recovery.#RESTORE_FILE_PATH}/project.od`)
                 .then(x => Project.loadAnyVersion(this.#env, x.buffer as ArrayBuffer)),
             Workers.Opfs.read(`${Recovery.#RESTORE_FILE_PATH}/meta.json`)
-                .then(x => JSON.parse(new TextDecoder().decode(x.buffer as ArrayBuffer)) as ProjectMeta),
+                .then(x => ProjectMeta.fromJSON(JSON.parse(new TextDecoder().decode(x.buffer as ArrayBuffer)))),
             Workers.Opfs.read(`${Recovery.#RESTORE_FILE_PATH}/saved`)
                 .then(x => x.at(0) === 1)
         ]))

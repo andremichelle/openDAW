@@ -284,8 +284,6 @@ export namespace DawProjectExporter {
                 .map(({box}) => asInstanceOf(box, ValueEventBox))
                 .sort((eventA, eventB) => eventA.position.getValue() - eventB.position.getValue())
             if (events.length === 0) {return undefined}
-            const minBpm = tempoTrack.minBpm.getValue()
-            const maxBpm = tempoTrack.maxBpm.getValue()
             const tempoParameterId = ids.getOrCreate(timelineBox.bpm.address)
             return Xml.element({
                 unit: Unit.BPM,
@@ -296,7 +294,7 @@ export namespace DawProjectExporter {
                     const interpolation = InterpolationFieldAdapter.read(event.interpolation)
                     return Xml.element({
                         time: event.position.getValue() / PPQN.Quarter,
-                        value: TempoAutomationConverter.normalizedToBpm(event.value.getValue(), minBpm, maxBpm),
+                        value: event.value.getValue(),
                         interpolation: TempoAutomationConverter.toDawProjectInterpolation(interpolation)
                     }, RealPointSchema)
                 })

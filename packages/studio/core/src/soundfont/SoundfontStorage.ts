@@ -1,4 +1,4 @@
-import {EmptyExec, Lazy, UUID} from "@opendaw/lib-std"
+import {Lazy, UUID} from "@opendaw/lib-std"
 import {Soundfont, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {Workers} from "../Workers"
 import {Storage} from "../Storage"
@@ -20,13 +20,10 @@ export class SoundfontStorage extends Storage<Soundfont, SoundfontMetaData, Soun
 
     private constructor() {super(SoundfontStorage.Folder)}
 
-    async save({uuid, file, meta}: SoundfontStorage.NewSoundfont): Promise<void> {
+    async save({uuid, file, meta}: SoundfontStorage.NewSoundfont, cached: boolean = false): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         console.debug(`save soundfont '${path}'`)
-        return Promise.all([
-            Workers.Opfs.write(`${path}/soundfont.sf2`, new Uint8Array(file)),
-            Workers.Opfs.write(`${path}/meta.json`, new TextEncoder().encode(JSON.stringify(meta)))
-        ]).then(EmptyExec)
+        return this.saveEntry(uuid, [["soundfont.sf2", new Uint8Array(file)]], meta, cached)
     }
 
     async load(uuid: UUID.Bytes): Promise<[ArrayBuffer, SoundfontMetaData]> {

@@ -35,6 +35,8 @@ type Construct = {
 
 export interface FloatingWindowHandle {
     readonly size: ObservableValue<Size>
+    // 1 = width x height
+    readonly zoom: ObservableValue<number>
     // the browser window the content lives in, listeners bound to a window must follow it
     readonly owner: ObservableValue<Window>
     togglePopout(): void
@@ -85,6 +87,7 @@ export const FloatingWindow = ({
     const zoom = lifecycle.own(new DefaultObservableValue<number>(fitScale))
     const owner = lifecycle.own(new DefaultObservableValue<Window>(window))
     const popout = new MutableObservableOption<Surface>()
+    const opening = {active: false}
     const origin = isDefined(position)
         ? {x: position.x, y: position.y}
         : {x: (window.innerWidth - bodyWidth) * 0.5, y: (window.innerHeight - bodyHeight) * 0.5}
@@ -198,7 +201,8 @@ export const FloatingWindow = ({
         if (current.width === next.width && current.height === next.height) {return}
         size.setValue(next)
         layout()
-        if (zoomable) {resizeWindow(next.width, next.height)}
+        // a window the user cannot resize follows its content, the popout's OS window too
+        if (zoomable || resizable === false) {resizeWindow(next.width, next.height)}
     }
     const negotiate = () => {
         if (!isDefined(adjust) || adjusting.busy || adjusting.closed || isNull(adjusting.next)) {return}
@@ -253,12 +257,22 @@ export const FloatingWindow = ({
         restack()
     }
     const popOut = () => {
+        if (opening.active) {return}
+        opening.active = true
         const {width, height} = size.getValue()
         const {left, top} = element.getBoundingClientRect()
         const position: Point = {x: window.screenX + left, y: window.screenY + window.outerHeight - window.innerHeight + top}
-        surface.new(width, height + header.offsetHeight, UUID.toString(UUID.generate()), title, position).match({
-            none: () => {Dialogs.info({message: "Could not open window. Check popup blocker?"}).finally()},
+        surface.new(width, height + header.offsetHeight, UUID.toString(UUID.generate()), title, position).then(result => result.match({
+            none: () => {
+                opening.active = false
+                if (!adjusting.closed) {Dialogs.info({message: "Could not open window. Check popup blocker?"}).finally()}
+            },
             some: popped => {
+                opening.active = false
+                if (adjusting.closed) {
+                    popped.close()
+                    return
+                }
                 popout.wrap(popped)
                 removeFromStack()
                 element.classList.remove("inactive")
@@ -277,7 +291,7 @@ export const FloatingWindow = ({
                 }))
                 layout()
             }
-        })
+        }))
     }
     const dockIn = () => popout.ifSome(popped => {
         popout.clear()
@@ -329,5 +343,5 @@ export const FloatingWindow = ({
     toFront()
     move(origin.x, origin.y)
     if (isDefined(adjust)) {request(size.getValue())}
-    return {size, owner, togglePopout, resetSize, requestSize, scrollBy, toFront, close}
+    return {size, zoom, owner, togglePopout, resetSize, requestSize, scrollBy, toFront, close}
 }

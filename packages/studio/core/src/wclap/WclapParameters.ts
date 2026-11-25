@@ -1,32 +1,54 @@
 import {asInstanceOf, isDefined, Optional, UUID} from "@opendaw/lib-std"
 import {Field} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {WclapDeviceBox, WclapInstrumentBox, WclapParameterBox} from "@opendaw/studio-boxes"
+import {WclapParameterBox} from "@opendaw/studio-boxes"
 import {WclapParamGesture, WclapParamInfo} from "@opendaw/studio-adapters"
 import {Project} from "../project"
+import {WclapBoxes} from "./WclapBoxes"
 
 // existing boxes keep their value and links, the host is the source of truth
 export namespace WclapParameters {
+    // A change in the plugin's GUI is an undo step: a drag (gesture begin to end) one step, a change without a gesture
+    // one step of its own. The plugin's save that follows joins it (WclapStates.store, cause "params").
+    const dragging = new Set<string>()
+
+    export const isDragging = (uuid: string): boolean => {
+        for (const key of dragging) {if (key.startsWith(`${uuid}:`)) {return true}}
+        return false
+    }
+
     export const reconcile = (project: Project, uuid: string, params: ReadonlyArray<WclapParamInfo>): void => {
         const hub = parametersOf(project, uuid)
         if (!isDefined(hub)) {return}
         const wanted = new Map(params.filter(isAutomatable).map(param => [param.id, param]))
-        project.editing.modify(() => {
+        dragging.forEach(key => {if (key.startsWith(`${uuid}:`)) {dragging.delete(key)}}) // a drag the reload ended
+        outsideHistory(project, () => {
             const existing = new Map<number, WclapParameterBox>()
             for (const {box} of hub.pointerHub.incoming()) {
                 const paramBox = asInstanceOf(box, WclapParameterBox)
                 const id = paramBox.clapId.getValue() >>> 0
                 const info = wanted.get(id)
                 if (!isDefined(info)) {
-                    paramBox.delete()
+                    // a box from the history (a preset) must stay, else undoing its creation fails
+                    if (UUID.equals(paramBox.address.uuid, parameterUuid(hub.box.address.uuid, id))) {
+                        paramBox.delete()
+                    } else {
+                        paramBox.flags.setValue(paramBox.flags.getValue() | IS_HIDDEN)
+                    }
                     continue
                 }
                 existing.set(id, paramBox)
                 paramBox.label.setValue(info.name)
                 paramBox.module.setValue(info.module)
                 paramBox.flags.setValue(info.flags)
-                paramBox.min.setValue(info.min)
-                paramBox.max.setValue(info.max)
+                // each bound write rebuilds the adapter's mapping, so the range must never invert in between
+                if (info.min >= paramBox.max.getValue()) {
+                    paramBox.max.setValue(info.max)
+                    paramBox.min.setValue(info.min)
+                } else {
+                    paramBox.min.setValue(info.min)
+                    paramBox.max.setValue(info.max)
+                }
                 paramBox.defaultValue.setValue(info.defaultValue)
             }
             for (const info of wanted.values()) {
@@ -43,11 +65,33 @@ export namespace WclapParameters {
                     paramBox.value.setValue(info.value)
                 })
             }
-        }, false)
+        })
+    }
+
+    // The parameter boxes mirror what the loaded plugin reports, so they stay out of the undo history: an undo
+    // would delete them while the plugin stays loaded, and it reports them again only when it loads again.
+    // They reach the engine and a live room like any other change of the graph.
+    const outsideHistory = (project: Project, exec: () => void): void => {
+        const graph = project.boxGraph
+        if (graph.inTransaction()) {
+            exec()
+            return
+        }
+        graph.beginTransaction()
+        exec()
+        graph.endTransaction()
     }
 
     export const apply = (project: Project, uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void => {
-        if (gesture !== 0) {return}
+        const key = `${uuid}:${paramId}`
+        if (gesture === 1) {
+            dragging.add(key)
+            return
+        }
+        if (gesture === 2) {
+            if (dragging.delete(key)) {project.editing.mark()}
+            return
+        }
         const hub = parametersOf(project, uuid)
         if (!isDefined(hub)) {return}
         const paramBox = hub.pointerHub.incoming()
@@ -59,7 +103,7 @@ export namespace WclapParameters {
         project.editing.modify(() => adapter.match({
             none: () => paramBox.value.setValue(value),
             some: adapter => adapter.setValue(value)
-        }), false)
+        }), !dragging.has(key))
     }
 
     const IS_HIDDEN = 1 << 2
@@ -77,7 +121,7 @@ export namespace WclapParameters {
 
     const parametersOf =(project: Project, uuid: string): Optional<Field<Pointers.Parameter>> => {
         const box = project.boxGraph.findBox(UUID.parse(uuid)).unwrapOrNull()
-        if (box instanceof WclapDeviceBox || box instanceof WclapInstrumentBox) {return box.parameters}
+        if (WclapBoxes.is(box)) {return box.parameters}
         return undefined
     }
 }

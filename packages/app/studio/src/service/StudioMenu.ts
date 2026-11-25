@@ -49,6 +49,8 @@ export const populateStudioMenu = (service: StudioService) => {
                         label: "Save Bundle File to Disk...",
                         selectable: service.hasProfile
                     }).setTriggerProcedure(() => service.exportBundle()),
+                    MenuItem.default({label: "Open Bundle File from Disk..."})
+                        .setTriggerProcedure(() => service.importBundle()),
                     MenuItem.default({label: "Import", separatorBefore: true})
                         .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                             MenuItem.default({label: "Audio Files..."})
@@ -59,8 +61,6 @@ export const populateStudioMenu = (service: StudioService) => {
                                 .setTriggerProcedure(() => NeuralDemux.run(service).catch(EmptyExec)),
                             MenuItem.default({label: "Soundfont Files..."})
                                 .setTriggerProcedure(() => service.soundfontService.browse(true)),
-                            MenuItem.default({label: "Project Bundle..."})
-                                .setTriggerProcedure(() => service.importBundle()),
                             MenuItem.default({label: "Preset Bundle..."})
                                 .setTriggerProcedure(() => service.importPreset().then(EmptyExec)),
                             MenuItem.default({label: "DAWproject..."})
@@ -143,11 +143,19 @@ export const populateStudioMenu = (service: StudioService) => {
                         icon: IconSymbol.Code
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
                     MenuItem.default({
+                        label: "Sample Editor",
+                        icon: IconSymbol.Waveform
+                    }).setTriggerProcedure(() => service.sampleEditor.navigate()),
+                    MenuItem.default({
                         label: "Preferences",
                         shortcut: GlobalShortcuts["show-preferences"].shortcut.format(),
                         separatorBefore: true,
                         icon: IconSymbol.System
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/preferences")),
+                    MenuItem.default({
+                        label: "Storage",
+                        icon: IconSymbol.Folder
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/storage")),
                     MenuItem.default({
                         label: "Statistics",
                         icon: IconSymbol.Charts

@@ -90,6 +90,18 @@ pub extern "C" fn observe_param_collection_field() -> u32 {
     13
 }
 
+/// WASM CONTRACT: `samples` hub key 16 (WclapSampleBox children, `index` 3 the plugin's key, `file` 4).
+#[no_mangle]
+pub extern "C" fn observe_sample_collection_field() -> u32 {
+    16
+}
+
+/// A slot's sample, resolved by the engine: the bridge hands it to the plugin (`opendaw.samples/1`).
+#[no_mangle]
+pub extern "C" fn sample_changed(state_ptr: u32, id: u32, handle: u32, present: u32) {
+    unsafe { abi::with_state(state_ptr, |state: &mut WclapInstrumentState| abi::wclap_sample(state.link.bridge, id, handle, present != 0)) }
+}
+
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<WclapInstrumentState>::from_descriptor(desc_ptr) };
@@ -131,7 +143,7 @@ mod tests {
         let mut state: WclapInstrumentState = unsafe { core::mem::zeroed() };
         WclapInstrument::init(&mut state, 48_000.0);
         let (mut out_left, mut out_right) = (vec![0.25f32; 128], vec![0.5f32; 128]);
-        let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: 128, bpm: 120.0};
+        let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
         state.link.process_instrument(None, &mut out_left, &mut out_right, &block);
         assert!(out_left.iter().all(|&sample| sample == 0.25));
         assert!(out_right.iter().all(|&sample| sample == 0.5));

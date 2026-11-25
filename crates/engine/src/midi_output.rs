@@ -339,6 +339,8 @@ pub(crate) struct MidiOutProcessor {
     // starts / completes — the note indicators light up.
     note_bits: Option<engine_env::telemetry::BroadcastSlot>,
     cc: Vec<CcBinding>,
+    // A composite layer's gate drops starts but not completes: release only the notes this node started.
+    release_held_only: bool,
     scratch: Box<[EventRecord]>,
     events: EventBuffer // unused (the node PULLS its notes); required by the Processor trait
 }
@@ -355,17 +357,41 @@ impl MidiOutProcessor {
             output: shared_audio_buffer(),
             note_bits,
             cc: Vec::new(),
+            release_held_only: false,
             scratch: vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice(),
             events: EventBuffer::new()
         }
     }
 
+    /// A layer's node survives a chain edit: a removed or bypassed MIDI effect started notes the new chain never ends.
     pub(crate) fn set_pull_chain(&mut self, chain: PullLink) {
+        let changed = self.pull_chain.as_ref().is_some_and(|previous| !previous.same(&chain));
+        if let Some(previous) = self.pull_chain.as_ref() {previous.release_leavers(&chain, &mut Vec::new())}
         self.pull_chain = Some(chain);
+        if changed { self.end_held_notes(); }
+    }
+
+    /// A unit's node is rebuilt on a chain edit: the next one holds the notes on when the chain stayed, else they end.
+    pub(crate) fn hand_over(&self, next: &MidiOutProcessor) {
+        let same = matches!((&self.pull_chain, &next.pull_chain), (Some(previous), Some(chain)) if previous.same(chain));
+        if let (Some(previous), Some(chain)) = (&self.pull_chain, &next.pull_chain) {previous.release_leavers(chain, &mut Vec::new())}
+        if same {
+            next.controls.active_notes.borrow_mut().extend(self.controls.active_notes.borrow().iter().copied());
+        } else {
+            self.end_held_notes();
+        }
+    }
+
+    pub(crate) fn end_held_notes(&self) {
+        flush_channel_change(&self.controls, &self.midi_out, self.controls.channel.get());
     }
 
     pub(crate) fn set_cc(&mut self, cc: Vec<CcBinding>) {
         self.cc = cc;
+    }
+
+    pub(crate) fn set_release_held_only(&mut self, value: bool) {
+        self.release_held_only = value;
     }
 
     /// The bound parameters' (box uuid, last emitted value) pairs, carried across a rebuild / re-bind so a
@@ -385,8 +411,7 @@ impl MidiOutProcessor {
     }
 
     fn emit_cc(&self, controller: i32, value: f32, relative_block_time: f64) {
-        // TS `parameterChanged`: skipped without a device pointer or while disabled. QUIRK mirrored: TS
-        // computes `relativeBlockTime * 1000.0 * delayInMs` (a MULTIPLY where the notes path ADDS the delay).
+        // TS `parameterChanged`: skipped without a device pointer or while disabled.
         if !self.controls.enabled.get() {
             return;
         }
@@ -394,7 +419,7 @@ impl MidiOutProcessor {
         if device_num < 0 {
             return;
         }
-        let time_ms = relative_block_time * 1000.0 * delay;
+        let time_ms = relative_block_time * 1000.0 + delay;
         let status = CONTROLLER | (self.controls.channel.get() as u8 & 0x0F);
         let data1 = (controller & 0x7F) as u8;
         let data2 = ((value * 127.0 + 0.5) as i32 & 0x7F) as u8; // Math.round(value * 127) & 0x7F
@@ -458,13 +483,15 @@ impl MidiOutProcessor {
                     });
                 }
             } else if record.kind == EVENT_NOTE_OFF {
-                {
+                let held = {
                     let mut active = self.controls.active_notes.borrow_mut();
-                    if let Some(found) = active.iter().position(|pitch| *pitch == record.pitch as u8) {
+                    let found = active.iter().position(|pitch| *pitch == record.pitch as u8);
+                    if let Some(found) = found {
                         active.remove(found);
                     }
-                }
-                if device_num >= 0 {
+                    found.is_some()
+                };
+                if device_num >= 0 && (held || !self.release_held_only) {
                     self.midi_out.borrow_mut().push(MidiMsg {
                         device: device_num as u32, status: NOTE_OFF | channel,
                         data1: record.pitch as u8, data2: 0, len: 3, time_ms
@@ -619,7 +646,7 @@ mod tests {
     }
 
     fn playing_block(p0: f64, p1: f64, s0: u32, s1: u32, bpm: f32) -> Block {
-        Block {index: 0, flags: abi::BlockFlags::create(true, false, true, false), p0, p1, s0, s1, bpm}
+        Block {index: 0, flags: abi::BlockFlags::create(true, false, true, false), p0, p1, anchor: p0, anchor_frame: s0 as i64, s0, s1, bpm}
     }
 
     #[test]
@@ -690,5 +717,41 @@ mod tests {
         assert!(controls.active_notes.borrow().is_empty());
         assert_eq!(controls.channel.get(), 5);
         assert_eq!(controls.last_channel.get(), 5);
+    }
+
+    #[test]
+    fn a_cc_is_timed_like_a_note_its_offset_plus_the_device_delay() {
+        let shared = shared_midi_out();
+        shared.borrow_mut().add_target([1; 16], target(false, 0, 10.0), Vec::new());
+        let processor = MidiOutProcessor::new(48000.0, MidiOutControls::new(3, Some([1; 16])), shared.clone(), None);
+        processor.emit_cc(74, 0.5, 0.0);
+        processor.emit_cc(74, 1.0, 0.0025);
+        processor.emit_cc(1, 0.0, 1.5);
+        let midi = shared.borrow();
+        let times: Vec<f64> = midi.queued().iter().map(|msg| msg.time_ms).collect();
+        assert_eq!(times, vec![10.0, 12.5, 1510.0]);
+        assert_eq!((midi.queued()[1].status, midi.queued()[1].data1, midi.queued()[1].data2), (0xB3, 74, 127));
+    }
+
+    #[test]
+    fn a_cc_with_zero_delay_keeps_its_offset() {
+        let shared = shared_midi_out();
+        shared.borrow_mut().add_target([1; 16], target(false, 0, 0.0), Vec::new());
+        let processor = MidiOutProcessor::new(48000.0, MidiOutControls::new(0, Some([1; 16])), shared.clone(), None);
+        processor.emit_cc(74, 0.5, 0.002);
+        assert_eq!(shared.borrow().queued()[0].time_ms, 2.0);
+    }
+
+    #[test]
+    fn a_cc_is_dropped_without_a_device_or_while_disabled() {
+        let shared = shared_midi_out();
+        let unresolved = MidiOutProcessor::new(48000.0, MidiOutControls::new(0, Some([9; 16])), shared.clone(), None);
+        unresolved.emit_cc(74, 0.5, 0.0);
+        shared.borrow_mut().add_target([1; 16], target(false, 0, 10.0), Vec::new());
+        let controls = MidiOutControls::new(0, Some([1; 16]));
+        controls.enabled.set(false);
+        let disabled = MidiOutProcessor::new(48000.0, controls, shared.clone(), None);
+        disabled.emit_cc(74, 0.5, 0.0);
+        assert_eq!(shared.borrow().queue_len(), 0);
     }
 }

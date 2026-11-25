@@ -11,6 +11,7 @@ import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.
 import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {CompositeRows} from "@/ui/devices/CompositeRows"
+import {ExclusiveSolo} from "@/ui/wrapper/ExclusiveSolo"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -21,17 +22,14 @@ type Construct = {
 
 export const CompositeCellStrip = ({lifecycle, project, cell, noun}: Construct) => {
     const {editing, midiLearning} = project
-    const {gain, pan, mute, solo} = cell.namedParameter
+    const {gain, pan, mute} = cell.namedParameter
     const tracks = cell.audioUnitBoxAdapter().tracks
     const muteValue = new DefaultObservableValue(false)
-    const soloValue = new DefaultObservableValue(false)
-    lifecycle.ownAll(
-        CompositeRows.connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, mute)),
-        CompositeRows.connectBoolean(soloValue, EditWrapper.forAutomatableParameter(editing, solo))
-    )
+    const exclusiveSolo = ExclusiveSolo.forCell(editing, cell)
+    lifecycle.own(CompositeRows.connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, mute)))
     return (
         <Frag>
-            <div className="channel-mix" data-swallow-click="">
+            <div className="channel-mix">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                                    tracks={tracks} parameter={gain} offset={2}>
                     <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
@@ -47,12 +45,12 @@ export const CompositeCellStrip = ({lifecycle, project, cell, noun}: Construct) 
                     </RelativeUnitValueDragging>
                 </AutomationControl>
             </div>
-            <div className="channel-isolation" data-swallow-click="">
+            <div className="channel-isolation">
                 <Checkbox lifecycle={lifecycle} model={muteValue}
                           appearance={{activeColor: Colors.orange, framed: true, tooltip: `Mute ${noun}`}}>
                     <Icon symbol={IconSymbol.Mute}/>
                 </Checkbox>
-                <Checkbox lifecycle={lifecycle} model={soloValue}
+                <Checkbox lifecycle={lifecycle} model={exclusiveSolo.model} onInit={exclusiveSolo.onInit}
                           appearance={{activeColor: Colors.yellow, framed: true, tooltip: `Solo ${noun}`}}>
                     <Icon symbol={IconSymbol.Solo}/>
                 </Checkbox>

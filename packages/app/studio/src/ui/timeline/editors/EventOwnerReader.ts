@@ -38,5 +38,6 @@ export interface EventOwnerReader<CONTENT> extends TimeAxisCursorMapper {
 
     subscribeChange(observer: Observer<void>): Subscription
     subscribeTrackChange(observer: Observer<void>): Subscription
+    subscribeContentChange(observer: Observer<void>): Subscription
     keeoOverlapping(range: TimelineRange): Subscription
 }

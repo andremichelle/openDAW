@@ -1,6 +1,5 @@
 import {
     Arrays,
-    isDefined,
     isNull,
     JSONValue,
     Objects,
@@ -9,29 +8,32 @@ import {
     Terminable,
     tryCatch
 } from "@opendaw/lib-std"
+import {Devices} from "@opendaw/studio-adapters"
 import {ShortcutDefinitions, ShortcutManager} from "@opendaw/lib-dom"
 import {GlobalShortcuts, GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioService} from "@/service/StudioService"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {Workspace} from "@/ui/workspace/Workspace"
-import {DeviceHost, Devices, TransferAudioUnits} from "@opendaw/studio-adapters"
 import {ContentEditorShortcuts, ContentEditorShortcutsFactory} from "@/ui/shortcuts/ContentEditorShortcuts"
 import {DevicePanelShortcuts, DevicePanelShortcutsFactory} from "@/ui/shortcuts/DevicePanelShortcuts"
 import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/PianoPanelShortcuts"
 import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsShortcuts"
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
+import {ChordTrackShortcuts, ChordTrackShortcutsFactory} from "@/ui/shortcuts/ChordTrackShortcuts"
 import {RouteLocation} from "@opendaw/lib-jsx"
+import {CreateTrack} from "@/ui/browse/CreateTrackButtons"
+import {ShortcutStorage} from "@/service/ShortcutStorage"
 
 export namespace StudioShortcutManager {
-    const localStorageKey = "shortcuts"
-
     export type ShortcutsMap = Record<string, ShortcutDefinitions>
 
     export const Contexts = {
         "global": {factory: GlobalShortcutsFactory, workingDefinition: GlobalShortcuts},
         "regions": {factory: RegionsShortcutsFactory, workingDefinition: RegionsShortcuts},
+        "chord-track": {factory: ChordTrackShortcutsFactory, workingDefinition: ChordTrackShortcuts},
         "note-editor": {factory: NoteEditorShortcutsFactory, workingDefinition: NoteEditorShortcuts},
         "content-editor": {factory: ContentEditorShortcutsFactory, workingDefinition: ContentEditorShortcuts},
         "device-panel": {factory: DevicePanelShortcutsFactory, workingDefinition: DevicePanelShortcuts},
@@ -56,11 +58,7 @@ export namespace StudioShortcutManager {
         }
     }
 
-    export const store = (): void => {
-        const shortcuts: ShortcutsMap = {}
-        Objects.entries(Contexts).forEach(([key, {workingDefinition}]) => shortcuts[key] = workingDefinition)
-        toJSONString(shortcuts).ifSome(jsonString => localStorage.setItem(localStorageKey, jsonString))
-    }
+    export const store = (): void => ShortcutStorage.store(Contexts, localStorage)
 
     export const install = (service: StudioService): Subscription => {
         const {global: gc} = ShortcutManager.get()
@@ -71,23 +69,15 @@ export namespace StudioShortcutManager {
             timeline: {
                 clips: {visible: clipsVisibility},
                 followCursor,
-                primaryVisibility: {markers, tempo, signature},
+                primaryVisibility: {markers, tempo, signature, key: keyTrack, chords: chordTrack},
                 snapping
             }
         } = service
         const gs = GlobalShortcuts
-        const storedShortcuts = localStorage.getItem(localStorageKey)
-        if (isDefined(storedShortcuts)) {
-            const {status, value: stored, error} = tryCatch(() => JSON.parse(storedShortcuts))
-            if (status === "success") {
-                Objects.entries(Contexts).forEach(([name, {workingDefinition}]) =>
-                    ShortcutDefinitions.fromJSON(workingDefinition, stored[name]))
-                console.debug("Custom shortcuts loaded.")
-            } else {
-                console.warn(error)
-            }
-        }
+        if (ShortcutStorage.load(Contexts, localStorage)) {console.debug("Custom shortcuts loaded.")}
         return Terminable.many(
+            gc.register(gs["group-tracks"].shortcut, () => service.runIfProject(TrackGrouping.groupSelectedTracks)),
+            gc.register(gs["ungroup-tracks"].shortcut, () => service.runIfProject(TrackGrouping.ungroupSelectedTracks)),
             gc.register(gs["project-undo"].shortcut, () => service.runIfProject(project => project.editing.undo()), {allowRepeat: true}),
             gc.register(gs["project-redo"].shortcut, () => service.runIfProject(project => project.editing.redo()), {allowRepeat: true}),
             gc.register(gs["project-open"].shortcut, async () => await service.browseLocalProjects()),
@@ -140,22 +130,38 @@ export namespace StudioShortcutManager {
             gc.register(gs["toggle-tempo-track"].shortcut, () => tempo.setValue(!tempo.getValue())),
             gc.register(gs["toggle-markers-track"].shortcut, () => markers.setValue(!markers.getValue())),
             gc.register(gs["toggle-signature-track"].shortcut, () => signature.setValue(!signature.getValue())),
+            gc.register(gs["toggle-key-track"].shortcut, () => keyTrack.setValue(!keyTrack.getValue())),
+            gc.register(gs["toggle-chord-track"].shortcut, () => chordTrack.setValue(!chordTrack.getValue())),
             gc.register(gs["toggle-clips"].shortcut, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
             gc.register(gs["toggle-follow-cursor"].shortcut, () => followCursor.setValue(!followCursor.getValue())),
             gc.register(gs["toggle-metronome"].shortcut, () => metronome.enabled = !metronome.enabled),
             gc.register(gs["toggle-loop"].shortcut, () =>
                 service.runIfProject(({editing, timelineBox: {loopArea: {enabled}}}) =>
                     editing.modify(() => enabled.setValue(!enabled.getValue())))),
-            gc.register(gs["copy-device"].shortcut, () => service.runIfProject(
-                ({editing, boxAdapters, userEditingManager, skeleton}) => userEditingManager.audioUnit.get()
+            gc.register(gs["toggle-mute"].shortcut, () => service.runIfProject(
+                ({editing, boxAdapters, userEditingManager}) => userEditingManager.audioUnit.get()
                     .ifSome(({box}) => {
-                        const deviceHost: DeviceHost = boxAdapters.adapterFor(box, Devices.isHost)
-                        const audioUnitBoxAdapter = deviceHost.audioUnitBoxAdapter()
-                        if (audioUnitBoxAdapter.isOutput) {return}
-                        const copies = editing.modify(() => TransferAudioUnits
-                            .transfer([audioUnitBoxAdapter.box], skeleton), false).unwrap("copyUnit")
-                        Option.wrap(copies.at(0)).ifSome(copy => userEditingManager.audioUnit.edit(copy.editing))
+                        const {mute} = boxAdapters.adapterFor(box, Devices.isHost).audioUnitBoxAdapter().box
+                        editing.modify(() => mute.setValue(!mute.getValue()))
                     }))),
+            gc.register(gs["toggle-solo"].shortcut, () => service.runIfProject(
+                ({editing, boxAdapters, userEditingManager, rootBoxAdapter}) => userEditingManager.audioUnit.get()
+                    .ifSome(({box}) => {
+                        const unit = boxAdapters.adapterFor(box, Devices.isHost).audioUnitBoxAdapter()
+                        if (unit.isOutput) {return}
+                        const solo = !unit.box.solo.getValue()
+                        editing.modify(() => {
+                            unit.box.solo.setValue(solo)
+                            if (solo) {
+                                rootBoxAdapter.audioUnits.adapters()
+                                    .filter(other => other !== unit)
+                                    .forEach(other => other.box.solo.setValue(false))
+                            }
+                        })
+                    }))),
+            gc.register(gs["add-instrument"].shortcut, () => {if (service.hasProfile) {CreateTrack.instrument(service)}}),
+            gc.register(gs["add-audio-track"].shortcut, () => {if (service.hasProfile) {CreateTrack.audioTrack(service)}}),
+            gc.register(gs["copy-device"].shortcut, () => service.runIfProject(TrackGrouping.duplicateSelectedTracks)),
             gc.register(gs["workspace-next-screen"].shortcut, () => {
                     if (!service.hasProfile) {return}
                     const keys: Array<Workspace.ScreenKeys> = Object.entries(DefaultWorkspace)
@@ -186,7 +192,12 @@ export namespace StudioShortcutManager {
             gc.register(gs["workspace-screen-project"].shortcut, () => service.runIfProject(() => service.switchScreen("project"))),
             gc.register(gs["workspace-screen-shadertoy"].shortcut, () => service.runIfProject(() => service.switchScreen("shadertoy"))),
             gc.register(gs["workspace-screen-tap"].shortcut, () => service.runIfProject(() => service.switchScreen("tap"))),
-            gc.register(gs["show-preferences"].shortcut, () => RouteLocation.get().navigateTo("/preferences"))
+            gc.register(gs["show-preferences"].shortcut, () => RouteLocation.get().navigateTo("/preferences")),
+            gc.register(gs["open-spotlight"].shortcut, () => service.spotlight.toggle()),
+            gc.register(gs["open-spotlight-alt"].shortcut, () => service.spotlight.toggle()),
+            gc.register(gs["call-toggle-mic"].shortcut, () => service.callService.ifSome(call => call.toggleMic())),
+            gc.register(gs["call-toggle-camera"].shortcut, () => service.callService.ifSome(call => call.toggleCamera())),
+            gc.register(gs["call-toggle-hand"].shortcut, () => service.callService.ifSome(call => call.toggleHand()))
         )
     }
 }

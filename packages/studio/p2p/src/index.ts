@@ -9,7 +9,7 @@ export {ChainedSampleProvider, type SampleFetcher} from "./ChainedSampleProvider
 export {ChainedSoundfontProvider, type SoundfontFetcher} from "./ChainedSoundfontProvider"
 export {ChainedWclapProvider, type WclapFetcher} from "./ChainedWclapProvider"
 export {type Fetcher, type ChainedProvider} from "./ChainedProvider"
-export {AssetPeerConnection} from "./AssetPeerConnection"
+export {AssetPeerConnection, RTC_CONFIG} from "./AssetPeerConnection"
 export {AssetServer, type AssetReader} from "./AssetServer"
 export {PeerAssetProvider, STALL_TIMEOUT_MS, MAX_RETRIES, WCLAP_DISCOVERY_TIMEOUT_MS} from "./PeerAssetProvider"
 export {P2PSession, type P2PSessionContext} from "./P2PSession"

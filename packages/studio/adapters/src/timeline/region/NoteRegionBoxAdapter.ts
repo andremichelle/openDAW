@@ -3,6 +3,7 @@ import {
     Arrays,
     int,
     Maybe,
+    mod,
     Notifier,
     Observer,
     Option,
@@ -22,6 +23,7 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {MutableRegion} from "./MutableRegion"
 import {ValueRegionBoxAdapter} from "./ValueRegionBoxAdapter"
 import {AudioRegionBoxAdapter} from "./AudioRegionBoxAdapter"
+import {Grooves} from "../../grooves/Grooves"
 
 type CopyToParams = {
     target?: Field<Pointers.RegionCollection>
@@ -95,7 +97,9 @@ export class NoteRegionBoxAdapter
     isValueRegion(): this is ValueRegionBoxAdapter {return false}
 
     moveContentStart(delta: ppqn): void {
-        this.optCollection.ifSome(collection => collection.events.asArray()
+        if (delta === 0) {return}
+        this.consolidate()
+        this.optCollection.ifSome(collection => collection.events.asArray().slice()
             .forEach(event => event.box.position.setValue(event.position - delta)))
         this.position = this.position + delta
         this.loopDuration = this.loopDuration - delta
@@ -178,6 +182,7 @@ export class NoteRegionBoxAdapter
             box.hue.setValue(this.hue)
             box.label.setValue(this.label)
             box.mute.setValue(this.mute)
+            this.#box.groove.ifVertex(vertex => box.groove.refer(vertex))
             box.events.refer(eventTarget)
             box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap("regions.target"))
         }), NoteRegionBoxAdapter)
@@ -193,12 +198,34 @@ export class NoteRegionBoxAdapter
         })
     }
 
+    // pass the engine preference of the same name, so the region keeps playing the same
+    resetLoopOffset(truncateNotesAtRegionEnd: boolean): void {
+        const {loopOffset, loopDuration} = this
+        if (loopOffset === 0 || loopDuration <= 0) {return}
+        const phase = mod(loopOffset, loopDuration)
+        if (phase !== 0) {
+            this.consolidate()
+            this.optCollection.ifSome(collection => collection.events.asArray()
+                .filter(event => event.position >= 0 && event.position < loopDuration)
+                .forEach(event => {
+                    const {position, complete, playCount} = event
+                    if (truncateNotesAtRegionEnd && playCount === 1 && complete > loopDuration) {
+                        event.box.duration.setValue(loopDuration - position)
+                    }
+                    event.box.position.setValue(mod(position - phase, loopDuration))
+                }))
+        }
+        this.loopOffset = 0
+    }
+
     canFlatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
         return regions.length > 0 && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap("trackBoxAdapter")))
             && regions.every(region => region.isSelected && region instanceof NoteRegionBoxAdapter)
     }
 
-    flatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): Option<NoteRegionBox> {
+    flatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>,
+            truncateNotesAtRegionEnd: boolean = false,
+            groove: Grooves.FlattenGroove = "keep"): Option<NoteRegionBox> {
         if (!this.canFlatten(regions)) {return Option.None}
         const graph = this.#context.boxGraph
         const sorted = regions.toSorted(RegionCollection.Comparator)
@@ -209,38 +236,59 @@ export class NoteRegionBoxAdapter
         const trackBoxAdapter = first.trackBoxAdapter.unwrap("trackBoxAdapter")
         const collectionBox = NoteEventCollectionBox.create(graph, UUID.generate())
         const overlapping = Array.from(trackBoxAdapter.regions.collection.iterateRange(rangeMin, rangeMax))
-        overlapping
-            .filter(region => region.isSelected)
+        const selected = overlapping.filter(region => region.isSelected)
+        selected
             .forEach(anyRegion => {
                     const region = anyRegion as NoteRegionBoxAdapter // we made that sure in canFlatten
+                    const played = groove === "apply"
+                        ? Grooves.playedAt(this.#context, region.box, region.position - region.loopOffset) : Option.None
                     for (const {
                         resultStart,
                         resultEnd,
-                        rawStart
+                        rawStart,
+                        regionEnd
                     } of LoopableRegion.locateLoops(region, region.position, region.complete)) {
                         const searchStart = Math.floor(resultStart - rawStart)
                         const searchEnd = Math.floor(resultEnd - rawStart)
+                        const end = truncateNotesAtRegionEnd ? regionEnd - rawStart : Number.POSITIVE_INFINITY
                         for (const event of region.optCollection.unwrap("optCollection").events.iterateRange(searchStart, searchEnd)) {
-                            event.copyTo({
-                                position: event.position + rawStart - first.position,
-                                events: collectionBox.events
-                            })
+                            const duration = event.playCount > 1
+                                ? event.duration : Math.min(event.duration, end - event.position)
+                            if (played.isEmpty()) {
+                                event.copyTo({
+                                    position: event.position + rawStart - first.position,
+                                    duration,
+                                    events: collectionBox.events
+                                })
+                                continue
+                            }
+                            // a note the groove moves out of the flattened region does not sound, it goes
+                            const play = played.unwrap()
+                            const straight = event.position + rawStart
+                            const start = Math.round(play(straight) - rangeMin)
+                            if (start < 0 || start >= rangeMax - rangeMin) {continue}
+                            const stop = Math.round(play(straight + duration) - rangeMin)
+                            event.copyTo({position: start, duration: Math.max(1, stop - start), events: collectionBox.events})
                         }
                     }
                 }
             )
-        overlapping.forEach(({box}) => box.delete())
-        return Option.wrap(NoteRegionBox.create(graph, UUID.generate(), box => {
-            box.position.setValue(rangeMin)
-            box.duration.setValue(rangeMax - rangeMin)
-            box.loopDuration.setValue(rangeMax - rangeMin)
-            box.loopOffset.setValue(0)
-            box.hue.setValue(this.hue)
-            box.mute.setValue(this.mute)
-            box.label.setValue(this.label)
-            box.events.refer(collectionBox.owners)
-            box.regions.refer(trackBoxAdapter.box.regions)
-        }))
+        const shared = groove === "apply" ? Option.None : Grooves.sharedOf(selected.map(region => region.box))
+        const keep = regions.includes(this) ? this : first as NoteRegionBoxAdapter
+        overlapping.filter(region => region !== keep).forEach(({box}) => box.delete())
+        const {box} = keep
+        box.position.setValue(rangeMin)
+        box.duration.setValue(rangeMax - rangeMin)
+        box.loopDuration.setValue(rangeMax - rangeMin)
+        box.loopOffset.setValue(0)
+        box.hue.setValue(this.hue)
+        box.mute.setValue(this.mute)
+        box.label.setValue(this.label)
+        shared.match({none: () => box.groove.defer(), some: groove => box.groove.refer(groove)})
+        const replaced = keep.optCollection.map(collection => collection.box)
+        box.events.refer(collectionBox.owners)
+        replaced.ifSome(collection => {if (collection.owners.pointerHub.isEmpty()) {collection.delete()}})
+        return Option.wrap(box)
     }
 
     toString(): string {return `{NoteRegionBoxAdapter ${UUID.toString(this.#box.address.uuid)} p: ${PPQN.toString(this.position)}, c: ${PPQN.toString(this.complete)}}`}

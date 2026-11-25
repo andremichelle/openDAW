@@ -12,7 +12,7 @@ current delay in milliseconds. Lower values mean tighter response.
 
 To record audio or MIDI, you must first arm the target instrument. Each audio-unit shows a tiny {icon:Record} button in
 the track header controls. Click it to arm the track for recording. To arm multiple tracks simultaneously, hold
-{key:Shift} while clicking additional arm buttons.
+**Shift** while clicking additional arm buttons.
 
 The arm button displays a horizontal peak meter showing input levels when an audio source is connected.
 
@@ -47,7 +47,7 @@ MIDI capture offers several options:
 ## Recording
 
 After arming your tracks, press the {icon:Record} button in the transport controls or use the keyboard shortcut.
-Recording begins after a count-in (configurable in preferences). To skip the count-in, hold {key:Shift} while clicking
+Recording begins after a count-in (configurable in preferences). To skip the count-in, hold **Shift** while clicking
 the record button.
 
 To restart recording (delete current recordings and start over), use the restart recording shortcut.
@@ -80,3 +80,6 @@ note input.
 openDAW automatically compensates for system latency when recording. The recorded audio and MIDI data is aligned to the
 correct timeline position regardless of your output device latency. However, lower latency still provides a better
 real-time playing experience.
+
+The browser does not report the delay of your input and often misreports Bluetooth outputs. To have audio takes land
+exactly in time, measure your setup once with [Latency Calibration](/manuals/latency-calibration).

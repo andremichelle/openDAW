@@ -243,7 +243,8 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         }
     }
 
-    reset(): void {this.setValue(this.#resetValue.unwrapOrElse(this.#field.initValue))}
+    get resetValue(): T {return this.#resetValue.unwrapOrElse(this.#field.initValue)}
+    reset(): void {this.setValue(this.resetValue)}
 
     terminate(): void {
         this.#automationHandle.ifSome(handle => handle.terminate())

@@ -1,11 +1,14 @@
 import {DefaultObservableValue, EmptyExec, isDefined, Nullable, Option} from "@opendaw/lib-std"
 import {RouteLocation} from "@opendaw/lib-jsx"
+import {Promises} from "@opendaw/lib-runtime"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {ProjectProfileService} from "@/service/ProjectProfileService"
 
 // Deep links that open a project are consumed: the back button must not land on them again and re-open it.
 // Every other page (script editor, graph, ...) stays reachable with the back button.
 const ConsumedRoutes: ReadonlyArray<string> = ["/open-bundle", "/open-project", "/join"]
+
+export const DevicePreviewRoute = "/device-preview"
 
 // The project profile is the single source of truth: project open ⇔ "/create" + a studio screen,
 // no project ⇔ "/" + dashboard. Other routes are plain pages and leave everything untouched.
@@ -47,10 +50,14 @@ export class StudioNavigation {
         }
         if (this.#confirming) {return}
         this.#confirming = true
-        const approved = await this.#profiles.approveLosingChanges()
+        const result = await Promises.tryCatch(this.#profiles.approveLosingChanges())
         this.#confirming = false
-        if (approved) {
+        if (result.status === "rejected") {throw result.error}
+        if (result.value) {
             this.#profiles.setValue(Option.None)
+            // closing from a page with its own route (a contest) must still reach the dashboard
+            const route = RouteLocation.get()
+            if (route.path !== "/") {route.navigateTo("/")}
         } else {
             RouteLocation.get().navigateTo("/create")
         }
@@ -59,6 +66,7 @@ export class StudioNavigation {
     onProjectOpened(): void {
         this.#screen.setValue("default")
         const route = RouteLocation.get()
+        if (route.path === DevicePreviewRoute) {return}
         if (ConsumedRoutes.some(prefix => route.path.startsWith(prefix))) {
             route.replaceWith("/create")
         } else {

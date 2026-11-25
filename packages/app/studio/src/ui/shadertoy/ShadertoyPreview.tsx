@@ -1,9 +1,8 @@
 import css from "./ShadertoyPreview.sass?inline"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Fullscreen, Html} from "@opendaw/lib-dom"
 import {asInstanceOf, isAbsent, Lifecycle, Nullable, Terminable, Terminator, tryCatch} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
-import {Promises} from "@opendaw/lib-runtime"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
 import {Colors} from "@opendaw/studio-enums"
@@ -62,11 +61,7 @@ export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
                                 }
                             })
                         }),
-                        Events.subscribe(canvas, "click", async () => {
-                            await Promises.tryCatch(document.fullscreenElement
-                                ? document.exitFullscreen()
-                                : canvas.requestFullscreen())
-                        })
+                        Events.subscribe(canvas, "click", () => Fullscreen.toggle(canvas))
                     )
                 }}/>
             </div>

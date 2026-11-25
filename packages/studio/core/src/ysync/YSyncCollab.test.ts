@@ -6,6 +6,7 @@ import {
     BoxConstruct,
     BoxGraph,
     BooleanField,
+    ByteArrayField,
     Int32Field,
     NoPointers,
     PointerField,
@@ -103,12 +104,29 @@ class MandatoryRefBox extends Box<UnreferenceableType, RefBoxFields> {
     get target(): PointerField<Pointer.Target> {return this.getField(1)}
 }
 
+// A box with a bytes field (like NativeInstrumentBox.state): Yjs only stores Uint8Array as raw bytes.
+type BytesBoxFields = { 1: ByteArrayField }
+
+class BytesBox extends Box<UnreferenceableType, BytesBoxFields> {
+    static create(graph: BoxGraph, uuid: UUID.Bytes, constructor?: Procedure<BytesBox>): BytesBox {
+        return graph.stageBox(new BytesBox({uuid, graph, name: "BytesBox", pointerRules: NoPointers}), constructor)
+    }
+    private constructor(construct: BoxConstruct<UnreferenceableType>) {super(construct)}
+    protected initializeFields(): BytesBoxFields {
+        return {1: ByteArrayField.create({parent: this, fieldKey: 1, fieldName: "state", deprecated: false, pointerRules: NoPointers})}
+    }
+    accept<R>(visitor: TestVisitor<R>): Maybe<R> {return safeExecute((visitor as any).visitBytesBox, this)}
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
+    get state(): ByteArrayField {return this.getField(1)}
+}
+
 const factory = (name: string, graph: BoxGraph, uuid: UUID.Bytes, constructor: Procedure<Box>): Box => {
     switch (name) {
         case "LeafBox": return LeafBox.create(graph, uuid, constructor as Procedure<LeafBox>)
         case "RefBox": return RefBox.create(graph, uuid, constructor as Procedure<RefBox>)
         case "ExclusiveBox": return ExclusiveBox.create(graph, uuid, constructor as Procedure<ExclusiveBox>)
         case "MandatoryRefBox": return MandatoryRefBox.create(graph, uuid, constructor as Procedure<MandatoryRefBox>)
+        case "BytesBox": return BytesBox.create(graph, uuid, constructor as Procedure<BytesBox>)
         default: return panic(`Unknown box: ${name}`)
     }
 }
@@ -188,6 +206,34 @@ describe("YSync live collaboration", () => {
         expect(A.graph.boxes().length).toBe(2)
         expect(B.graph.boxes().length).toBe(2)
         expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+    })
+
+    it("bytes fields travel as raw bytes, on create and on every change", () => {
+        const id = UUID.generate()
+        const stateOf = (peer: Peer): Array<number> => Array.from(peer.graph.findBox<BytesBox>(id).unwrap().state.getValue())
+        const stored = (peer: Peer): unknown => ((peer.boxes.get(UUID.toString(id)) as Y.Map<unknown>)
+            .get("fields") as Y.Map<unknown>).get("1")
+        shared(graph => {BytesBox.create(graph, id).state.setValue(new Int8Array([1, -2, 3]))})
+        expect(stateOf(B)).toEqual([1, -2, 3])
+        expect(stored(B)).toBeInstanceOf(Uint8Array)
+        edit(A, graph => graph.findBox<BytesBox>(id).unwrap().state.setValue(new Int8Array([-128, 0, 127, 5])))
+        converge(A, B)
+        expect(stateOf(B)).toEqual([-128, 0, 127, 5])
+        expect(stored(A)).toBeInstanceOf(Uint8Array)
+        expect(B.graph.findBox<BytesBox>(id).unwrap().state.getValue()).toBeInstanceOf(Int8Array)
+        edit(B, graph => graph.findBox<BytesBox>(id).unwrap().state.setValue(new Int8Array(0)))
+        converge(A, B)
+        expect(stateOf(A)).toEqual([])
+        expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+    })
+
+    it("a bytes field written as a number list (older member) still arrives", () => {
+        const id = UUID.generate()
+        shared(graph => {BytesBox.create(graph, id)})
+        A.doc.transact(() => (((A.boxes.get(UUID.toString(id)) as Y.Map<unknown>).get("fields") as Y.Map<unknown>)
+            .set("1", [7, -7])))
+        deliver(A, B)
+        expect(Array.from(B.graph.findBox<BytesBox>(id).unwrap().state.getValue())).toEqual([7, -7])
     })
 
     it("concurrent writes to the SAME field converge to one value on both peers (LWW)", () => {

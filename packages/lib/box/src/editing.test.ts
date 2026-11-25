@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, it} from "vitest"
-import {BooleanField, BoxGraph, Field} from "./"
+import {BooleanField, BoxGraph, Field, Update} from "./"
 import {PointerField, UnreferenceableType} from "./pointer"
 import {Box, BoxConstruct} from "./box"
 import {NoPointers, VertexVisitor} from "./vertex"
@@ -169,6 +169,64 @@ describe("editing", () => {
         expect((scene.graph.findBox(barUuid).unwrap().box as BarBox).bool.getValue()).true
         scene.editing.redo()
         expect(scene.graph.findBox(barUuid).nonEmpty()).false
+    })
+
+    it("drops a step that can no longer be undone so older steps stay reachable", (scene: TestScene) => {
+        const kept = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        const removed = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        scene.editing.modify(() => removed.bool.setValue(true))
+        // another participant deletes the box outside this history
+        scene.graph.beginTransaction()
+        removed.delete()
+        scene.graph.endTransaction()
+        expect(scene.editing.undo()).false
+        expect(scene.editing.undo()).false
+        expect(scene.editing.canUndo()).true
+        expect(scene.editing.undo()).true
+        expect(scene.graph.findBox(kept.address.uuid).nonEmpty()).false
+        expect(scene.editing.canUndo()).false
+        expect(scene.editing.redo()).true
+        expect(scene.graph.findBox(kept.address.uuid).nonEmpty()).true
+        expect(scene.editing.canRedo()).false
+    })
+
+    it("keeps unsaved changes after a failed undo drops the step made since saving", (scene: TestScene) => {
+        const removed = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        scene.editing.markSaved()
+        scene.editing.modify(() => removed.bool.setValue(true))
+        scene.graph.beginTransaction()
+        removed.delete()
+        scene.graph.endTransaction()
+        expect(scene.editing.undo()).false
+        expect(scene.editing.hasUnsavedChanges()).true
+    })
+
+    it("stays saved after a failed undo drops the step the save contains", (scene: TestScene) => {
+        scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate()))
+        const removed = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        scene.editing.modify(() => removed.bool.setValue(true))
+        scene.editing.markSaved()
+        scene.graph.beginTransaction()
+        removed.delete()
+        scene.graph.endTransaction()
+        expect(scene.editing.undo()).false
+        expect(scene.editing.hasUnsavedChanges()).false
+        expect(scene.editing.undo()).false
+        expect(scene.editing.hasUnsavedChanges()).false
+        expect(scene.editing.undo()).true
+        expect(scene.editing.hasUnsavedChanges()).true
+    })
+
+    it("keeps unsaved changes after a failed redo drops a step the save contained", (scene: TestScene) => {
+        const removed = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        scene.editing.modify(() => removed.bool.setValue(true))
+        scene.editing.markSaved()
+        scene.editing.undo()
+        scene.graph.beginTransaction()
+        removed.delete()
+        scene.graph.endTransaction()
+        expect(scene.editing.redo()).false
+        expect(scene.editing.hasUnsavedChanges()).true
     })
 
     it("should handle box created and deleted in same transaction", (scene: TestScene) => {
@@ -1106,5 +1164,295 @@ describe("#306 each automation-node placement is its own undo step", () => {
         scene.editing.undo() // one more step removes placement 1
         expect(scene.graph.findBox(firstUuid).nonEmpty()).false
         expect(scene.editing.canUndo()).false
+    })
+})
+describe("#480 a pointer write through a box instance that undo replaced", () => {
+    interface TestScene {
+        graph: BoxGraph
+        editing: BoxEditing
+        target: MandatoryBox
+        holder: RefBox
+        stale: BarBox
+        live: BarBox
+    }
+
+    beforeEach<TestScene>((scene: TestScene) => {
+        scene.graph = createGraphWithFactory()
+        scene.editing = new BoxEditing(scene.graph)
+        const {target, holder, stale} = scene.editing.modify(() => {
+            const target = MandatoryBox.create(scene.graph, UUID.generate())
+            const holder = RefBox.create(scene.graph, UUID.generate(), box => box.target.refer(target))
+            const stale = BarBox.create(scene.graph, UUID.generate())
+            return {target, holder, stale}
+        }).unwrap()
+        scene.editing.modify(() => stale.delete())
+        scene.editing.undo()
+        scene.target = target
+        scene.holder = holder
+        scene.stale = stale
+        scene.live = scene.graph.findBox<BarBox>(stale.address.uuid).unwrap()
+    })
+
+    const createSecondTarget = (scene: TestScene): MandatoryBox => scene.editing.modify(() => {
+        const second = MandatoryBox.create(scene.graph, UUID.generate())
+        RefBox.create(scene.graph, UUID.generate(), box => box.target.refer(second))
+        return second
+    }).unwrap()
+
+    it("undo restores a new instance and the old one reports detached", (scene: TestScene) => {
+        expect(scene.live).not.toBe(scene.stale)
+        expect(scene.live.isAttached()).true
+        expect(scene.stale.isAttached()).false
+    })
+
+    it("leaves no ghost edge on the target", (scene: TestScene) => {
+        scene.editing.modify(() => scene.stale.pointer.refer(scene.target))
+        expect(scene.live.pointer.isEmpty()).true
+        expect(scene.target.pointerHub.size()).toBe(1)
+        expect(() => scene.graph.edges().validateRequirements()).not.toThrow()
+    })
+
+    it("emits no update, so a synced copy cannot diverge", (scene: TestScene) => {
+        const updates: Array<Update> = []
+        const subscription = scene.graph.subscribeToAllUpdates({onUpdate: update => updates.push(update)})
+        scene.editing.modify(() => scene.stale.pointer.refer(scene.target))
+        subscription.terminate()
+        expect(updates.length).toBe(0)
+    })
+
+    it("the ghost does not keep a mandatory target alive once its real user is gone", (scene: TestScene) => {
+        scene.editing.modify(() => scene.stale.pointer.refer(scene.target))
+        scene.editing.modify(() => scene.holder.delete())
+        expect(scene.holder.isAttached()).false
+        expect(scene.target.isAttached()).false
+        expect(() => scene.graph.edges().validateRequirements()).not.toThrow()
+    })
+
+    it("a live edge survives a stale write elsewhere and both targets stay deletable", (scene: TestScene) => {
+        const second = createSecondTarget(scene)
+        scene.editing.modify(() => scene.live.pointer.refer(scene.target))
+        scene.editing.modify(() => scene.stale.pointer.refer(second))
+        expect(second.pointerHub.size()).toBe(1)
+        expect(scene.graph.edges().isConnected(scene.live.pointer, scene.target.address)).true
+        expect(() => scene.editing.modify(() => second.delete())).not.toThrow()
+        expect(scene.graph.edges().isConnected(scene.live.pointer, scene.target.address)).true
+        expect(() => scene.editing.modify(() => scene.live.pointer.defer())).not.toThrow()
+        expect(() => scene.editing.modify(() => scene.target.delete())).not.toThrow()
+        expect(scene.graph.findBox(scene.target.address.uuid).isEmpty()).true
+        expect(() => scene.graph.edges().validateRequirements()).not.toThrow()
+    })
+})
+
+describe("a constructor pointer that changes again in the same transaction", () => {
+    // A pointer set in a box constructor is processed at the end of the transaction. A later change of the same
+    // pointer must still come after it: in the resolved target, in the recorded undo step and in a rollback.
+    interface TestScene {
+        graph: BoxGraph
+        editing: BoxEditing
+        first: MandatoryBox
+        second: MandatoryBox
+    }
+
+    beforeEach<TestScene>((scene: TestScene) => {
+        scene.graph = createGraphWithFactory()
+        scene.editing = new BoxEditing(scene.graph)
+        const createTarget = () => {
+            const target = MandatoryBox.create(scene.graph, UUID.generate())
+            RefBox.create(scene.graph, UUID.generate(), box => box.target.refer(target))
+            return target
+        }
+        scene.first = scene.editing.modify(createTarget).unwrap()
+        scene.second = scene.editing.modify(createTarget).unwrap()
+    })
+
+    it("clears the pointer, then undoes and redoes the step", (scene: TestScene) => {
+        const box = scene.editing.modify(() => {
+            const box = BarBox.create(scene.graph, UUID.generate(), box => box.pointer.refer(scene.first))
+            box.pointer.defer()
+            return box
+        }).unwrap()
+        const uuid = box.address.uuid
+        expect(box.pointer.targetVertex.isEmpty()).true
+        expect(scene.first.pointerHub.size()).toBe(1)
+        expect(scene.editing.undo()).true
+        expect(scene.graph.findBox(uuid).isEmpty()).true
+        expect(scene.first.pointerHub.size()).toBe(1)
+        expect(scene.editing.redo()).true
+        expect((scene.graph.findBox(uuid).unwrap() as BarBox).pointer.isEmpty()).true
+    })
+
+    it("points at the second target, then undoes and redoes the step", (scene: TestScene) => {
+        const box = scene.editing.modify(() => {
+            const box = BarBox.create(scene.graph, UUID.generate(), box => box.pointer.refer(scene.first))
+            box.pointer.refer(scene.second)
+            return box
+        }).unwrap()
+        const uuid = box.address.uuid
+        expect(box.pointer.targetVertex.unwrap().address.equals(scene.second.address)).true
+        expect(scene.first.pointerHub.size()).toBe(1)
+        expect(scene.second.pointerHub.size()).toBe(2)
+        expect(scene.editing.undo()).true
+        expect(scene.graph.findBox(uuid).isEmpty()).true
+        expect(scene.second.pointerHub.size()).toBe(1)
+        expect(scene.editing.redo()).true
+        const redone = scene.graph.findBox(uuid).unwrap() as BarBox
+        expect(redone.pointer.targetVertex.unwrap().address.equals(scene.second.address)).true
+    })
+
+    it("keeps the order when a listener changes another constructor pointer", (scene: TestScene) => {
+        const {first, second} = scene
+        const [other, box] = scene.editing.modify(() => {
+            const other = BarBox.create(scene.graph, UUID.generate(), box => box.pointer.refer(first))
+            const box = BarBox.create(scene.graph, UUID.generate(), box => box.pointer.refer(first))
+            // When the constructor update of box arrives, the listener changes the pointer of other
+            const subscription = scene.graph.subscribeToAllUpdates({
+                onUpdate: update => {
+                    if (update.type === "pointer" && update.address.equals(box.pointer.address)) {
+                        other.pointer.refer(second)
+                    }
+                }
+            })
+            box.pointer.refer(second)
+            subscription.terminate()
+            return [other, box]
+        }).unwrap()
+        expect(box.pointer.targetVertex.unwrap().address.equals(second.address)).true
+        expect(other.pointer.targetVertex.unwrap().address.equals(second.address)).true
+        expect(scene.editing.undo()).true
+        expect(scene.editing.redo()).true
+    })
+
+    it("keeps the change that a listener makes when the constructor update arrives", (scene: TestScene) => {
+        const {first, second} = scene
+        const box = scene.editing.modify(() => {
+            const box = BarBox.create(scene.graph, UUID.generate(), box => box.pointer.refer(first))
+            // When the constructor update of box arrives, the listener clears the pointer of box
+            const subscription = scene.graph.subscribeToAllUpdates({
+                onUpdate: update => {
+                    if (update.type === "pointer" && update.address.equals(box.pointer.address)
+                        && update.oldAddress.isEmpty()) {box.pointer.defer()}
+                }
+            })
+            box.pointer.refer(second)
+            subscription.terminate()
+            return box
+        }).unwrap()
+        expect(box.pointer.targetAddress.isEmpty()).true
+        expect(box.pointer.targetVertex.isEmpty()).true
+        expect(first.pointerHub.size()).toBe(1)
+        expect(second.pointerHub.size()).toBe(1)
+    })
+
+    it("resolves every pointer when a listener changes and adds pointers in a load without validation", () => {
+        const source = createGraphWithFactory()
+        source.beginTransaction()
+        const target = MandatoryBox.create(source, UUID.generate())
+        BarBox.create(source, UUID.generate(), box => box.pointer.refer(target))
+        BarBox.create(source, UUID.generate(), box => box.pointer.refer(target))
+        source.endTransaction()
+        const graph = createGraphWithFactory()
+        // At the first pointer update, the listener clears that pointer and adds a box that points at the target
+        const subscription = graph.subscribeToAllUpdates({
+            onUpdate: update => {
+                if (update.type !== "pointer") {return}
+                subscription.terminate()
+                const pointer = update.field(graph)
+                const vertex = pointer.targetVertex.unwrap()
+                pointer.targetAddress = Option.None
+                BarBox.create(graph, UUID.generate(), box => box.pointer.refer(vertex))
+            }
+        })
+        graph.fromArrayBuffer(source.toArrayBuffer(), false)
+        expect(graph.boxes().length).toBe(4)
+        const pointers = graph.boxes().flatMap(box => box.outgoingEdges()).map(([pointer]) => pointer)
+        expect(pointers.length).toBe(2)
+        expect(pointers.every(pointer => pointer.targetVertex.nonEmpty())).true
+    })
+
+    it("rolls back an aborted transaction", (scene: TestScene) => {
+        expect(() => scene.editing.modify(() => {
+            const box = BarBox.create(scene.graph, UUID.generate(), box => box.pointer.refer(scene.first))
+            box.pointer.defer()
+            panic("forced failure")
+        })).toThrow("forced failure")
+        expect(scene.graph.boxes().length).toBe(4)
+        expect(scene.first.pointerHub.size()).toBe(1)
+    })
+})
+
+// Live errors 1159 and 1194: a rollback recreates a box deleted in the transaction as a NEW instance under the same
+// uuid. The old instance's removal is discarded, so catchupAndSubscribe's address guard swallows the new instance's
+// onAdded and the listener keeps the old, detached pointer forever (VertexSelection keeps a stale SelectionBox).
+describe("pointer hub listeners follow boxes a rollback recreates", () => {
+    const trackIncoming = (target: MandatoryBox): Map<string, PointerField> => {
+        const tracked = new Map<string, PointerField>()
+        target.pointerHub.catchupAndSubscribe({
+            onAdded: (pointer: PointerField) => tracked.set(pointer.address.toString(), pointer),
+            onRemoved: (pointer: PointerField) => {
+                expect(tracked.get(pointer.address.toString())).toBe(pointer)
+                tracked.delete(pointer.address.toString())
+            }
+        })
+        return tracked
+    }
+    const liveIncoming = (graph: BoxGraph, target: MandatoryBox): ReadonlyArray<PointerField> =>
+        graph.findBox<MandatoryBox>(target.address.uuid).unwrap().pointerHub.incoming()
+    const expectTracksLiveInstances = (graph: BoxGraph, target: MandatoryBox, tracked: Map<string, PointerField>) => {
+        const incoming = liveIncoming(graph, target)
+        expect(tracked.size).toBe(incoming.length)
+        incoming.forEach(pointer => expect(tracked.get(pointer.address.toString())).toBe(pointer))
+        tracked.forEach(pointer => expect(pointer.box.graph.findBox(pointer.box.address.uuid).unwrap()).toBe(pointer.box))
+    }
+
+    it("after abortTransaction", () => {
+        const graph = createGraphWithFactory()
+        graph.beginTransaction()
+        const mandatory = MandatoryBox.create(graph, UUID.generate())
+        RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        const deleted = RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        graph.endTransaction()
+        const tracked = trackIncoming(mandatory)
+        expect(tracked.size).toBe(2)
+        graph.beginTransaction()
+        deleted.delete()
+        graph.abortTransaction()
+        expect(graph.findBox(deleted.address.uuid).unwrap()).not.toBe(deleted)
+        expectTracksLiveInstances(graph, mandatory, tracked)
+    })
+
+    it("after endTransaction rolls back a failed validation", () => {
+        const graph = createGraphWithFactory()
+        graph.beginTransaction()
+        const mandatory = MandatoryBox.create(graph, UUID.generate())
+        RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        const deleted = RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        graph.endTransaction()
+        const tracked = trackIncoming(mandatory)
+        expect(() => {
+            graph.beginTransaction()
+            deleted.delete()
+            MandatoryBox.create(graph, UUID.generate())
+            graph.endTransaction()
+        }).toThrow(/requires an edge/)
+        expect(graph.findBox(deleted.address.uuid).unwrap()).not.toBe(deleted)
+        expectTracksLiveInstances(graph, mandatory, tracked)
+    })
+
+    it("a later delete of the recreated box is announced", () => {
+        const graph = createGraphWithFactory()
+        graph.beginTransaction()
+        const mandatory = MandatoryBox.create(graph, UUID.generate())
+        RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        const deleted = RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+        graph.endTransaction()
+        const tracked = trackIncoming(mandatory)
+        graph.beginTransaction()
+        deleted.delete()
+        graph.abortTransaction()
+        graph.beginTransaction()
+        graph.findBox(deleted.address.uuid).unwrap().delete()
+        graph.endTransaction()
+        expectTracksLiveInstances(graph, mandatory, tracked)
+        expect(tracked.size).toBe(1)
     })
 })

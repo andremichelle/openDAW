@@ -40,6 +40,7 @@ type Construct = Readonly<{
     reference: ValueEventBoxAdapter
     collection: ValueEventCollectionBoxAdapter
     chainPending?: boolean
+    copyable?: boolean
 }>
 
 type SnapGuide = {
@@ -65,6 +66,7 @@ export class ValueMoveModifier implements ValueModifier {
     readonly #reference: ValueEventBoxAdapter
     readonly #collection: ValueEventCollectionBoxAdapter
     readonly #chainPending: boolean
+    readonly #copyable: boolean
 
     readonly #notifier: Notifier<void>
     readonly #masks: ReadonlyArray<[ppqn, ppqn]>
@@ -78,7 +80,7 @@ export class ValueMoveModifier implements ValueModifier {
 
     private constructor({
                             editing, element, context, selection, valueAxis, eventMapping, snapping,
-                            pointerPulse, pointerValue, reference, collection, chainPending
+                            pointerPulse, pointerValue, reference, collection, chainPending, copyable
                         }: Construct) {
         this.#editing = editing
         this.#element = element
@@ -92,6 +94,7 @@ export class ValueMoveModifier implements ValueModifier {
         this.#reference = reference
         this.#collection = collection
         this.#chainPending = chainPending ?? false
+        this.#copyable = copyable ?? true
 
         this.#notifier = new Notifier<void>()
         this.#masks = this.#buildMasks()
@@ -165,8 +168,9 @@ export class ValueMoveModifier implements ValueModifier {
             this.#deltaValue = deltaValue
             change = true
         }
-        if (this.#copy !== ctrlKey) {
-            this.#copy = ctrlKey
+        const copy = this.#copyable && ctrlKey
+        if (this.#copy !== copy) {
+            this.#copy = copy
             change = true
         }
         if (this.#snapValue !== snapValue) {

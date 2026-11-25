@@ -9,6 +9,7 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {VoicingMode} from "@opendaw/studio-enums"
+import {ClassicWaveform} from "@opendaw/lib-dsp"
 import {VaporisateurSettings} from "./VaporisateurSettings"
 
 export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
@@ -57,15 +58,17 @@ export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter 
     #wrapParameters(box: VaporisateurDeviceBox) {
         const VoiceModes = [VoicingMode.Monophonic, VoicingMode.Polyphonic]
         return {
-            oscillators: box.oscillators.fields().map(osc => ({
+            oscillators: box.oscillators.fields().map((osc, index) => ({
                 waveform: this.#parametric.createParameter(
                     osc.waveform,
                     ValueMapping.linearInteger(0, 3),
-                    StringMapping.indices("", ["Sine", "Triangle", "Sawtooth", "Square"]), "Waveform"),
+                    StringMapping.indices("", ["Sine", "Triangle", "Sawtooth", "Square"]), "Waveform", undefined,
+                    index === 0 ? ClassicWaveform.saw : ClassicWaveform.square),
                 volume: this.#parametric.createParameter(
                     osc.volume,
                     ValueMapping.DefaultDecibel,
-                    StringMapping.numeric({unit: "db", fractionDigits: 1}), "Volume"),
+                    StringMapping.numeric({unit: "db", fractionDigits: 1}), "Volume", undefined,
+                    index === 0 ? -6.0 : Number.NEGATIVE_INFINITY),
                 octave: this.#parametric.createParameter(
                     osc.octave,
                     ValueMapping.linearInteger(-3, 3),
@@ -112,11 +115,11 @@ export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter 
             decay: this.#parametric.createParameter(
                 box.decay,
                 ValueMapping.exponential(0.001, 5.0),
-                StringMapping.numeric({unit: "s", fractionDigits: 3}), "Decay"),
+                StringMapping.numeric({unit: "s", fractionDigits: 3}), "Decay", undefined, 0.1),
             sustain: this.#parametric.createParameter(
                 box.sustain,
                 ValueMapping.unipolar(),
-                StringMapping.percent({fractionDigits: 1}), "Sustain"),
+                StringMapping.percent({fractionDigits: 1}), "Sustain", undefined, 0.5),
             release: this.#parametric.createParameter(
                 box.release,
                 ValueMapping.exponential(0.001, 5.0),
@@ -156,7 +159,7 @@ export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter 
             lfoRate: this.#parametric.createParameter(
                 box.lfo.rate,
                 ValueMapping.exponential(0.0001, 30.0),
-                StringMapping.numeric({unit: "Hz", fractionDigits: 1, unitPrefix: true}), "Rate", 0.0),
+                StringMapping.numeric({unit: "Hz", fractionDigits: 1, unitPrefix: true}), "Rate", 0.0, 1.0),
             lfoTargetTune: this.#parametric.createParameter(
                 box.lfo.targetTune,
                 ValueMapping.bipolar(),

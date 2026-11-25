@@ -290,9 +290,11 @@ export class VaryingTempoMap implements TempoMap, Terminable {
 
     intervalToPPQN(fromSeconds: seconds, toSeconds: seconds): ppqn {
         if (fromSeconds >= toSeconds) {return 0.0}
-        const fromPPQN = this.#absoluteSecondsToPPQN(fromSeconds)
-        const toPPQN = this.#absoluteSecondsToPPQN(toSeconds)
-        return toPPQN - fromPPQN
+        return this.#signedSecondsToPPQN(toSeconds) - this.#signedSecondsToPPQN(fromSeconds)
+    }
+
+    #signedSecondsToPPQN(time: seconds): ppqn {
+        return time < 0 ? -this.#absoluteSecondsToPPQN(-time) : this.#absoluteSecondsToPPQN(time)
     }
 
     subscribe(observer: Observer<TempoMap>): Subscription {

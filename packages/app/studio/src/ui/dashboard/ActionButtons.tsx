@@ -30,7 +30,7 @@ export const ActionButtons = ({service}: Construct) => (
             <Icon symbol={IconSymbol.Folder}/><span>Open Bundle</span>
         </button>
         <button className="action" title="Split a music file into drums, bass, vocals and other."
-                onclick={() => NeuralDemux.explain(service).catch(EmptyExec)}>
+                onclick={() => NeuralDemux.run(service).catch(EmptyExec)}>
             <Icon symbol={IconSymbol.Robot}/><span>Neural Demux</span>
         </button>
     </div>

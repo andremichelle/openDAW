@@ -12,5 +12,5 @@ export const firstTrackRect = (area: HTMLElement, manager: TracksManager): Rect 
     }
     const style = getComputedStyle(area)
     const rootFontSize = parseFloat(getComputedStyle(area.ownerDocument.documentElement).fontSize)
-    return {x, y, width, height: parseFloat(style.getPropertyValue("--lane-height")) * rootFontSize}
+    return {x, y, width, height: parseFloat(style.getPropertyValue("--track-min-height")) * rootFontSize}
 }

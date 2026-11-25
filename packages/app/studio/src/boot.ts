@@ -6,7 +6,7 @@ if (localStorage.getItem("opendaw-suppress-unload-guard") !== null) {
     window.addEventListener("beforeunload", event => event.stopImmediatePropagation(), {capture: true})
 }
 import {App} from "@/ui/App.tsx"
-import {isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {EmptyExec, isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
@@ -26,7 +26,7 @@ import {
     GlobalSoundfontLoaderManager,
     Workers
 } from "@opendaw/studio-core"
-import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI, OpenWclapAPI} from "@/opendaw-api"
+import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI, WclapCatalog} from "@/opendaw-api"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
@@ -37,15 +37,19 @@ import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {reportVisitor} from "@/VisitorReporter"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
+import {ReportNames} from "@/errors/ReportNames"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider} from "@opendaw/studio-p2p"
 import {IconSymbol, initializeColors, setColorScheme} from "@opendaw/studio-enums"
-import {StudioPreferences, WclapStorage} from "@opendaw/studio-core"
+import {SampleGarbage, StudioPreferences, WclapStorage} from "@opendaw/studio-core"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
 import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
+import {MasteringDeviceBoxType, MasteringDeviceUrl} from "@opendaw/studio-matchering/device-url"
+import {StorageFull} from "@/storage/StorageFull"
+import {StorageUsage} from "@/storage/StorageUsage"
 
 if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
 
@@ -80,6 +84,17 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     console.debug("requesting custom sampleRate", sampleRate ?? "'No (Firefox)'")
     const context = new AudioContext({sampleRate, latencyHint: 0})
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
+    if (context.sampleRate < 44100) {
+        context.close().catch(EmptyExec)
+        document.querySelector("#preloader")?.remove()
+        Dialogs.show({
+            headline: "Unsupported Sample Rate",
+            content: `Your browser runs audio at ${context.sampleRate} Hz. openDAW does not support sample rates below 44100 Hz.`,
+            excludeOk: true,
+            cancelable: false
+        }).catch(EmptyExec)
+        return
+    }
     console.debug(`Error.stackTraceLimit: ${Error.stackTraceLimit ?? "N/A"}`)
     // purge identifiers written by the old client-side counting (§25 TDDDG)
     localStorage.removeItem("__id__")
@@ -92,7 +107,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     WasmEngine.install({
         processorUrl: wasmProcessorUrl,
         offlineWorkerUrl: wasmOfflineWorkerUrl,
-        wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`
+        wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`,
+        extraDevices: [{url: MasteringDeviceUrl, boxType: MasteringDeviceBoxType}]
     })
     if (!await WasmEngine.ensureReady(context)) {
         document.querySelector("#preloader")?.remove()
@@ -116,6 +132,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         soundfonts: () => OpenSoundfontAPI.get().all(),
         presets: () => OpenPresetAPI.get().list()
     })
+    WclapCatalog.get().tree().finally()
     const chainedSampleProvider = new ChainedSampleProvider({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)
@@ -125,14 +142,14 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
             OpenSoundfontAPI.get().load(uuid, progress)
     })
     const chainedWclapProvider = new ChainedWclapProvider()
-    WclapStorage.installRemote(async id => (await OpenWclapAPI.get().find(id)).nonEmpty()
-        ? OpenWclapAPI.get().load(id)
-        : chainedWclapProvider.fetch(UUID.parse(id), Progress.Empty))
+    WclapStorage.installRemote(id => WclapCatalog.get().load(id)
+        .catch(() => chainedWclapProvider.fetch(UUID.parse(id), Progress.Empty)))
     const sampleManager = new GlobalSampleLoaderManager(chainedSampleProvider)
     const soundfontManager = new GlobalSoundfontLoaderManager(chainedSoundfontProvider)
     const cloudAuthManager = CloudAuthManager.create({
         Dropbox: "jtehjzxaxf3bf1l",
-        GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com"
+        GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com",
+        SoundCloud: "t2NZPSxHxTi38C9g6gCMfMr7V1zjdEPa"
     })
     const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
         sampleManager, soundfontManager, chainedSampleProvider, chainedSoundfontProvider, chainedWclapProvider,
@@ -141,10 +158,12 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     if (isDefined(context.playbackStats)) {
         new BufferUnderrunDetector(context.playbackStats, service.engine)
     }
-    const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
+    const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand(),
+        () => ReportNames.collectNames(service))
+    service.engineErrors.subscribe(event => errorHandler.reportEngineError(event, WasmEngine.recentUpdates()))
     const surface = Surface.main({
         config: (surface: Surface) => surface.ownAll(
-            ContextMenu.install(surface.owner, (menuItem, {clientX, clientY, target}) => {
+            ContextMenu.install(surface.owner, (menuItem, {clientX, clientY, target}, watch) => {
                 Html.unfocus(surface.owner)
                 const offset = 2
                 const x: number = clientX - offset
@@ -152,19 +171,19 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
                 const menu = Menu.create(menuItem)
                 menu.moveTo(x, y)
                 menu.attach(target instanceof Element ? Layers.get(target).flyout : surface.flyout)
+                menu.own(watch(() => menu.terminate()))
+                if (target instanceof Element) {
+                    menu.own(AnimationFrame.add(() => {if (!target.isConnected) {menu.terminate()}}))
+                }
             }),
             TouchContextMenu.install(surface.owner))
     }, errorHandler)
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
-    StudioPreferences.catchupAndSubscribe(({"neutral-hue": hue, "neutral-saturation": saturation}) => {
-        setColorScheme({hue, saturation: saturation / 100.0})
+    StudioPreferences.catchupAndSubscribe(({"color-scheme": scheme}) => {
+        setColorScheme(scheme)
         Surface.forEach(surface => initializeColors(surface.owner.document.documentElement))
     }, "appearance")
     document.querySelector("#preloader")?.remove()
-    replaceChildren(surface.ground, App(service))
-    Tour.install(service)
-    AnimationFrame.start(window)
-    installCursors()
     RuntimeNotifier.install({
         info: (request) => Dialogs.info(request),
         approve: (request) => Dialogs.approve({...request, reverse: true}),
@@ -172,6 +191,11 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         notify: ({message, icon, origin}) => Surface.get(origin)
             .toast(message, isDefined(icon) ? IconSymbol.fromName(icon) : IconSymbol.Notification)
     })
+    StorageFull.install(service.assetCache, () => StorageUsage.refresh().finally())
+    replaceChildren(surface.ground, App(service))
+    Tour.install(service)
+    AnimationFrame.start(window)
+    installCursors()
     const opfsProbe = await Promises.tryCatch(Workers.Opfs.isAvailable())
     if (opfsProbe.status === "rejected" || !opfsProbe.value) {
         Dialogs.info({
@@ -180,6 +204,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         }).finally()
         return
     }
+    SampleGarbage.purge().catch(console.warn)
     if (buildInfo.env === "production" && !Browser.isLocalHost()) {
         if (import.meta.env.BUILD_UUID !== buildInfo.uuid) {
             console.warn("Cache issue:")

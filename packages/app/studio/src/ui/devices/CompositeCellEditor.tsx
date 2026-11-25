@@ -53,7 +53,7 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
         <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => {
             cell.match({
                 none: () => MenuItems.forAudioUnitInput(parent, service, host),
-                some: entry => MenuItems.forCompositeCell(parent, service, host, entry.compositeDevice())
+                some: entry => MenuItems.forCompositeCell(parent, host, entry.compositeDevice())
             })
             parent.addMenuItem(DebugMenus.debugBox(cell.mapOr<Box>(entry => entry.box, host.audioUnitBoxAdapter().box)))
         })} style={{minWidth: "0", fontSize: "0.75em", marginLeft: "auto"}}

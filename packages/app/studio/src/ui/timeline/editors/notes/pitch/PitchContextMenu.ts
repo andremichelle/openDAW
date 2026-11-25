@@ -1,10 +1,10 @@
 import {ContextMenu, ElementCapturing, ProjectApi} from "@opendaw/studio-core"
-import {Editing, isNull, MutableObservableValue, Selection} from "@opendaw/lib-std"
+import {Editing, Func, isNull, MutableObservableValue, Selection} from "@opendaw/lib-std"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {PitchCaptureTarget} from "@/ui/timeline/editors/notes/pitch/PitchEventCapturing.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {EventCollection} from "@opendaw/lib-dsp"
+import {EventCollection, Harmony, ppqn} from "@opendaw/lib-dsp"
 
 type Construct = {
     element: Element
@@ -15,10 +15,11 @@ type Construct = {
     events: EventCollection<NoteEventBoxAdapter>
     stepRecording: MutableObservableValue<boolean>
     api: ProjectApi
+    keyAt: Func<ppqn, Harmony.Key>
 }
 
 export const installContextMenu =
-    ({element, capturing, snapping, editing, selection, events, stepRecording, api}: Construct) =>
+    ({element, capturing, snapping, editing, selection, events, stepRecording, api, keyAt}: Construct) =>
         ContextMenu.subscribe(element, (collector: ContextMenu.Collector) => {
             const target = capturing.captureEvent(collector.client)
             if (isNull(target)) {return}
@@ -27,5 +28,5 @@ export const installContextMenu =
                 selection.deselectAll()
                 selection.select(target.event)
             }
-            createPitchMenu({editing, snapping, selection, events, stepRecording, api})(collector)
+            createPitchMenu({editing, snapping, selection, events, stepRecording, api, keyAt})(collector)
         })

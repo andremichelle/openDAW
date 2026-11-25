@@ -1,6 +1,6 @@
 import css from "./SampleView.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
-import {Arrays, Exec, Lifecycle, Objects, Option, UUID} from "@opendaw/lib-std"
+import {Arrays, EmptyExec, Exec, Lifecycle, Objects, Option, UUID} from "@opendaw/lib-std"
 import {SamplePlayback} from "@/service/SamplePlayback"
 import {Sample} from "@opendaw/studio-adapters"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -62,6 +62,8 @@ export const SampleView = ({
                              .setTriggerProcedure(() => sampleSelection.requestDevice(targets)),
                          MenuItem.default({label: "Auto-chop into Playfield", selectable: service.hasProfile})
                              .setTriggerProcedure(() => ChopTrigger.intoNewPlayfield(service, sample)),
+                         MenuItem.default({label: "Edit in Sample Editor", icon: IconSymbol.Waveform})
+                             .setTriggerProcedure(() => service.sampleEditor.openSample(sample).then(EmptyExec, console.warn)),
                          MenuItem.default({
                              label: "Edit Name & Bpm…",
                              icon: IconSymbol.Pencil,

@@ -1,13 +1,20 @@
 import {Promises} from "@opendaw/lib-runtime"
-import {Arrays, Errors, Optional} from "@opendaw/lib-std"
+import {Arrays, Errors, Notifier, Optional, Subscription} from "@opendaw/lib-std"
 import {ConstrainDOM} from "@opendaw/lib-dom"
 
 export class AudioDevices {
+    static readonly #streamsChanged: Notifier<void> = new Notifier<void>()
+
+    // an input stream opened or closed: live inputs on the device may read late from now on
+    static subscribeStreamsChanged(observer: () => void): Subscription {return this.#streamsChanged.subscribe(observer)}
+    static notifyStreamsChanged(): void {this.#streamsChanged.notify()}
+
     static async requestPermission() {
         const {status, value: stream} =
             await Promises.tryCatch(navigator.mediaDevices.getUserMedia({audio: true}))
         if (status === "rejected") {return Errors.warn("Could not request permission.")}
         stream.getTracks().forEach(track => track.stop())
+        this.notifyStreamsChanged()
         await this.updateInputList()
     }
 
@@ -21,6 +28,7 @@ export class AudioDevices {
                     : error.constraint
                 : String(error))
         }
+        this.notifyStreamsChanged()
         await this.updateInputList()
         return stream
     }

@@ -158,14 +158,17 @@ impl Pattern {
 
     /// Emit this block's note events. Mirrors a note sequencer: release what has ended first, so a
     /// stop or a loop wrap never leaves the monophonic voice gated with no note left to release it.
-    pub fn generate(&mut self, from: f64, to: f64, flags: BlockFlags, out: &mut [EventRecord]) -> usize {
+    /// The steps in the STRAIGHT range sound where `warp` moves them, kept inside `[from, to]`.
+    pub fn generate<W: Fn(f64) -> f64>(&mut self, from: f64, to: f64, straight: (f64, f64), warp: W,
+                                       flags: BlockFlags, out: &mut [EventRecord]) -> usize {
+        let (straight_from, straight_to) = straight;
         let mut count = 0;
         let read = flags.has(BlockFlags::TRANSPORTING | BlockFlags::PLAYING);
         if !read || flags.discontinuous() {
             self.commit_pending_index();
         }
         self.step = if read {
-            (floor(from / SEMI_QUAVER) as i64).rem_euclid(self.lengths[self.index] as i64) as i32
+            (floor(straight_from / SEMI_QUAVER) as i64).rem_euclid(self.lengths[self.index] as i64) as i32
         } else {-1};
         for slot in 0..RETAINED {
             let note = self.retained[slot];
@@ -185,23 +188,26 @@ impl Pattern {
         // is dropped at transport start and none is emitted twice (a doubled note-on would deplete
         // the accent cap twice, which is audible as a weak accent).
         let steps_per_bar = (BAR / SEMI_QUAVER) as i64;
-        let first = ceil(from / SEMI_QUAVER) as i64;
-        let last = floor(to / SEMI_QUAVER) as i64;
+        let first = ceil(straight_from / SEMI_QUAVER) as i64;
+        let last = floor(straight_to / SEMI_QUAVER) as i64;
         for index in first..=last {
-            let position = index as f64 * SEMI_QUAVER;
-            if position < from || position >= to {continue}
+            let straight_position = index as f64 * SEMI_QUAVER;
+            if straight_position < straight_from || straight_position >= straight_to {continue}
+            if straight_position < 0.0 && straight_position < from {continue}
             if index.rem_euclid(steps_per_bar) == 0 {
                 self.commit_pending_index();
             }
             let step = self.patterns[self.index][(index.rem_euclid(self.lengths[self.index] as i64)) as usize];
             if !step.gate || count >= out.len() {continue}
-            let duration = step.duration_steps() * SEMI_QUAVER;
+            let position = warp(straight_position).clamp(from, to);
+            let end = warp(straight_position + step.duration_steps() * SEMI_QUAVER).max(position);
+            let duration = end - position;
             let id = self.next_id;
             self.next_id = self.next_id.wrapping_add(1).max(1);
             out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_ON, id, pitch: step.note as u32,
                                       velocity: step.velocity(), cent: 0.0, duration};
             count += 1;
-            self.retain(position + duration, id, step.note as u32);
+            self.retain(end, id, step.note as u32);
         }
         count
     }
@@ -234,7 +240,7 @@ mod tests {
     fn collect_with(pattern: &mut Pattern, from: f64, to: f64, flags: BlockFlags) -> Vec<EventRecord> {
         let mut out = [EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0,
                                     velocity: 0.0, cent: 0.0, duration: 0.0}; 32];
-        let count = pattern.generate(from, to, flags, &mut out);
+        let count = pattern.generate(from, to, (from, to), |position| position, flags, &mut out);
         out[..count].to_vec()
     }
 
@@ -264,6 +270,50 @@ mod tests {
         let step = Step {note: 127, gate: true, slide: true, accent: true};
         assert_eq!(Step::unpack(step.pack()), step);
         assert_eq!(step.pack(), 127 | 1 << 7 | 1 << 8 | 1 << 9);
+    }
+
+    // a groove that plays every step 60 pulses late
+    fn late(pattern: &mut Pattern, from: f64, to: f64) -> Vec<EventRecord> {
+        let mut out = [EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0,
+                                    velocity: 0.0, cent: 0.0, duration: 0.0}; 32];
+        let count = pattern.generate(from, to, (from - 60.0, to - 60.0), |position| position + 60.0, playing(), &mut out);
+        out[..count].to_vec()
+    }
+
+    #[test]
+    fn a_groove_moves_each_step_and_its_release() {
+        let mut pattern = pattern_with(&[gated(36, false, false), gated(43, false, false)], 2);
+        let events = late(&mut pattern, 0.0, 100.0);
+        assert_eq!(starts(&events), vec![(60.0, 36)]);
+        let off = late(&mut pattern, 100.0, 300.0).into_iter()
+            .find(|event| event.kind == EVENT_NOTE_OFF && event.pitch == 36).expect("a release");
+        assert!((off.position - (GATE_FRACTION * SEMI_QUAVER + 60.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_step_the_groove_pushes_into_the_next_block_plays_there_once() {
+        let mut pattern = pattern_with(&[gated(36, false, false)], 1);
+        let first = late(&mut pattern, 0.0, 200.0);
+        let second = late(&mut pattern, 200.0, 400.0);
+        assert_eq!(starts(&first), vec![(60.0, 36)]);
+        assert_eq!(starts(&second), vec![(SEMI_QUAVER + 60.0, 36)]);
+    }
+
+    #[test]
+    fn a_groove_pulls_no_step_in_from_before_the_start() {
+        let mut pattern = pattern_with(&[gated(36, false, false), gated(43, false, false)], 2);
+        let mut out = [EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0,
+                                    velocity: 0.0, cent: 0.0, duration: 0.0}; 8];
+        let count = pattern.generate(0.0, 400.0, (-300.0, 100.0), |position| position + 300.0, playing(), &mut out);
+        assert_eq!(starts(&out[..count]), vec![(300.0, 36)], "step -1 at -240 would sound at 60");
+    }
+
+    #[test]
+    fn a_grooved_slide_still_overlaps_the_next_step() {
+        let mut pattern = pattern_with(&[gated(36, true, false), gated(43, false, false)], 2);
+        let events = late(&mut pattern, 0.0, SEMI_QUAVER * 2.0);
+        let slide = events.iter().find(|event| event.kind == EVENT_NOTE_ON && event.pitch == 36).expect("a slide");
+        assert!(slide.position + slide.duration > SEMI_QUAVER + 60.0);
     }
 
     #[test]

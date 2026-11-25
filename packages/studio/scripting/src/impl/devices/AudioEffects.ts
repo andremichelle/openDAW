@@ -122,12 +122,13 @@ export class AutotuneEffectImpl extends AudioEffectFacade<AutotuneDeviceBox> imp
     declare retune: unitValue
     declare shift: float
     declare smooth: unitValue
+    declare follow: boolean
 
     constructor(context: Context, box: AutotuneDeviceBox) {
         super(context, box)
         this.bind({
             scaleKey: box.key, scale: box.scale, amount: box.amount, retune: box.retune,
-            shift: box.shift, smooth: box.smooth
+            shift: box.shift, smooth: box.smooth, follow: box.follow
         })
     }
 }

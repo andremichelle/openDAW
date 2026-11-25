@@ -60,5 +60,6 @@ export const CubedDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrumen
             }
         }
     },
+    40: {type: "pointer", name: "groove", pointerType: Pointers.Groove, mandatory: false},
     99: {type: "int32", name: "version", constraints: "any", unit: ""}
 })

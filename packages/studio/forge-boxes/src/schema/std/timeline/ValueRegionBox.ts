@@ -15,7 +15,8 @@ export const ValueRegionBox: BoxSchema<Pointers> = {
             13: {type: "int32", name: "loop-duration", ...PPQNDurationConstraints},
             14: {type: "boolean", name: "mute"},
             15: {type: "string", name: "label"},
-            16: {type: "int32", name: "hue", ...HueConstraints}
+            16: {type: "int32", name: "hue", ...HueConstraints},
+            17: {type: "pointer", name: "groove", pointerType: Pointers.Groove, mandatory: false}
         }
     }, pointerRules: {accepts: [Pointers.Selection, Pointers.Editing, Pointers.MetaData], mandatory: false}
 }

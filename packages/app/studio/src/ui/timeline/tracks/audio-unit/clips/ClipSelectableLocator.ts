@@ -21,8 +21,8 @@ export const createClipSelectableLocator = (capturing: ElementCapturing<ClipCapt
         for (let trackIndex = startIndex; trackIndex < tracks.length; trackIndex++) {
             const track = tracks[trackIndex]
             if (track.position >= v1) {break}
-            const clipIndex0 = Math.floor(u0 / ClipWidth)
-            const clipIndex1 = Math.floor(u1 / ClipWidth)
+            const clipIndex0 = Math.floor((u0 + manager.service.timeline.clips.scroll.getValue()) / ClipWidth)
+            const clipIndex1 = Math.floor((u1 + manager.service.timeline.clips.scroll.getValue()) / ClipWidth)
             track.trackBoxAdapter.clips.collection.adapters()
                 .forEach(adapter => {
                     const clipIndex = adapter.indexField.getValue()

@@ -75,11 +75,13 @@ export const MarkerTrackBody = ({lifecycle, service}: Construct) => {
                 return Option.None
             }
             const oldPosition = adapter.position
+            const pointerPulse = range.xToUnit(startEvent.clientX - canvas.getBoundingClientRect().left)
             engine.setPosition(oldPosition)
             return Option.wrap({
                 update: (event: Dragging.Event) => {
                     const rect = canvas.getBoundingClientRect()
-                    const position = snapping.xToUnitFloor(event.clientX - rect.left)
+                    const position = Math.max(0,
+                        oldPosition + snapping.computeDelta(pointerPulse, event.clientX - rect.left, oldPosition))
                     editing.modify(() => {
                         const atPosition = events.lowerEqual(position)
                         if (atPosition !== null && atPosition.position === position && atPosition !== adapter) {

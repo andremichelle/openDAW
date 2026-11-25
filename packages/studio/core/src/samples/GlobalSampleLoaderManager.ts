@@ -85,6 +85,8 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         }
     }
 
+    isInUse(uuid: UUID.Bytes): boolean {return this.#refCounts.hasKey(uuid) || this.#pending.hasKey(uuid)}
+
     record(loader: SampleLoader): void {
         this.#loaders.add(loader)
     }
@@ -104,7 +106,7 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         subscription = loader.subscribe(state => {
             if (state.type === "error") {
                 queueMicrotask(() => subscription.terminate())
-                reject(new Error(state.reason))
+                reject(new Error(state.reason, {cause: state.cause}))
             } else if (loader.data.nonEmpty()) {
                 queueMicrotask(() => subscription.terminate())
                 resolve(loader.data.unwrap())
@@ -140,8 +142,10 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
             () => this.#fetchFromApi(loader)
         ).catch((error: unknown) => {
             console.warn("Unexpected error loading sample:", error)
-            loader.setError(error instanceof Error ? error.message : String(error))
-        }).finally(() => this.#pending.removeByKey(uuid))
+            loader.setError(error instanceof Error ? error.message : String(error), error)
+        }).finally(() => this.#pending.opt(uuid).ifSome(entry => {
+            if (entry.promise === promise) {this.#pending.removeByKey(uuid)}
+        }))
         this.#pending.add({uuid, promise})
     }
 
@@ -154,7 +158,7 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         if (fetchResult.status === "rejected") {
             const error = fetchResult.error
             console.warn(error)
-            loader.setError(error instanceof Error ? error.message : String(error))
+            loader.setError(error instanceof Error ? error.message : String(error), error)
             return
         }
         const [audio, meta] = fetchResult.value
@@ -162,15 +166,12 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         const peaksBuffer = await Workers.Peak.generateAsync(
             peakProgress, shifts, audio.frames, audio.numberOfFrames, audio.numberOfChannels
         ) as ArrayBuffer
-        const storeResult = await Promises.tryCatch(SampleStorage.get().save({uuid, audio, peaks: peaksBuffer, meta}))
-        if (storeResult.status === "resolved") {
-            const peaks = SamplePeaks.from(new ByteArrayInput(peaksBuffer))
-            this.#cache.add({uuid, data: audio, peaks, meta})
-            loader.setLoaded(audio, peaks, meta)
-        } else {
-            const error = storeResult.error
-            console.warn(error)
-            loader.setError(error instanceof Error ? error.message : String(error))
+        const stored = await Promises.tryCatch(SampleStorage.get().save({uuid, audio, peaks: peaksBuffer, meta}, true))
+        if (stored.status === "rejected") {
+            console.warn(`Sample ${UUID.toString(uuid)} plays from memory, it could not be stored`, stored.error)
         }
+        const peaks = SamplePeaks.from(new ByteArrayInput(peaksBuffer))
+        this.#cache.add({uuid, data: audio, peaks, meta})
+        loader.setLoaded(audio, peaks, meta)
     }
 }

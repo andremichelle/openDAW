@@ -5,6 +5,8 @@ import {Promises} from "@opendaw/lib-runtime"
 import {ProjectMeta} from "./ProjectMeta"
 import {ProjectProfile} from "./ProjectProfile"
 import {Workers} from "../Workers"
+import {OpfsQuota} from "../OpfsQuota"
+import {TrashList} from "../TrashList"
 import {TemplatePaths} from "./TemplatePaths"
 
 export namespace TemplateStorage {
@@ -62,13 +64,16 @@ export namespace TemplateStorage {
         template.updateMetaData("name", name)
         template.updateMetaData("created", new Date().toISOString())
         template.updateModifyDate()
-        await Workers.Opfs.write(TemplatePaths.projectFile(uuid), new Uint8Array(project.toArrayBuffer()))
-        await Workers.Opfs.write(TemplatePaths.projectMeta(uuid),
-            new TextEncoder().encode(JSON.stringify(template.meta)))
-        await profile.cover.match({
-            none: () => Promise.resolve(),
-            some: cover => Workers.Opfs.write(TemplatePaths.projectCover(uuid), new Uint8Array(cover))
-        })
+        const projectBytes = new Uint8Array(project.toArrayBuffer())
+        const metaBytes = new TextEncoder().encode(JSON.stringify(template.meta))
+        await OpfsQuota.retry(TemplatePaths.projectFile(uuid), async () => {
+            await Workers.Opfs.write(TemplatePaths.projectFile(uuid), projectBytes)
+            await profile.cover.match({
+                none: () => Promise.resolve(),
+                some: cover => Workers.Opfs.write(TemplatePaths.projectCover(uuid), new Uint8Array(cover))
+            })
+            await Workers.Opfs.write(TemplatePaths.projectMeta(uuid), metaBytes)
+        }, () => Workers.Opfs.delete(TemplatePaths.templateFolder(uuid)))
     }
 
     export const listUsedAssets = async (
@@ -102,16 +107,9 @@ export namespace TemplateStorage {
         return result
     }
 
-    export const deleteTemplate = async (uuid: UUID.Bytes) => {
-        const array = await loadTrashedIds()
-        array.push(UUID.toString(uuid))
-        const trash = new TextEncoder().encode(JSON.stringify(array))
-        await Workers.Opfs.write(`${TemplatePaths.Folder}/trash.json`, trash)
-        await Workers.Opfs.delete(TemplatePaths.templateFolder(uuid))
-    }
+    export const deleteTemplate = async (uuid: UUID.Bytes) => TrashList.deleteRecorded(Workers.Opfs,
+        `${TemplatePaths.Folder}/trash.json`, UUID.toString(uuid), TemplatePaths.templateFolder(uuid))
 
-    export const loadTrashedIds = async (): Promise<Array<UUID.String>> => {
-        const {status, value} = await Promises.tryCatch(Workers.Opfs.read(`${TemplatePaths.Folder}/trash.json`))
-        return status === "rejected" ? [] : JSON.parse(new TextDecoder().decode(value))
-    }
+    export const loadTrashedIds = async (): Promise<Array<UUID.String>> =>
+        TrashList.read(Workers.Opfs, `${TemplatePaths.Folder}/trash.json`)
 }

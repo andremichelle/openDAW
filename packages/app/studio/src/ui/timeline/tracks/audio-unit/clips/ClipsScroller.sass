@@ -1,0 +1,24 @@
+@use "@/colors"
+
+// borrowed from TimelineRangeSlider.sass
+component
+  grid-column: span var(--clips-count)
+  height: 14px
+  display: flex
+  align-items: center
+  padding: 0 0.125em
+  @include colors.panel-background
+
+  > div.horizontal
+    height: 10px
+    background-color: transparent
+
+    > div
+      top: 0
+      bottom: 0
+      height: 10px
+      border-radius: 5px
+      background-color: rgba(white, 0.0625)
+
+    &:active > div
+      background-color: rgba(white, 0.125)

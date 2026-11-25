@@ -25,19 +25,19 @@ export const VaporisateurDeviceBox: BoxSchema<Pointers> = DeviceFactory.createIn
     },
     14: {
         type: "float32", name: "cutoff", pointerRules: ParameterPointerRules,
-        constraints: {min: 20.0, max: 20_000.0, scaling: "exponential"}, unit: "Hz"
+        value: 8000.0, constraints: {min: 20.0, max: 20_000.0, scaling: "exponential"}, unit: "Hz"
     },
     15: {
         type: "float32", name: "resonance", pointerRules: ParameterPointerRules,
-        constraints: {min: 0.01, max: 10.0, scaling: "exponential"}, unit: "q"
+        value: 0.1, constraints: {min: 0.01, max: 10.0, scaling: "exponential"}, unit: "q"
     },
     16: {
         type: "float32", name: "attack", pointerRules: ParameterPointerRules,
-        constraints: {min: 0.001, max: 5.0, scaling: "exponential"}, unit: "s"
+        value: 0.005, constraints: {min: 0.001, max: 5.0, scaling: "exponential"}, unit: "s"
     },
     17: {
         type: "float32", name: "release", pointerRules: ParameterPointerRules,
-        constraints: {min: 0.001, max: 5.0, scaling: "exponential"}, unit: "s"
+        value: 0.5, constraints: {min: 0.001, max: 5.0, scaling: "exponential"}, unit: "s"
     },
     18: {
         type: "float32", name: "filter-envelope", pointerRules: ParameterPointerRules,

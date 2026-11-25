@@ -31,7 +31,7 @@ Click the **Editor** button on the device panel to open the full-screen code edi
 The toolbar at the top provides:
 
 - **Compile** — Compile and load the code into the engine
-- **Examples** — Load ready-made processors to learn from
+- **Community Scripts** — Browse and load processors shared by the community
 - **From Clipboard** — Paste code from the clipboard into the editor and compile it in one step
 - **Start AI-Prompt** — Copy a device-specific AI starter prompt to the clipboard, ready to paste into an AI assistant (e.g. ChatGPT, Claude) for help writing processors
 - **Close Editor** — Return to the previous view
@@ -52,7 +52,7 @@ Set the device name using a `// @label` comment:
 // @label My MIDI Effect
 ```
 
-When the script compiles, the device panel header will display this name. Omitting `@label` keeps the current name. An empty `@label` (without a name) causes a compile error.
+When the script compiles, the device panel header will display this name. Omitting `@label` keeps the current name, unless that name came from the previous `@label`: then the device goes back to its default name. An empty `@label` (without a name) causes a compile error.
 
 ---
 
@@ -237,6 +237,20 @@ Without the `// @no-pass` line this example would emit each note twice: once for
 | `bpm`    | `number` | Current project tempo in BPM                          |
 | `flags`  | `number` | Bitmask: 1 = transporting, 2 = discontinuous (jumped) |
 
+### Key and chord
+
+`this.keyAt(position)` and `this.chordAt(position)` read the harmony of the song at a position in ppqn, the same
+[key and chord](/manuals/key-and-chords) Scale Matrix and Arpeggio follow. Call them in `process`, they are not
+available in the constructor.
+
+| Call | Returns |
+|------|---------|
+| `this.keyAt(block.from)` | `{root, steps}`: `root` the pitch class 0 to 11 (0 = C), `steps` the scale's notes in semitones above the root, `[0, 2, 4, 5, 7, 9, 11]` for major |
+| `this.chordAt(block.from)` | `null` where no chord sits, else `{root, notes}`: `notes` the semitones above the root as voiced, inversion included, `[0, 4, 7]` for a major triad |
+
+A chord note plays as `60 + root + note`. Both return frozen objects shared between calls, so asking every block
+allocates nothing.
+
 ### Event types
 
 The `events` parameter is a unified iterator containing both note-ons and note-offs in chronological order.
@@ -247,7 +261,7 @@ The `events` parameter is a unified iterator containing both note-ons and note-o
 |------------|-----------|---------|---------------------------------------|
 | `gate`     | `boolean` | `true`  | Identifies this as a note-on          |
 | `id`       | `number`  | —       | Unique identifier for this note       |
-| `position` | `number`  | ppqn    | Start position (480 ppqn per quarter) |
+| `position` | `number`  | ppqn    | Start position (960 ppqn per quarter) |
 | `duration` | `number`  | ppqn    | Note length                           |
 | `pitch`    | `number`  | 0–127   | MIDI note number                      |
 | `velocity` | `number`  | 0.0–1.0 | Note velocity                         |
@@ -268,7 +282,7 @@ Your generator yields note-on objects only: `{ position, duration, pitch, veloci
 
 | Property   | Type     | Range     | Description                           |
 |------------|----------|-----------|---------------------------------------|
-| `position` | `number` | ppqn      | Start position (480 ppqn per quarter) |
+| `position` | `number` | ppqn      | Start position (960 ppqn per quarter) |
 | `duration` | `number` | ppqn      | Note length                           |
 | `pitch`    | `number` | 0–127     | MIDI note number                      |
 | `velocity` | `number` | 0.0–1.0   | Note velocity                         |
@@ -294,12 +308,76 @@ State is reset when the code is recompiled (a new instance is created).
 
 ---
 
-## 8. Examples
+## 8. Custom Views
 
-Select **Examples** in the code editor toolbar to load ready-made processors (Chord Generator, Velocity, Pitch, Random Humanizer, Probability Gate, Echo / Note Delay, Pitch Range Filter, 303 Sequencer).
+A script can place its own editor element into the device panel, store custom data and show live telemetry.
+Everything stays in the one script: the directive header, `class Processor` and the view classes.
+
+```javascript
+// @view 2 1 8 3                   class View at column 2, row 1, 8 columns wide, 3 rows high
+// @window Editor 900 520          a resizable floating window for the class Editor
+// @collection steps 16            16 records ...
+// @field steps.velocity 0.8 0 1 linear
+// @buffer wave 256                256 floats
+// @stream spectrum 512 fft        processor -> view telemetry
+```
+
+| Directive | What it does |
+|-----------|--------------|
+| `@view [Class] <column> <row> <columns> <rows>` | Places a view into the 3-row panel grid, the knobs fill the free cells. Overlapping views are marked red. |
+| `@window [Class] <width> <height>` | A floating window, opened from the device header or `host.openWindow()`. |
+| `@collection` / `@field` / `@record` | Records the view edits and the processor reads (`this.data.<name>`). Saved with the project, undoable. |
+| `@buffer <name> <length>` | Floats the view writes and the processor reads (`this.data.<name>`, a Float32Array). |
+| `@stream <name> <length> [value\|ring\|fft]` | Live values from the processor to the view (`this.streams.<name>`). Never saved. |
+
+Every view runs in its own sandboxed frame: it cannot reach the studio, the network or your files, and it shares
+no variables with the Processor. A script with a view therefore keeps its top level free of state: only `class`,
+`function` and `const` declarations, every top-level value is frozen. The code editor marks violations as you type.
+
+In the view, the class receives `host`: `host.params`, `host.data`, `host.streams`, `host.edit` and
+`host.gesture` (one undo step), `host.preview` (play notes), `host.send` (reaches `message(data)` of the
+Processor) and `host.color` (the studio and display colours). Hover any of them in the code editor for details.
+
+The mouse wheel over the view scrolls the device panel. A view that uses the wheel itself calls
+`event.preventDefault()` in its wheel listener to keep it.
+
+A view with keyboard focus receives every key before the studio does, the studio shortcuts included. The view
+is a document of its own, the studio hears a key only after the view passed it on. Space still starts and stops
+playback, but the view's key listeners receive it too, and a button that was clicked last still has the focus.
+Call `blur()` on a button after its click and ignore the keys the studio uses, or the view acts on them as well.
+
+A parameter the view controls itself does not need a knob. Mark it with `[omit-default-ui]` and attach it to the
+element that controls it, so a right click there opens the regular parameter menu (automation, modulation, MIDI
+learn, reset):
+
+```javascript
+// @param cutoff 1000 20 20000 exp Hz [omit-default-ui]
+```
+
+```javascript
+host.attachParameter(cutoffHandle, "cutoff", {enterValue: true})
+```
+
+`{enterValue: true}` adds a double click that opens the same text field as on a regular knob, to type a value
+with its unit. Use it for knobs and sliders. Leave it out for checkboxes and buttons, where a double click
+should only toggle.
+
+The parameter stays automatable, modulatable and MIDI learnable. `host.params.cutoff.sources` tells the view
+whether it is automated or modulated, `value` already includes both.
+
+Community scripts with views: Step Arp (a 16-step velocity and gate pattern with a playing-step highlight).
 
 ---
 
-## 9. AI Assistance
+## 9. Community Scripts
+
+Select **Community Scripts** in the code editor toolbar to browse processors shared by the openDAW community, for example Chord Player, Key Harmonizer, Random Humanizer, Probability Gate, Echo / Note Delay and 303 Sequencer. Search by name, author or tag, preview the code and click **Open** to load one into the device. Paste a GitHub link to a script, a folder or a pull request into the field at the bottom to load a script straight from GitHub, so you can try it before it is published. **How to contribute?** explains how to share your own.
+
+---
+
+## 10. AI Assistance
 
 Click **Start AI-Prompt** in the editor toolbar to copy a detailed starter prompt to your clipboard. Paste it into any AI assistant to get help writing Spielwerk processors. Once the AI generates code, copy it and click **From Clipboard** to load and compile it directly.
+
+The prompt also covers custom views and carries a design guide derived from the stock devices, so a view the AI writes
+looks like part of openDAW.

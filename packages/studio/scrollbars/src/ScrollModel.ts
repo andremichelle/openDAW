@@ -13,8 +13,9 @@ export class ScrollModel implements Terminable {
     constructor() {this.#notifier = new Notifier<ScrollModel>()}
 
     moveTo(value: number): void {
-        if (!this.scrollable()) {return}
-        this.normalized = value / (this.#trackSize - this.thumbSize)
+        const range = this.#trackSize - this.thumbSize
+        if (!this.scrollable() || !(range > 0.0)) {return}
+        this.normalized = value / range
     }
 
     moveBy(delta: number): void {
@@ -47,16 +48,18 @@ export class ScrollModel implements Terminable {
     // The size of the underlying content
     set contentSize(value: number) {
         if (this.#contentSize === value) {return}
+        const previousOverflow = Math.max(0.0, this.overflow)
         this.#contentSize = value
         this.#normalized = !this.scrollable()
             ? 0.0
-            : Math.max(0.0, Math.min(1.0, this.#normalized * this.overflow / (this.#contentSize - this.#visibleSize)))
+            : Math.max(0.0, Math.min(1.0, this.#normalized * previousOverflow / this.overflow))
         this.#onChanged()
     }
     get contentSize(): number {return this.#contentSize}
 
     // the normalized thumb position
     set normalized(value: number) {
+        if (Number.isNaN(value)) {return}
         const clamped = !this.scrollable() ? 0.0 : clamp(value, 0.0, 1.0)
         if (this.#normalized === clamped) {return}
         this.#normalized = clamped
@@ -68,7 +71,7 @@ export class ScrollModel implements Terminable {
         if (!this.scrollable()) {return}
         this.normalized = value / (this.overflow)
     }
-    get position() {return !this.scrollable() ? 0.0 : Math.floor(this.#normalized * this.overflow)}
+    get position() {return !this.scrollable() ? 0.0 : Math.round(this.#normalized * this.overflow)}
 
     get overflow() {return this.#contentSize - this.#visibleSize}
     get thumbPosition() {return this.#normalized * (this.#trackSize - this.#minThumbSize())}

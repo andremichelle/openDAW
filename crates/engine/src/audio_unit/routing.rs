@@ -12,6 +12,7 @@ impl Engine {
     /// source unit (re)building with a new buffer, and load build order uniformly. Run only when a reconcile
     /// did work (a membership change or an enqueued unit), so an idle transaction does nothing here.
     pub(crate) fn resolve_sidechains(&mut self) {
+        self.sidechain_links.clear();
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
             match &mut unit.wired {
@@ -55,10 +56,11 @@ impl Engine {
     /// target's output, swap the producer -> consumer edge if the source node changed, and (if any port moved)
     /// push the device its current sidechain sources. See `resolve_sidechains` for the why.
     pub(crate) fn resolve_one_sidechain(&mut self, binding: &mut SidechainBinding) {
-        let mut changed = false;
-        let mut sources: Vec<(u32, SharedAudioBuffer)> = Vec::new();
+        let mut changed = self.sync_sidechain_collection(binding);
+        let mut sources: Vec<(u32, NodeId, SharedAudioBuffer)> = Vec::new();
         for port in &mut binding.ports {
-            let target = self.graph.target_of(&Address::of(binding.device_uuid, port.path.clone())).cloned();
+            let target = self.graph.target_of(&port.address).cloned();
+            let target_uuid = target.as_ref().map(|address| address.uuid);
             let resolution = target.and_then(|target| {
                 // A pointer at a FIELD of a box resolves by its FULL address first: that is how a device nested
                 // in an effect composite taps the composite's INPUT (its `input` vertex, registered to the
@@ -88,18 +90,38 @@ impl Engine {
                     self.context.remove_edge(old, binding.node_id);
                 }
                 if let Some(new) = source_node {
-                    self.context.register_edge(new, binding.node_id);
+                    self.context.register_order_edge(new, binding.node_id);
                 }
                 port.resolved = source_node;
                 changed = true;
             }
-            if let Some((_, buffer)) = resolution {
-                sources.push((port.port_id, buffer));
+            if let Some((node, buffer)) = resolution {
+                if let Some(target_uuid) = target_uuid {
+                    self.sidechain_links.push((binding.node_id, binding.device_uuid, node, target_uuid));
+                }
+                sources.push((port.port_id, node, buffer));
             }
         }
         if changed {
             binding.sink.borrow_mut().set_sidechains(&sources);
         }
+    }
+
+    /// Flag every node on a sidechain feedback loop and tell the user once about each newly looped device.
+    pub(crate) fn resolve_feedback(&mut self) {
+        let mut nodes = BTreeSet::new();
+        let mut looped = BTreeSet::new();
+        for (consumer, device, source, target) in &self.sidechain_links {
+            let cycle = self.context.feedback_nodes(*source, *consumer);
+            if cycle.is_empty() {continue}
+            nodes.extend(cycle);
+            if looped.insert(*device) && !self.looped_sidechains.contains(device) {
+                crate::notice(format_args!("sidechain-loop\t{}\t{}",
+                    boxgraph::address::uuid_to_string(device), boxgraph::address::uuid_to_string(target)));
+            }
+        }
+        self.looped_sidechains = looped;
+        self.context.set_feedback(nodes);
     }
 
     /// The summing bus of a route: a REGISTERED (non-primary) bus's sum, or the master fallback (`None` =
@@ -147,6 +169,10 @@ impl Engine {
             self.unwire_output_route(unit); // no wired chain: drop any stale route
             return;
         };
+        if self.returns_through_monitor(&unit.unit) {
+            self.unwire_output_route(unit);
+            return;
+        }
         let target_bus: Option<Uuid> = self.graph.target_of(&Address::of(unit.unit, vec![UNIT_OUTPUT_KEY]))
             .map(|target| target.uuid)
             .filter(|uuid| self.bus_registry.contains_key(uuid));
@@ -160,7 +186,7 @@ impl Engine {
         if self.context.would_cycle(strip_id, sum_id) {
             return; // a feedback loop: leave unrouted (silent); a later edit can fix it
         }
-        sum_rc.borrow_mut().add_audio_source(strip_output.clone());
+        sum_rc.borrow_mut().add_audio_source(strip_output.clone(), strip_id);
         self.context.register_edge(strip_id, sum_id);
         unit.routed = Some(Routed {bus: target_bus, sum_id, strip_id, strip_output});
     }
@@ -223,6 +249,7 @@ impl Engine {
         let proc = Rc::new(RefCell::new(AuxSendProcessor::new(params, automation.clone(), self.sample_rate)));
         let node_id = self.context.register_processor(proc.clone());
         self.context.set_label(node_id, format!("aux-send {:02x}{:02x}", send_uuid[0], send_uuid[1]));
+        self.context.set_owner(node_id, send_uuid);
         let mut send = SendBinding {send_uuid, proc, node_id, source: None, target: None, routing, subs, automation,
             param_subs: Vec::new(), param_collections: Vec::new()};
         self.bind_send_automation(&mut send, invalidate);
@@ -280,7 +307,8 @@ impl Engine {
     pub(crate) fn resolve_sinks(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
-            for_each_sink_in_wired(&mut unit.wired, &mut |binding| self.resolve_one_sink(binding));
+            let monitored = self.returns_through_monitor(&unit.unit);
+            for_each_sink_in_wired(&mut unit.wired, &mut |binding| self.resolve_one_sink(binding, monitored));
         }
         self.audio_units = units;
     }
@@ -289,8 +317,8 @@ impl Engine {
     /// otherwise the tap stays unwired (no master fallback, unlike an output route or a send: an unassigned
     /// sink is silent by design). A disabled sink is bypassed in the chain (never processed), so its tap is
     /// detached here rather than summed stale. A feedback loop is left unrouted.
-    pub(crate) fn resolve_one_sink(&mut self, sink: &mut SinkBinding) {
-        let wanted = if self.device_enabled(sink.device_uuid) {
+    pub(crate) fn resolve_one_sink(&mut self, sink: &mut SinkBinding, monitored: bool) {
+        let wanted = if !monitored && self.device_enabled(sink.device_uuid) {
             self.graph.target_of(&Address::of(sink.device_uuid, vec![SINK_TARGET_KEY]))
                 .map(|target| target.uuid)
                 .filter(|uuid| self.bus_registry.contains_key(uuid))
@@ -314,7 +342,7 @@ impl Engine {
         if self.context.would_cycle(sink.node_id, sum_id) {
             return;
         }
-        sum.borrow_mut().add_audio_source(sink.proc.borrow().tap_output());
+        sum.borrow_mut().add_audio_source(sink.proc.borrow().tap_output(), sink.node_id);
         self.context.register_edge(sink.node_id, sum_id);
         sink.target = Some((bus, sum_id));
     }
@@ -365,8 +393,8 @@ impl Engine {
     pub(crate) fn resolve_sends(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
-            // A STEM export with includeSends=false leaves this unit's aux sends unwired (TS skips them).
-            let include_sends = self.unit_options(&unit.unit).include_sends;
+            // A STEM export with includeSends=false or EFFECTS monitoring leaves this unit's aux sends unwired (TS skips them).
+            let include_sends = self.unit_options(&unit.unit).include_sends && !self.returns_through_monitor(&unit.unit);
             let mut sends = core::mem::take(&mut unit.sends);
             for send in &mut sends {
                 let tap = match (&unit.wired, include_sends) {
@@ -421,7 +449,7 @@ impl Engine {
             send.target = None; // a feedback loop: leave unrouted
             return;
         }
-        sum_rc.borrow_mut().add_audio_source(send.proc.borrow().audio_output());
+        sum_rc.borrow_mut().add_audio_source(send.proc.borrow().audio_output(), send.node_id);
         self.context.register_edge(send.node_id, sum_id);
         send.target = Some(new_target);
     }

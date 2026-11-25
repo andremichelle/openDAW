@@ -1,4 +1,4 @@
-import {asDefined, Exec, int, mod, panic, UUID} from "@opendaw/lib-std"
+import {asDefined, Exec, int, isDefined, mod, panic, UUID} from "@opendaw/lib-std"
 import {Event, EventCollection, ppqn} from "@opendaw/lib-dsp"
 import {
     AnyRegionBoxAdapter,
@@ -72,26 +72,30 @@ export class RegionClipResolver {
         const array = track.regions.collection.asArray()
         if (array.length === 0) {return}
         let prev = array[0]
-        if (prev.duration <= 0) {return panic(`duration(${prev.duration}) must be positive`)}
+        if (prev.duration <= 0) {
+            RegionClipResolver.#reportInvalid("regions-duration", track, array, 0)
+            return panic(`duration(${prev.duration}) must be positive`)
+        }
         for (let i = 1; i < array.length; i++) {
             const next = array[i]
-            if (next.duration <= 0) {return panic(`duration(${next.duration}) must be positive`)}
+            if (next.duration <= 0) {
+                RegionClipResolver.#reportInvalid("regions-duration", track, array, i)
+                return panic(`duration(${next.duration}) must be positive`)
+            }
             const overlaps = !RegionOverlap.endsAtSuccessor(prev.box)
                 && prev.complete > next.position + boundaryTolerance(next.position)
             if (overlaps) {
-                RegionClipResolver.#reportOverlap(track, array, i)
+                RegionClipResolver.#reportInvalid("regions-overlap", track, array, i)
                 return panic(`regions overlap: prev.complete(${prev.complete}) > next.position(${next.position})`)
             }
             prev = next
         }
     }
 
-    // Diagnostic only (#1054 family): the overlap panic below is unreproducible from a single geometry, so on
-    // the failure path dump the full track layout into the shipped log buffer to reveal the accumulated
-    // arrangement that produced the overlap. Fires once, immediately before the panic; no behaviour change.
-    static #reportOverlap(track: TrackBoxAdapter, regions: ReadonlyArray<AnyRegionBoxAdapter>, index: int): void {
-        const dump = (region: AnyRegionBoxAdapter, i: int) => ({
-            i,
+    // Diagnostic only (live errors 1054, 1357): a region's state for the shipped log buffer.
+    static describeRegion(region: AnyRegionBoxAdapter, index: int) {
+        return {
+            i: index,
             uuid: UUID.toString(region.uuid),
             type: region.isAudioRegion() ? "audio" : region.isNoteRegion() ? "note" : "value",
             timeBase: region.isAudioRegion() ? region.box.timeBase.getValue() : undefined,
@@ -101,15 +105,28 @@ export class RegionClipResolver {
             loopOffset: region.loopOffset,
             loopDuration: region.loopDuration,
             mute: region.mute,
-            mirrored: region.isMirrowed
-        })
-        console.debug("regions-overlap", {
+            mirrored: region.isMirrowed,
+            selected: region.isSelected
+        }
+    }
+
+    static describeTrack(track: TrackBoxAdapter) {
+        const regions = track.regions.collection.asArray()
+        return {
             track: UUID.toString(track.uuid),
             trackType: track.type,
+            listIndex: track.listIndex,
             count: regions.length,
-            prev: dump(regions[index - 1], index - 1),
-            next: dump(regions[index], index),
-            regions: regions.map(dump)
+            regions: regions.map(RegionClipResolver.describeRegion)
+        }
+    }
+
+    // Diagnostic only: dump the full track layout into the shipped log buffer immediately before the panic.
+    static #reportInvalid(label: string, track: TrackBoxAdapter, regions: ReadonlyArray<AnyRegionBoxAdapter>, index: int): void {
+        console.debug(label, {
+            ...RegionClipResolver.describeTrack(track),
+            prev: index > 0 ? RegionClipResolver.describeRegion(regions[index - 1], index - 1) : undefined,
+            next: RegionClipResolver.describeRegion(regions[index], index)
         })
     }
 
@@ -219,18 +236,24 @@ export class RegionClipResolver {
             if (b === "delete" && a !== "delete") {return -1}
             return 0
         })
+        const claimed = this.#claimedStarts(tasks)
+        // a seconds region ends at its successor, so a remainder starting on another region's start is empty (#1186)
+        const emptyRemainder = (region: AnyRegionBoxAdapter, start: ppqn): boolean =>
+            RegionOverlap.endsAtSuccessor(region.box) && claimed.some(position => Math.abs(position - start) <= boundaryTolerance(start))
         sorted.forEach(task => {
             const {type, region} = task
             switch (type) {
                 case "delete":
                     region.box.delete()
                     break
-                case "start":
+                case "start": {
                     // Round the new start UP to an integer. `position` is Int32, so a fractional mask
                     // boundary (seconds-based region) would truncate on store and desync from the Float32
                     // loop fields, leaving the region overlapping the clip by the dropped fraction (#287).
-                    this.#trimStart(region, Math.ceil(task.position))
+                    const start = Math.ceil(task.position)
+                    if (emptyRemainder(region, start)) {region.box.delete()} else {this.#trimStart(region, start)}
                     break
+                }
                 case "complete":
                     // Round the new end DOWN to an integer, for the same reason.
                     this.#trimComplete(region, Math.floor(task.position))
@@ -240,11 +263,41 @@ export class RegionClipResolver {
                     const end = Math.ceil(task.end)
                     switch (RegionClipResolver.classifySeparation(region, begin, end)) {
                         case "delete": region.box.delete(); break
-                        case "start": this.#trimStart(region, end); break
+                        case "start":
+                            if (emptyRemainder(region, end)) {region.box.delete()} else {this.#trimStart(region, end)}
+                            break
                         case "complete": this.#trimComplete(region, begin); break
-                        case "clip": RegionEditing.clip(region, begin, end); break
+                        case "clip":
+                            if (emptyRemainder(region, end)) {this.#trimComplete(region, begin)} else {RegionEditing.clip(region, begin, end)}
+                            break
                     }
                     break
+                }
+            }
+        })
+    }
+
+    // Where the regions that are not seconds remainders start once the tasks ran: untouched regions keep theirs,
+    // trimmed ones and the right parts of separated ones start at the mask end.
+    #claimedStarts(tasks: ReadonlyArray<ClipTask>): ReadonlyArray<ppqn> {
+        const byRegion = new Map(tasks.map(task => [task.region, task]))
+        return this.#ground.regions.collection.asArray().flatMap((region): ReadonlyArray<ppqn> => {
+            const task = byRegion.get(region)
+            if (!isDefined(task)) {return [region.position]}
+            if (RegionOverlap.endsAtSuccessor(region.box)) {return []}
+            switch (task.type) {
+                case "delete": return []
+                case "complete": return [region.position]
+                case "start": return [Math.ceil(task.position)]
+                case "separate": {
+                    const begin = Math.floor(task.begin)
+                    const end = Math.ceil(task.end)
+                    switch (RegionClipResolver.classifySeparation(region, begin, end)) {
+                        case "delete": return []
+                        case "start": return [end]
+                        case "complete": return [region.position]
+                        case "clip": return [region.position, end]
+                    }
                 }
             }
         })

@@ -1,5 +1,7 @@
 component
   font-size: 0.75rem
+  min-width: 0
+  max-width: 100%
   display: flex
   flex-direction: column
   row-gap: 0.5rem
@@ -14,16 +16,17 @@ component
 
   div.fields
     display: grid
-    grid-template-columns: auto auto 1fr
+    grid-template-columns: auto auto minmax(0, 1fr)
     column-gap: 0.75rem
     white-space: nowrap
 
     > div.type
       color: var(--color-green)
       grid-column: span 3
+      margin-bottom: 2px
 
     > div.field
-      margin-left: 0.25rem
+      margin-left: 0.5rem
       display: grid
       grid-template-columns: subgrid
       grid-column: span 3
@@ -42,6 +45,9 @@ component
 
       > div.value
         color: var(--color-green)
+        min-width: 0
+        overflow: hidden
+        text-overflow: ellipsis
 
       > div.target
         color: var(--color-blue)
@@ -55,3 +61,7 @@ component
 
   span.pointer
     color: var(--color-shadow)
+
+  span.incoming
+    color: var(--color-blue)
+    cursor: pointer

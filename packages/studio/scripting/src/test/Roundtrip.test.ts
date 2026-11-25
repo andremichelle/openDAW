@@ -43,7 +43,7 @@ describe("Roundtrip", () => {
         expect(lead.valueTracks[0].parameter).toBe("feedback")
         expect(lead.valueTracks[0].target).toBe(lead.audioEffects[0])
         expect(lead.valueTracks[0].regions[0].events[0].value).toBeCloseTo(0.3)
-        const loadedTape = loaded.findAudioUnit("Tape")!
+        const loadedTape = loaded.findAudioUnit("Audio Track")!
         expect(loadedTape.kind === "instrument" && loadedTape.audioTracks[0].regions[0].sample.name).toBe("Loop")
         expect(loadedTape.kind === "instrument" && loadedTape.audioTracks[0].regions[0].playback).toBe("pitch")
         expect(loaded.markers[0].label).toBe("Drop")

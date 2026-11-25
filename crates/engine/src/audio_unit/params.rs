@@ -43,6 +43,7 @@ pub(crate) fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Ve
     unsafe { SOUNDFONT_OBS.get() }.clear();
     unsafe { FIELD_OBS.get() }.clear();
     unsafe { SIDECHAIN_BIND.get() }.clear();
+    unsafe { GROOVE_BINDS.get() }.clear();
     call_device_init(reg.init_index, state_ptr, sample_rate);
     core::mem::take(unsafe { BIND.get() })
 }
@@ -119,6 +120,8 @@ pub(crate) fn deliver_field_value(value: &FieldValue, field_changed_index: u32, 
         // stays alive for the synchronous call - the same borrow contract as a string's bytes.
         let flat: Vec<i32> = elements.iter().filter_map(FieldValue::as_int32).collect();
         call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_INT_ARRAY, flat.as_ptr() as u32, flat.len() as u32);
+    } else if let FieldValue::Bytes(bytes) = value {
+        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BYTES, bytes.as_ptr() as u32, bytes.len() as u32);
     }
 }
 
@@ -192,6 +195,7 @@ pub(crate) fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &
             position: spec.position, duration: spec.duration,
             loop_offset: spec.loop_offset, loop_duration: spec.loop_duration,
             mute: spec.mute,
+            groove: spec.groove,
             curve: collection.curve()
         });
         collections.push(collection);
@@ -202,7 +206,8 @@ pub(crate) fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &
     let mut clips = Vec::new();
     for spec in value_clips_of_track(graph, track_uuid) {
         let collection = ValueCollection::observe(graph, spec.collection);
-        clips.push(BoundValueClip {clip_uuid: spec.clip, duration: spec.duration, looped: spec.looped, mute: spec.mute, curve: collection.curve()});
+        clips.push(BoundValueClip {clip_uuid: spec.clip, duration: spec.duration, looped: spec.looped, mute: spec.mute,
+            groove: spec.groove, curve: collection.curve()});
         collections.push(collection);
         rebind_uuids.push(spec.clip);
     }
@@ -295,8 +300,8 @@ impl Engine {
         collections.extend(new_collections);
         let resolver: Option<StripValueSource> = if handle.track.is_some() || handle.modulation.is_some() {
             let handle = handle.clone();
-            Some(Rc::new(move |position: f64, transporting: bool| {
-                let (value, kind, modulation) = handle.resolve_held(position, transporting);
+            Some(Rc::new(move |position: f64, transporting: bool, lag: u32| {
+                let (value, kind, modulation) = handle.resolve_held_lagged(position, transporting, lag);
                 map(value, kind, modulation)
             }))
         } else {
@@ -376,9 +381,25 @@ impl Engine {
             }
             broadcast_slots.push((id, slot));
         }
+        // The device's groove pointers (`host_observe_groove` during init): each slot follows its pointer's target
+        let groove_binds = core::mem::take(unsafe { GROOVE_BINDS.get() });
+        let mut groove_slots = Vec::with_capacity(groove_binds.len());
+        let mut groove_subs = Vec::with_capacity(groove_binds.len());
+        for (slot, path) in groove_binds {
+            let pointer = Address::of(device_uuid, path);
+            crate::follow_groove(slot, &self.graph, self.graph.target_of(&pointer).map(|address| address.uuid));
+            let watched = pointer.clone();
+            groove_subs.push(self.graph.subscribe_vertex(Propagation::This, pointer, Box::new(move |graph, _update| {
+                crate::follow_groove(slot, graph, graph.target_of(&watched).map(|address| address.uuid));
+            })));
+            groove_slots.push(slot);
+        }
         let (mut handles, mut field_subs, mut collections, mut armed) = self.observe_params(device_uuid, &paths, invalidate);
         // The device's plain-field, sample and soundfont observations all unsubscribe the same way, so one list.
         let (mut observe_subs, pointer_field_subs) = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
+        self.field_overrides.insert(device_uuid,
+            (reg.field_changed_index, state_ptr, field_paths.iter().map(|obs| obs.path.clone()).collect()));
+        observe_subs.extend(groove_subs);
         observe_subs.extend(self.observe_samples(device_uuid, reg, state_ptr, &sample_paths));
         observe_subs.extend(self.observe_soundfonts(device_uuid, reg, state_ptr, &soundfont_paths));
         // SCRIPTABLE devices: also bind the dynamic parameter / sample COLLECTION children, and watch each hub's
@@ -396,14 +417,21 @@ impl Engine {
                 Box::new(move |_graph, _event| hub_invalidate())));
         }
         let mut sample_hub_sub = None;
+        let mut sample_subs = Vec::new();
         if reg.sample_collection_field != 0 {
-            observe_subs.extend(self.observe_script_samples(device_uuid, reg, state_ptr, reg.sample_collection_field));
+            sample_subs = self.observe_script_samples(device_uuid, reg, state_ptr, reg.sample_collection_field);
             let hub_invalidate = invalidate.clone();
             sample_hub_sub = Some(self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![reg.sample_collection_field]),
                 Box::new(move |_graph, _event| hub_invalidate())));
         }
+        let records = if reg.record_collection_field != 0 || reg.buffer_collection_field != 0 {
+            let signal = current_params_signal().unwrap_or_else(|| invalidate.clone());
+            Some(self.bind_script_records(device_uuid, reg, state_ptr, signal))
+        } else {
+            None
+        };
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, broadcast_slots}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, sample_subs, records, broadcast_slots, groove_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
@@ -718,8 +746,14 @@ impl Engine {
     /// JS-side instance).
     pub(crate) fn teardown_device_params(&mut self, device_params: Vec<DeviceParams>) {
         for params in device_params {
+            if self.field_overrides.get(&params.device_uuid).is_some_and(|(_, state_ptr, _)| *state_ptr == params.state_ptr) {
+                self.field_overrides.remove(&params.device_uuid);
+            }
             call_device_terminate(params.reg.terminate_index, params.state_ptr);
             for sub in params.field_subs {
+                self.graph.unsubscribe(sub);
+            }
+            for sub in params.sample_subs {
                 self.graph.unsubscribe(sub);
             }
             for sub in params.observe_subs {
@@ -733,9 +767,13 @@ impl Engine {
             for sub in params.param_hub_sub.into_iter().chain(params.sample_hub_sub) {
                 self.graph.unsubscribe(sub);
             }
+            if let Some(records) = params.records {
+                self.teardown_script_records(records);
+            }
             for collection in params.collections {
                 collection.terminate(&mut self.graph);
             }
+            params.groove_slots.into_iter().for_each(crate::release_groove_slot);
             for (id, slot) in params.broadcast_slots {
                 if let Some(entry) = unsafe { DEVICE_BROADCASTS.get() }.get_mut(id as usize) {
                     *entry = (0, false);
@@ -818,6 +856,7 @@ impl Engine {
             }
             Wired::Composite(composite) => {
                 composite.binding.for_each_params(&mut |params| self.rebind_one(params, &invalidate, position));
+                composite.binding.for_each_midi_out(&mut |device| self.rebind_midi_out_cc(device, &invalidate));
                 self.rebind_composite_strips(&mut composite.binding, &invalidate);
                 for member in &mut composite.audio {
                     self.rebind_member(member, &invalidate, position);
@@ -883,8 +922,8 @@ impl Engine {
         // handles line up by index). Fresh handles start at `last = NaN`, which would re-push EVERY parameter;
         // carrying `last` over means `refresh_params` only pushes the ones whose value actually changed — so a
         // parameter (or whole plugin) unaffected by this automation edit is never re-pushed (and never glides).
-        let previous_last: Vec<(f32, f32)> = params.handles.iter()
-            .map(|handle| (handle.last.get(), handle.last_modulation.get())).collect();
+        let previous_last: Vec<(u32, f32, f32)> = params.handles.iter()
+            .map(|handle| (handle.id, handle.last.get(), handle.last_modulation.get())).collect();
         for sub in core::mem::take(&mut params.field_subs) {
             self.graph.unsubscribe(sub);
         }
@@ -901,8 +940,17 @@ impl Engine {
             collections.append(&mut script_collections);
             armed |= script_armed;
         }
-        for (handle, (last, last_modulation)) in handles.iter().zip(previous_last) {
-            handle.mark(last, last_modulation);
+        // The sample slots too: a slot added to the hub (a WebCLAP plugin's, which has no script recompile to rebuild
+        // the device) is delivered now, the others again (a device takes the same handle twice without harm)
+        if params.reg.sample_collection_field != 0 {
+            for sub in core::mem::take(&mut params.sample_subs) {
+                self.graph.unsubscribe(sub);
+            }
+            params.sample_subs = self.observe_script_samples(params.device_uuid, params.reg, params.state_ptr, params.reg.sample_collection_field);
+        }
+        // carried over only for an unchanged id: a re-numbered script param must be pushed again under its new id
+        for (handle, (id, last, last_modulation)) in handles.iter().zip(previous_last) {
+            if handle.id == id {handle.mark(last, last_modulation);}
         }
         params.sink.set_params(handles.clone(), armed);
         refresh_params(&handles, params.reg, params.state_ptr, position);

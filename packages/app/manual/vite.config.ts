@@ -5,6 +5,7 @@ import viteCompression from "vite-plugin-compression"
 import markdownit from "markdown-it"
 import {markdownItTable} from "markdown-it-table"
 import {Prerender} from "./src/Prerender"
+import {ManualSearch} from "./src/ManualSearch"
 
 const markdownFiles = (directory: string): ReadonlyArray<string> => readdirSync(directory).flatMap(name => {
     const path = resolve(directory, name)
@@ -26,6 +27,22 @@ const prerenderPages = (): Plugin => ({
             const html = Prerender.page(template, {path: page, markdown: readFileSync(file, "utf8")}, text => markdown.render(text))
             writeFileSync(resolve(target, page === "" ? "index.html" : `${page}.html`), html)
         })
+    }
+})
+
+const SearchTextsId = "virtual:manual-search-texts"
+
+const searchTexts = (): Plugin => ({
+    name: "opendaw-manual-search-texts",
+    resolveId: source => source === SearchTextsId ? `\0${SearchTextsId}` : undefined,
+    load: id => {
+        if (id !== `\0${SearchTextsId}`) {return undefined}
+        const source = resolve(__dirname, "public")
+        const texts = Object.fromEntries(markdownFiles(source).map(file => {
+            const path = relative(source, file).replaceAll("\\", "/").replace(/\.md$/, "")
+            return [ManualSearch.pathOf(path), ManualSearch.normalize(readFileSync(file, "utf8"))]
+        }))
+        return `export default ${JSON.stringify(texts)}`
     }
 })
 
@@ -64,6 +81,7 @@ export default defineConfig(({command}) => ({
     },
     plugins: [
         prerenderPages(),
+        searchTexts(),
         viteCompression({algorithm: "brotliCompress"})
     ]
 }))

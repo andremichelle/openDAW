@@ -1,4 +1,5 @@
 import {
+    Arrays,
     asDefined,
     assert,
     ByteArrayInput,
@@ -7,6 +8,7 @@ import {
     Exec,
     int,
     isDefined,
+    isInstanceOf,
     JSONValue,
     Listeners,
     Option,
@@ -51,6 +53,7 @@ export class BoxGraph<BoxMap = any> {
     readonly #boxFactory: Option<BoxFactory<BoxMap>>
     readonly #boxes: SortedSet<Readonly<Uint8Array>, Box>
     readonly #deferredPointerUpdates: Array<{ pointerField: PointerField, update: PointerUpdate }>
+    readonly #deferredPointerFields: Set<PointerField>
     readonly #pendingDeferredNotifications: Array<{ pointerField: PointerField, update: PointerUpdate }>
     readonly #transactionUpdates: Array<Update>
     readonly #updateListeners: Listeners<UpdateListener>
@@ -64,6 +67,7 @@ export class BoxGraph<BoxMap = any> {
         final: Option<Address>,
         index: int
     }>
+    readonly #severedPointers: Array<{ pointer: PointerField, target: Vertex }>
     readonly #finalizeTransactionObservers: Array<Exec>
     readonly #deletionListeners: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, listeners: Set<Exec> }>
 
@@ -75,6 +79,7 @@ export class BoxGraph<BoxMap = any> {
         this.#boxFactory = boxFactory
         this.#boxes = UUID.newSet<Box>(box => box.address.uuid)
         this.#deferredPointerUpdates = []
+        this.#deferredPointerFields = new Set()
         this.#pendingDeferredNotifications = []
         this.#transactionUpdates = []
         this.#dispatchers = Dispatchers.create()
@@ -83,6 +88,7 @@ export class BoxGraph<BoxMap = any> {
         this.#transactionListeners = new Listeners<TransactionListener>()
         this.#edges = new GraphEdges()
         this.#pointerTransactionState = Address.newSet(({pointer}) => pointer.address)
+        this.#severedPointers = []
         this.#finalizeTransactionObservers = []
         this.#deletionListeners = UUID.newSet<{ uuid: UUID.Bytes, listeners: Set<Exec> }>(entry => entry.uuid)
     }
@@ -99,11 +105,7 @@ export class BoxGraph<BoxMap = any> {
         this.#rollback()
         // Boxes recreated during the rollback (DeleteUpdate.inverse) defer their pointer updates.
         // They must be resolved (resolvedTo), not discarded, or restored boxes keep unresolved pointers.
-        if (this.#deferredPointerUpdates.length > 0) {
-            this.#deferredPointerUpdates.forEach(({pointerField, update}) =>
-                this.#processPointerVertexUpdate(pointerField, update))
-            this.#deferredPointerUpdates.length = 0
-        }
+        this.#processDeferredPointerUpdates()
         this.#finalizeTransaction()
     }
 
@@ -139,6 +141,8 @@ export class BoxGraph<BoxMap = any> {
         // Nested construction: the outer box is not staged yet, so pointers into it would refer to a vertex
         // the graph does not have. Create the boxes in sequence and wire them after.
         assert(!this.#constructingBox, "Cannot construct box while other box is constructing")
+        // edges are keyed by address, wiring a second box under a staged uuid would cut the first one's edges
+        if (this.#boxes.hasKey(box.address.uuid)) {return panic(`${box.name} ${box.address.toString()} already staged`)}
         if (isDefined(constructor)) {
             this.#constructingBox = true
             const result = tryCatch(() => constructor(box))
@@ -193,9 +197,9 @@ export class BoxGraph<BoxMap = any> {
 
     unstageBox(box: Box): void {
         this.#assertTransaction()
+        this.#edges.unwatchVerticesOf(box)
         const deleted = this.#boxes.removeByKey(box.address.uuid)
         assert(deleted === box, `${box} could not be found to unstage`)
-        this.#edges.unwatchVerticesOf(box)
         const update = new DeleteUpdate(box.address.uuid, box.name, box.toArrayBuffer())
         if (!this.#rollingBack) {this.#transactionUpdates.push(update)}
         this.#deletionListeners.removeByKeyIfExist(box.address.uuid)?.listeners.forEach(listener => listener())
@@ -263,36 +267,58 @@ export class BoxGraph<BoxMap = any> {
 
     onPointerAddressUpdated(pointerField: PointerField, oldValue: Option<Address>, newValue: Option<Address>): void {
         this.#assertTransaction()
+        // https://github.com/andremichelle/openDAW/issues/480
+        if (!this.#constructingBox && !pointerField.isAttached()) {return}
         if (oldValue.nonEmpty()) {this.#edges.disconnect(pointerField)}
         if (newValue.nonEmpty()) {this.#edges.connect(pointerField, newValue.unwrap())}
         const update = new PointerUpdate(pointerField.address, oldValue, newValue)
         if (this.#constructingBox) {
             this.#deferredPointerUpdates.push({pointerField, update})
+            this.#deferredPointerFields.add(pointerField)
         } else {
-            if (!this.#rollingBack) {this.#transactionUpdates.push(update)}
-            this.#processPointerVertexUpdate(pointerField, update)
+            // Resolve constructor updates and this one before listeners run, so a listener's change resolves last
+            const updates = [...this.#takeDeferredPointerUpdates(pointerField), update]
+            updates.forEach(pointerUpdate => {
+                if (!this.#rollingBack) {this.#transactionUpdates.push(pointerUpdate)}
+                this.#resolvePointerUpdate(pointerField, pointerUpdate)
+            })
+            updates.forEach(pointerUpdate => {
+                this.#dispatchers.dispatch(pointerUpdate)
+                this.#updateListeners.proxy.onUpdate(pointerUpdate)
+            })
             this.#immediateUpdateListeners.proxy.onUpdate(update)
         }
     }
 
+    // Listeners can take from and add to the array, so detach it first and repeat until it stays empty
+    #processDeferredPointerUpdates(): void {
+        while (this.#deferredPointerUpdates.length > 0) {
+            this.#deferredPointerUpdates.splice(0).forEach(({pointerField, update}) =>
+                this.#processPointerVertexUpdate(pointerField, update))
+        }
+    }
+
+    #takeDeferredPointerUpdates(pointerField: PointerField): ReadonlyArray<PointerUpdate> {
+        if (!this.#deferredPointerFields.delete(pointerField)) {return []}
+        const updates = this.#deferredPointerUpdates
+            .filter(deferred => deferred.pointerField === pointerField)
+            .map(({update}) => update)
+        Arrays.removeIf(this.#deferredPointerUpdates, deferred => deferred.pointerField === pointerField)
+        return updates
+    }
+
     #processPointerVertexUpdate(pointerField: PointerField, update: PointerUpdate): void {
-        const {oldAddress, newAddress} = update
-        pointerField.resolvedTo(newAddress.flatMap(address => this.findVertex(address)))
-        const optState = this.#pointerTransactionState.opt(pointerField.address)
-        optState.match<unknown>({
-            none: () => this.#pointerTransactionState.add({
-                pointer: pointerField,
-                initial: oldAddress,
-                final: newAddress,
-                index: this.#pointerTransactionState.size()
-            }),
-            some: state => state.final = newAddress
-        })
+        this.#resolvePointerUpdate(pointerField, update)
         this.#dispatchers.dispatch(update)
         this.#updateListeners.proxy.onUpdate(update)
     }
 
     #prepareDeferredPointerUpdate(pointerField: PointerField, update: PointerUpdate): void {
+        this.#resolvePointerUpdate(pointerField, update)
+        this.#pendingDeferredNotifications.push({pointerField, update})
+    }
+
+    #resolvePointerUpdate(pointerField: PointerField, update: PointerUpdate): void {
         const {oldAddress, newAddress} = update
         pointerField.resolvedTo(newAddress.flatMap(address => this.findVertex(address)))
         const optState = this.#pointerTransactionState.opt(pointerField.address)
@@ -305,7 +331,6 @@ export class BoxGraph<BoxMap = any> {
             }),
             some: state => state.final = newAddress
         })
-        this.#pendingDeferredNotifications.push({pointerField, update})
     }
 
     #dispatchDeferredNotifications(): void {
@@ -317,16 +342,29 @@ export class BoxGraph<BoxMap = any> {
     }
 
     #finalizeTransaction(): void {
-        this.#pointerTransactionState.values()
+        this.#deferredPointerFields.clear()
+        this.#severedPointers.splice(0).forEach(({pointer, target}) => {
+            target.pointerHub.onRemoved(pointer)
+            if (this.#pointerTransactionState.hasKey(pointer.address)) {return}
+            this.findVertex(pointer.address).ifSome(replacement => {
+                if (isInstanceOf(replacement, PointerField)
+                    && replacement.targetAddress.mapOr(address => address.equals(target.address), false)) {
+                    target.pointerHub.onAdded(replacement)
+                }
+            })
+        })
+        // a listener that throws must not leave the graph in a transaction forever
+        const notified = tryCatch(() => this.#pointerTransactionState.values()
             .toSorted((a, b) => a.index - b.index)
             .forEach(({pointer, initial, final}) => {
                 if (!initial.equals(final)) {
                     initial.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onRemoved(pointer))
                     final.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onAdded(pointer))
                 }
-            })
+            }))
         this.#pointerTransactionState.clear()
         this.#inTransaction = false
+        if (notified.status === "failure") {throw notified.error}
         while (this.#finalizeTransactionObservers.length > 0) {
             this.#finalizeTransactionObservers.splice(0).forEach(observer => observer())
             if (this.#finalizeTransactionObservers.length > 0) {
@@ -339,6 +377,12 @@ export class BoxGraph<BoxMap = any> {
 
     #rollback(): void {
         this.#rollingBack = true
+        // the rollback recreates deleted boxes as new instances, so listeners must let go of the old pointers
+        this.#pointerTransactionState.forEach(({pointer, initial}) => {
+            if (this.findBox(pointer.box.address.uuid).mapOr(box => box === pointer.box, false)) {return}
+            initial.flatMap(address => this.findVertex(address))
+                .ifSome(target => this.#severedPointers.push({pointer, target}))
+        })
         for (const {update} of this.#deferredPointerUpdates) {
             this.#transactionUpdates.push(update)
         }
@@ -614,11 +658,7 @@ export class BoxGraph<BoxMap = any> {
     }
 
     #finalizeWithoutValidation(): void {
-        if (this.#deferredPointerUpdates.length > 0) {
-            this.#deferredPointerUpdates.forEach(({pointerField, update}) =>
-                this.#processPointerVertexUpdate(pointerField, update))
-            this.#deferredPointerUpdates.length = 0
-        }
+        this.#processDeferredPointerUpdates()
         this.#edges.clearAffected()
         this.#finalizeTransaction()
     }

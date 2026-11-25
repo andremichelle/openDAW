@@ -6,6 +6,7 @@
 //! edges (a pointer may target a box loaded earlier or later).
 
 use alloc::boxed::Box;
+use core::cell::RefCell;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use crate::address::{Address, Uuid};
@@ -36,6 +37,8 @@ pub struct BoxGraph {
     affected: BTreeSet<Address>,                // targets whose incoming set changed THIS transaction (drives hub dispatch)
     next_index: i32,                            // creation index for boxes created via updates
     subscriptions: Subscriptions,               // change listeners notified during a transaction
+    // each box's own checksum fold and length; a big field (a plugin state) is folded once, not on every verification
+    checksums: RefCell<BTreeMap<Uuid, ([u8; 32], usize)>>,
 }
 
 impl BoxGraph {
@@ -47,7 +50,7 @@ impl BoxGraph {
         let next_index = map.values().map(|graph_box| graph_box.creation_index).max().map_or(0, |max| max + 1);
         let mut graph = Self {
             boxes: map, outgoing: BTreeMap::new(), incoming: BTreeMap::new(), unresolved: BTreeMap::new(),
-            affected: BTreeSet::new(), next_index, subscriptions: Subscriptions::new()
+            affected: BTreeSet::new(), next_index, subscriptions: Subscriptions::new(), checksums: RefCell::new(BTreeMap::new())
         };
         graph.rebuild_edges();
         graph
@@ -110,9 +113,15 @@ impl BoxGraph {
 
     /// 32-byte rolling XOR checksum over every box's fields (uuid order), matching `BoxGraph.checksum`.
     pub fn checksum(&self) -> [u8; 32] {
+        let mut cache = self.checksums.borrow_mut();
         let mut checksum = Checksum::new();
-        for graph_box in self.boxes.values() {
-            checksum_fields(&mut checksum, &graph_box.fields);
+        for (uuid, graph_box) in &self.boxes {
+            let (fold, length) = cache.entry(*uuid).or_insert_with(|| {
+                let mut own = Checksum::new();
+                checksum_fields(&mut own, &graph_box.fields);
+                (own.result(), own.position())
+            });
+            checksum.append(fold, *length);
         }
         checksum.result()
     }
@@ -166,12 +175,37 @@ impl BoxGraph {
     /// not O(all boxes) — the difference between a silent selection and an audible dropout.
     pub fn transaction(&mut self, updates: &[Update], registry: &Registry) -> Result<(), Error> {
         self.affected.clear();
-        for update in updates {
-            self.apply(update, registry)?;
-            self.update_edges(update);
+        if !updates.iter().any(|update| matches!(update, Update::BytesSplice {..})) {
+            for update in updates {
+                self.apply(update, registry)?;
+                self.update_edges(update);
+            }
+            self.dispatch(updates);
+            return Ok(());
         }
-        self.dispatch(updates);
+        // a splice reads the field as the updates before it left it, so each one is resolved right before it applies
+        let mut resolved = Vec::with_capacity(updates.len());
+        for update in updates {
+            let update = self.resolve(update)?;
+            self.apply(&update, registry)?;
+            self.update_edges(&update);
+            resolved.push(update);
+        }
+        self.dispatch(&resolved);
         Ok(())
+    }
+
+    /// A bytes splice as the `Primitive` it makes of the field's current value, any other update as it is.
+    fn resolve(&self, update: &Update) -> Result<Update, Error> {
+        let Update::BytesSplice {address, offset, delete, bytes} = update else {return Ok(update.clone())};
+        let Some(FieldValue::Bytes(current)) = self.field_value(address) else {return Err(Error::BadSplice)};
+        let end = offset.checked_add(*delete).ok_or(Error::BadSplice)?;
+        if end > current.len() {return Err(Error::BadSplice)}
+        let mut value = Vec::with_capacity(current.len() - delete + bytes.len());
+        value.extend_from_slice(&current[..*offset]);
+        value.extend_from_slice(bytes);
+        value.extend_from_slice(&current[end..]);
+        Ok(Update::Primitive {address: address.clone(), old: FieldValue::Bytes(current.clone()), new: FieldValue::Bytes(value)})
     }
 
     /// Notify subscribers after a transaction. The subscriptions are lifted out of `self` for the
@@ -304,18 +338,20 @@ impl BoxGraph {
     fn apply(&mut self, update: &Update, registry: &Registry) -> Result<(), Error> {
         match update {
             Update::New {uuid, name, settings} => self.create_box(*uuid, name, settings, registry),
-            Update::Delete {uuid, ..} => {self.boxes.remove(uuid); Ok(())}
+            Update::Delete {uuid, ..} => {self.remove_box(uuid); Ok(())}
             Update::Primitive {address, new, ..} => self.set_field(address, new.clone()),
-            Update::Pointer {address, new, ..} => self.set_field(address, FieldValue::Pointer(new.clone()))
+            Update::Pointer {address, new, ..} => self.set_field(address, FieldValue::Pointer(new.clone())),
+            Update::BytesSplice {..} => Err(Error::BadSplice)
         }
     }
 
     fn revert(&mut self, update: &Update, registry: &Registry) -> Result<(), Error> {
         match update {
-            Update::New {uuid, ..} => {self.boxes.remove(uuid); Ok(())}
+            Update::New {uuid, ..} => {self.remove_box(uuid); Ok(())}
             Update::Delete {uuid, name, settings} => self.create_box(*uuid, name, settings, registry),
             Update::Primitive {address, old, ..} => self.set_field(address, old.clone()),
-            Update::Pointer {address, old, ..} => self.set_field(address, FieldValue::Pointer(old.clone()))
+            Update::Pointer {address, old, ..} => self.set_field(address, FieldValue::Pointer(old.clone())),
+            Update::BytesSplice {..} => Err(Error::BadSplice)
         }
     }
 
@@ -325,11 +361,18 @@ impl BoxGraph {
         let fields = read_fields(&mut reader, schema)?;
         let creation_index = self.next_index;
         self.next_index += 1;
+        self.checksums.get_mut().remove(&uuid);
         self.boxes.insert(uuid, GraphBox {creation_index, name: name.to_string(), uuid, fields});
         Ok(())
     }
 
+    fn remove_box(&mut self, uuid: &Uuid) {
+        self.checksums.get_mut().remove(uuid);
+        self.boxes.remove(uuid);
+    }
+
     fn set_field(&mut self, address: &Address, value: FieldValue) -> Result<(), Error> {
+        self.checksums.get_mut().remove(&address.uuid);
         let graph_box = self.boxes.get_mut(&address.uuid).ok_or(Error::AddressNotFound)?;
         let (first, rest) = address.field_keys.split_first().ok_or(Error::AddressNotFound)?;
         let target = graph_box.fields
@@ -382,7 +425,7 @@ impl BoxGraph {
                     self.edge_connect(address.clone(), target.clone());
                 }
             }
-            Update::Primitive {..} => {}
+            Update::Primitive {..} | Update::BytesSplice {..} => {}
         }
     }
 

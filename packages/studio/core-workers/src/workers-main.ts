@@ -1,3 +1,4 @@
+import {Procedure, unitValue} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {OpfsWorker, SamplePeakWorker} from "@opendaw/lib-fusion"
 import {
@@ -5,6 +6,8 @@ import {
     AudioMaterialFeatures,
     AudioMaterialProtocol,
     BpmProtocol,
+    SampleEffectProtocol,
+    SampleEffects,
     TransientDetector,
     TransientProtocol
 } from "@opendaw/lib-dsp"
@@ -31,6 +34,13 @@ Communicator.executor(messenger.channel("bpm"), new class implements BpmProtocol
 Communicator.executor(messenger.channel("material"), new class implements AudioMaterialProtocol {
     async analyze(audioData: AudioData, moduleUrl: string): Promise<AudioMaterialFeatures> {
         return analyzeMaterial(audioData, moduleUrl)
+    }
+})
+
+Communicator.executor(messenger.channel("sample-effects"), new class implements SampleEffectProtocol {
+    async process(progress: Procedure<unitValue>, id: string, source: AudioData,
+                  values: ReadonlyArray<number>): Promise<AudioData> {
+        return SampleEffects.byId(id).unwrap(`Unknown sample effect '${id}'`).process(source, values, progress)
     }
 })
 

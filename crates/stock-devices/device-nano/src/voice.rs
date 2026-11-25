@@ -18,7 +18,20 @@ pub struct Playback {
     pub loop_enabled: bool,
     pub loop_fade_frames: f64, // crossfade length in source frames
     pub loop_start: f32, // unit loop range, clamped inside the region
-    pub loop_end: f32
+    pub loop_end: f32,
+    pub one_shot: bool, // a note-off is ignored unless the loop is on
+    pub fixed_pitch: bool // every note plays at the root key
+}
+
+impl Playback {
+    fn releases_on_note_off(&self) -> bool {
+        releases_on_note_off(self.one_shot, self.loop_enabled)
+    }
+}
+
+/// A looping voice would never end by itself, so one-shot only holds a note while the loop is off.
+pub fn releases_on_note_off(one_shot: bool, loop_enabled: bool) -> bool {
+    !one_shot || loop_enabled
 }
 
 /// The read-head rate for `pitch` (pitch + cent/100): `2^(pitch/12 - (root_key/12 - octave - tune/1200))`, so
@@ -41,7 +54,11 @@ pub struct NanoVoice {
     env_position: u32,
     decay_position: u32, // the env position at note-off (only meaningful once `releasing`)
     released_level: f32, // the (pre-square) envelope level at note-off; the release decays from it
-    releasing: bool
+    releasing: bool,
+    held: bool, // until its note-off arrives
+    level: f32, // the (pre-square) envelope level of the last rendered sample
+    fast_release: u32, // a forced release length in engine samples, 0 when none
+    seq: u64 // start order, the oldest voice is stolen when the pool is full
 }
 
 impl NanoVoice {
@@ -58,9 +75,17 @@ impl NanoVoice {
         self.position
     }
 
+    pub fn seq(&self) -> u64 {
+        self.seq
+    }
+
     /// Begin a note. The read rate follows the live root key / octave (see [`rate`]).
-    pub fn start(&mut self, id: u32, pitch: u32, cent: f32, velocity: f32) {
+    pub fn start(&mut self, id: u32, pitch: u32, cent: f32, velocity: f32, seq: u64) {
         self.active = true;
+        self.held = true;
+        self.level = 0.0;
+        self.fast_release = 0;
+        self.seq = seq;
         self.id = id;
         self.pitch = pitch as f32 + cent / 100.0;
         self.velocity = velocity;
@@ -83,6 +108,25 @@ impl NanoVoice {
         self.releasing = true;
         self.decay_position = self.env_position;
         self.released_level = if self.env_position < attack {self.env_position as f32 / attack as f32} else {1.0};
+    }
+
+    /// The note-off of this voice's note: releases unless the voice plays one-shot (see [`Playback`]).
+    pub fn note_off(&mut self, attack: u32, release: bool) {
+        self.held = false;
+        if release {
+            self.stop(attack);
+        }
+    }
+
+    /// Mono retrigger or choke: decay from the current level over `fast_release` samples, also mid-release.
+    pub fn force_release(&mut self, fast_release: u32) {
+        if self.fast_release > 0 {
+            return;
+        }
+        self.releasing = true;
+        self.decay_position = self.env_position;
+        self.released_level = self.level;
+        self.fast_release = fast_release.max(1);
     }
 
     /// Free the slot immediately.
@@ -121,10 +165,14 @@ impl NanoVoice {
         let loop_span = loop_hi - loop_lo;
         let fade = if loop_enabled {playback.loop_fade_frames.min(loop_span * 0.5)} else {0.0};
         let shift = loop_span - fade; // >= loop_span/2, so wrapping always advances
-        let speed = rate(self.pitch, playback.root_key, playback.octave, playback.tune_cents);
+        if !self.held && !self.releasing && playback.releases_on_note_off() {
+            self.stop(playback.attack);
+        }
+        let pitch = if playback.fixed_pitch {playback.root_key as f32} else {self.pitch};
+        let speed = rate(pitch, playback.root_key, playback.octave, playback.tune_cents);
         let increment = speed as f64 * playback.rate_ratio * if backwards {-1.0} else {1.0};
         let attack = playback.attack.max(1);
-        let release = playback.release.max(1);
+        let release = if self.fast_release > 0 {self.fast_release} else {playback.release.max(1)};
         let release_inverse = 1.0 / release as f32;
         let gain = playback.gain * self.velocity;
         for index in 0..out_left.len() {
@@ -148,12 +196,13 @@ impl NanoVoice {
             let partner = if int_position + 1 < num_frames {int_position + 1} else {int_position};
             let frac = (self.position - int_position as f64) as f32;
             let shaped = if self.releasing {
-                self.released_level * (1.0 - (self.env_position - self.decay_position) as f32 * release_inverse).min(1.0)
+                self.released_level * (1.0 - (self.env_position - self.decay_position) as f32 * release_inverse).min(1.0).max(0.0)
             } else if self.env_position < attack {
                 self.env_position as f32 / attack as f32
             } else {
                 1.0
             };
+            self.level = shaped;
             let env = shaped * shaped;
             let mut sample_left = left[int_position] * (1.0 - frac) + left[partner] * frac;
             let mut sample_right = right[int_position] * (1.0 - frac) + right[partner] * frac;
@@ -198,7 +247,7 @@ mod tests {
     fn playback(sample_start: f32, sample_end: f32) -> Playback {
         Playback {
             rate_ratio: 1.0, root_key: 60, octave: 0, tune_cents: 0.0, gain: 1.0, attack: (0.003 * SR) as u32, release: 4_800, sample_start, sample_end,
-            loop_enabled: false, loop_fade_frames: 0.0, loop_start: 0.0, loop_end: 1.0
+            loop_enabled: false, loop_fade_frames: 0.0, loop_start: 0.0, loop_end: 1.0, one_shot: false, fixed_pitch: false
         }
     }
 
@@ -208,7 +257,7 @@ mod tests {
 
     fn started(pitch: u32) -> NanoVoice {
         let mut voice = NanoVoice::default();
-        voice.start(7, pitch, 0.0, 1.0);
+        voice.start(7, pitch, 0.0, 1.0, 0);
         voice
     }
 
@@ -452,6 +501,91 @@ mod tests {
         let swapped = dc(1_024);
         let (_, finished) = run(&mut voice, &swapped, &fast, 4_096);
         assert!(finished, "the frame clamp ends the voice instead of reading past the new sample");
+    }
+
+    #[test]
+    fn shortening_the_release_mid_tail_never_spikes() {
+        let frames = dc(48_000);
+        let mut voice = started(60);
+        run(&mut voice, &frames, &playback(0.0, 1.0), 4_800);
+        voice.stop(144);
+        run(&mut voice, &frames, &Playback {release: 48_000, ..playback(0.0, 1.0)}, 4_800);
+        let (out, finished) = run(&mut voice, &frames, &Playback {release: 100, ..playback(0.0, 1.0)}, 64);
+        assert!(finished && peak(&out) <= 1.0, "an elapsed release writes nothing above full level (peak {})", peak(&out));
+    }
+
+    #[test]
+    fn a_one_shot_ignores_the_note_off_and_plays_to_the_region_end() {
+        let frames = dc(4_800);
+        let mut voice = started(60);
+        let settings = Playback {one_shot: true, ..playback(0.0, 1.0)};
+        run(&mut voice, &frames, &settings, 480);
+        voice.note_off(settings.attack, settings.releases_on_note_off());
+        let (out, finished) = run(&mut voice, &frames, &settings, 2_400);
+        assert!(!finished && (out[2_399] - 1.0).abs() < 1.0e-6, "still at full level after the note-off");
+        let (_, finished) = run(&mut voice, &frames, &settings, 4_800);
+        assert!(finished, "the region end frees the one-shot voice");
+    }
+
+    #[test]
+    fn a_looping_one_shot_still_releases() {
+        let frames = dc(48_000);
+        let mut voice = started(60);
+        let settings = Playback {one_shot: true, ..looped(0.0, 0.1, 0.0, 1.0, 480.0)};
+        run(&mut voice, &frames, &settings, 4_800);
+        voice.note_off(settings.attack, settings.releases_on_note_off());
+        let (_, finished) = run(&mut voice, &frames, &Playback {release: 480, ..settings}, 4_800);
+        assert!(finished, "a loop never ends by itself, so the note-off releases it");
+    }
+
+    #[test]
+    fn switching_one_shot_off_releases_a_note_already_let_go() {
+        let frames = dc(48_000);
+        let mut voice = started(60);
+        let one_shot = Playback {one_shot: true, release: 480, ..playback(0.0, 1.0)};
+        run(&mut voice, &frames, &one_shot, 480);
+        voice.note_off(one_shot.attack, one_shot.releases_on_note_off());
+        let (_, finished) = run(&mut voice, &frames, &Playback {one_shot: false, ..one_shot}, 4_800);
+        assert!(finished, "the pending note-off applies once one-shot is off");
+    }
+
+    #[test]
+    fn with_fixed_pitch_every_note_plays_at_the_root_rate() {
+        let frames = ramp(48_000);
+        let fixed = Playback {fixed_pitch: true, ..playback(0.0, 1.0)};
+        for pitch in [36, 60, 84] {
+            let mut voice = started(pitch);
+            run(&mut voice, &frames, &fixed, 4_800);
+            assert!((voice.position() - 4_800.0).abs() < 1.0e-6, "pitch {pitch} reads at the native rate");
+        }
+        let mut tuned = started(84);
+        run(&mut tuned, &frames, &Playback {octave: 1, ..fixed}, 4_800);
+        assert!((tuned.position() - 9_600.0).abs() < 1.0e-6, "octave and tune still apply");
+    }
+
+    #[test]
+    fn a_forced_release_fades_out_from_the_current_level() {
+        let frames = dc(48_000);
+        let mut voice = started(60);
+        let (head, _) = run(&mut voice, &frames, &playback(0.0, 1.0), 48); // inside the attack
+        voice.force_release(240);
+        let (tail, finished) = run(&mut voice, &frames, &Playback {release: 48_000, ..playback(0.0, 1.0)}, 512);
+        assert!(finished, "the 240-sample fast release overrides the long release");
+        assert!((tail[0] - head[47]).abs() < 1.0e-6, "continues from the last level");
+        assert!(tail[1..].iter().all(|value| *value <= tail[0]) && peak(&tail[241..]) == 0.0);
+    }
+
+    #[test]
+    fn a_forced_release_shortens_a_running_release() {
+        let frames = dc(48_000);
+        let mut voice = started(60);
+        let slow = Playback {release: 48_000, ..playback(0.0, 1.0)};
+        run(&mut voice, &frames, &slow, 4_800);
+        voice.stop(144);
+        let (before, _) = run(&mut voice, &frames, &slow, 4_800);
+        voice.force_release(240);
+        let (tail, finished) = run(&mut voice, &frames, &slow, 512);
+        assert!(finished && tail[0] <= before[4_799] && peak(&tail[241..]) == 0.0, "fades from the release level, no jump");
     }
 
     #[test]

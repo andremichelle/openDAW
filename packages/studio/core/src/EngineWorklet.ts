@@ -13,6 +13,7 @@ import {
     Observer,
     Option,
     Procedure,
+    RuntimeNotifier,
     SetMultimap,
     Subscription,
     SyncStream,
@@ -24,7 +25,9 @@ import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {
     ClipNotification,
     ClipSequencingUpdates,
+    DeviceBoxUtils,
     EngineCommands,
+    EngineNotice,
     EngineProcessorAttachment,
     EngineSettings,
     EngineSettingsSchema,
@@ -32,15 +35,20 @@ import {
     EngineStateSchema,
     EngineToClient,
     ExportConfiguration,
+    LabeledAudioOutput,
     MonitoringMapEntry,
     NoteSignal,
     PERF_BUFFER_SIZE,
     PreferencesHost,
     ProcessorOptions,
+    SignalGraph,
+    TransportAnchor,
     WclapBundle,
     WclapParamGesture,
     WclapParamInfo,
+    WclapSaveCause,
     WclapGuiInfo,
+    WclapPanelInfo,
     WclapGuiSize,
     WclapPluginInfo,
     WclapStatus
@@ -48,8 +56,8 @@ import {
 import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {Engine, RecordingStart} from "./Engine"
-import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter} from "./EngineVariant"
+import {Engine, RecordingStart, RecordingStop} from "./Engine"
+import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter, SampleLoadEvent} from "./EngineVariant"
 import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
@@ -72,15 +80,19 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #isRecording: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
+    readonly #compensationLatency: DefaultObservableValue<number> = new DefaultObservableValue(0)
+    readonly #compensationExceeded: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #preferences: PreferencesHost<EngineSettings>
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #recordingStart: MutableObservableOption<RecordingStart> = new MutableObservableOption()
+    #recordingStop: Option<RecordingStop> = Option.None
     #recordingGeneration: int = 0
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #notifyClipNotification: Notifier<ClipNotification>
     readonly #notifyNoteSignals: Notifier<NoteSignal>
+    readonly #notifyTransportAnchors: Notifier<ReadonlyArray<TransportAnchor>>
     readonly #playingClips: Array<UUID.Bytes>
     readonly #deviceMessageListeners: SetMultimap<string, Procedure<string>> = new SetMultimap()
     readonly #wclapStatusListeners: SetMultimap<string, Procedure<WclapStatus>> = new SetMultimap()
@@ -105,9 +117,16 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         const budgetMs = (RenderQuantum / context.sampleRate) * 1000
         const reader = SyncStream.reader<EngineState>(EngineStateSchema(), state => {
             this.#isPlaying.setValue(state.isPlaying)
+            const {recordingStopTime} = state
+            if (this.#recordingStop.mapOr(stop => stop.contextTime !== recordingStopTime, true)) {
+                this.#recordingStop = Number.isFinite(recordingStopTime)
+                    ? Option.wrap({contextTime: recordingStopTime}) : Option.None
+            }
             this.#isRecording.setValue(state.isRecording)
             this.#isCountingIn.setValue(state.isCountingIn)
             this.#countInBeatsRemaining.setValue(state.countInBeatsRemaining)
+            this.#compensationLatency.setValue(state.compensationLatency)
+            this.#compensationExceeded.setValue(state.compensationExceeded)
             this.#playbackTimestamp.setValue(state.playbackTimestamp)
             this.#bpm.setValue(state.bpm)
             this.#perfBuffer = state.perfBuffer
@@ -143,6 +162,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         this.#isReady = isReady
         this.#notifyClipNotification = this.#terminator.own(new Notifier<ClipNotification>())
         this.#notifyNoteSignals = this.#terminator.own(new Notifier<NoteSignal>())
+        this.#notifyTransportAnchors = this.#terminator.own(new Notifier<ReadonlyArray<TransportAnchor>>())
         this.#playingClips = []
         this.#controlFlags = new Int32Array(controlFlagsSAB)
         this.#commands = this.#terminator.own(
@@ -188,6 +208,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     }
                     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return dispatcher.dispatchAndReturn(this.wclapOpenGui, uuid)}
                     wclapCloseGui(uuid: UUID.Bytes): void {dispatcher.dispatchAndForget(this.wclapCloseGui, uuid)}
+                    wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo> {
+                        return dispatcher.dispatchAndReturn(this.wclapOpenPanel, uuid, height)
+                    }
                     wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
                         return dispatcher.dispatchAndReturn(this.wclapResizeGui, uuid, width, height)
                     }
@@ -198,6 +221,12 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {
                         return dispatcher.dispatchAndReturn(this.wclapDescribe, url)
                     }
+                    wclapRetry(url: string): void {dispatcher.dispatchAndForget(this.wclapRetry, url)}
+                    scriptMessage(uuid: UUID.Bytes, message: unknown): void {dispatcher.dispatchAndForget(this.scriptMessage, uuid, message)}
+                    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+                        dispatcher.dispatchAndForget(this.overrideDeviceField, uuid, key, value)
+                    }
+                    querySignalGraph(): Promise<SignalGraph> {return dispatcher.dispatchAndReturn(this.querySignalGraph)}
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
         this.#frozenAudioWriter = isDefined(variant.connectFrozenAudio)
@@ -206,13 +235,13 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
 
         const {port, sab} =
             this.#terminator.own(MIDIReceiver.create(
-                () => context instanceof AudioContext ? context.outputLatency * 1000 : 20,
-                (deviceId, data, relativeTimeInMs) =>
-                    this.#project.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
+                MIDIReceiver.outputClock(context, () => this.#compensationLatency.getValue() * 1000),
+                (deviceId, data, timestamp) => this.#project.sendMIDIFromEngine(deviceId, data, timestamp)))
         this.#commands.setupMIDI(port, sab)
         Communicator.executor<EngineToClient>(messenger.channel("engine-to-client"), {
                 log: (message: string): void => console.log("WORKLET", message),
                 error: (reason: unknown) => this.dispatchEvent(new ErrorEvent("error", {error: reason})),
+                notice: (notice: EngineNotice): void => RuntimeNotifier.notify({message: this.#describeNotice(notice)}),
                 deviceMessage: (uuid: string, message: string): void => {
                     for (const listener of this.#deviceMessageListeners.get(uuid)) {
                         listener(message)
@@ -220,14 +249,20 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 },
                 ready: (): void => resolve(),
                 fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => {
+                    const record = (event: SampleLoadEvent): void => variant.recordSampleLoad?.(event)
+                    record({type: "requested", uuid})
                     return new Promise((resolve, reject) => {
                         const handler = project.sampleManager.getOrCreate(uuid)
                         const subscription = handler.subscribe(state => {
                             if (state.type === "error") {
+                                record({type: "failed", uuid})
                                 reject(new Error(state.reason))
                                 subscription.terminate()
                             } else if (state.type === "loaded") {
-                                resolve(handler.data.unwrap("handler.data"))
+                                const data = handler.data.unwrap("handler.data")
+                                const {numberOfFrames, numberOfChannels, sampleRate} = data
+                                record({type: "delivered", uuid, numberOfFrames, numberOfChannels, sampleRate})
+                                resolve(data)
                                 subscription.terminate()
                             }
                         })
@@ -254,13 +289,16 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 },
                 fetchWclapBundle: (url: string): Promise<WclapBundle> => WclapBundles.fetch(url),
                 wclapSend: (uuid: string, bytes: ArrayBuffer): void => WclapGuis.deliver(uuid, bytes),
-                wclapState: (uuid: string, bytes: ArrayBuffer): void => WclapStates.store(project, uuid, bytes),
+                wclapState: (uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause): void =>
+                    WclapStates.storeFrom(project, uuid, bytes, url, clapId, cause),
                 wclapParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>): void =>
                     WclapParameters.reconcile(project, uuid, params),
                 wclapParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void =>
                     WclapParameters.apply(project, uuid, paramId, value, gesture),
                 wclapHovered: (uuid: string, paramId: number): void => WclapGuis.hover(uuid, paramId),
                 wclapResizeGui: (uuid: string, width: number, height: number): void => WclapGuis.resize(uuid, width, height),
+                wclapShowGui: (uuid: string): void => WclapGuis.show(uuid, true),
+                wclapHideGui: (uuid: string): void => WclapGuis.show(uuid, false),
                 wclapStatus: (uuid: string, status: WclapStatus): void => {
                     WclapFailures.report(project, uuid, this.#wclapStatus.get(uuid), status)
                     this.#wclapStatus.set(uuid, status)
@@ -284,11 +322,23 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     // a report for an earlier recording, delivered after the next one was prepared
                     if (generation !== this.#recordingGeneration) {return}
                     this.#recordingStart.wrap({contextTime, position})
+                },
+                transportAnchors: (anchors: ReadonlyArray<TransportAnchor>): void => {
+                    // the stop arrives here before the engine state is read on the next animation frame
+                    anchors.forEach(({kind, recording, contextTime}) => {
+                        if (kind === "stop" && recording) {this.#recordingStop = Option.wrap({contextTime})}
+                    })
+                    this.#notifyTransportAnchors.notify(anchors)
                 }
             } satisfies EngineToClient
         )
         this.#preferences = this.#terminator.own(new PreferencesHost<EngineSettings>(EngineSettingsSchema.parse({})))
+        const clockLease = this.#terminator.own(new Terminator())
         this.#terminator.ownAll(
+            this.#preferences.catchupAndSubscribe(measure => {
+                clockLease.terminate()
+                if (measure) {clockLease.own(HRClockWorker.get().lease())}
+            }, "debug", "dspLoadMeasurement"),
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
             this.#preferences.syncWith(messenger.channel("engine-preferences")),
@@ -318,12 +368,19 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     loadClickSound(index: 0 | 1, data: AudioData): void {this.#commands.loadClickSound(index, data)}
     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return this.#commands.wclapOpenGui(uuid)}
     wclapCloseGui(uuid: UUID.Bytes): void {this.#commands.wclapCloseGui(uuid)}
+    wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo> {return this.#commands.wclapOpenPanel(uuid, height)}
     wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
         return this.#commands.wclapResizeGui(uuid, width, height)
     }
     wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void {this.#commands.wclapReceive(uuid, bytes)}
     wclapSaveState(uuid: UUID.Bytes): void {this.#commands.wclapSaveState(uuid)}
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {return this.#commands.wclapDescribe(url)}
+    wclapRetry(url: string): void {this.#commands.wclapRetry(url)}
+    scriptMessage(uuid: UUID.Bytes, message: unknown): void {this.#commands.scriptMessage(uuid, message)}
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+        this.#commands.overrideDeviceField(uuid, key, value)
+    }
+    querySignalGraph(): Promise<SignalGraph> {return this.#commands.querySignalGraph()}
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
         if (isNull(this.#frozenAudioWriter)) {
             this.#commands.setFrozenAudio(uuid, audioData)
@@ -336,12 +393,41 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}
     get countInBeatsRemaining(): ObservableValue<number> {return this.#countInBeatsRemaining}
+    get compensationLatency(): ObservableValue<number> {return this.#compensationLatency}
+    get compensationExceeded(): ObservableValue<boolean> {return this.#compensationExceeded}
     get position(): ObservableValue<ppqn> {return this.#position}
     get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
+    get recordingStop(): Option<RecordingStop> {return this.#recordingStop}
     get bpm(): ObservableValue<bpm> {return this.#bpm}
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
+
+    #describeNotice(notice: EngineNotice): string {
+        const device = this.#labelOf(notice.device)
+        switch (notice.type) {
+            case "sidechain-loop":
+                return `${device} listens to ${this.#labelOf(notice.source)}, which it feeds. This sidechain is a feedback loop.`
+            case "non-finite":
+                return `${device} was reset because its output overflowed in a feedback loop.`
+        }
+    }
+
+    #labelOf(uuid: string): string {
+        const bytes = UUID.parse(uuid)
+        const device = this.#project.boxGraph.findBox(bytes).flatMap(box => DeviceBoxUtils.isDeviceBox(box)
+            ? Option.wrap(DeviceBoxUtils.lookupLabelField(box).getValue()) : Option.None)
+        if (device.nonEmpty()) {return device.unwrap()}
+        const find = (outputs: Iterable<LabeledAudioOutput>): Option<string> => {
+            for (const output of outputs) {
+                if (UUID.equals(output.address.uuid, bytes)) {return Option.wrap(output.label)}
+                const nested = output.children().flatMap(children => find(children))
+                if (nested.nonEmpty()) {return nested}
+            }
+            return Option.None
+        }
+        return find(this.#project.rootBoxAdapter.labeledAudioOutputs()).unwrapOrElse("A device")
+    }
     get preferences(): PreferencesHost<EngineSettings> {return this.#preferences}
     get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get perfBuffer(): Float32Array {return this.#perfBuffer}
@@ -351,6 +437,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     queryLoadingComplete(): Promise<boolean> {return this.#commands.queryLoadingComplete()}
     noteSignal(signal: NoteSignal): void {this.#commands.noteSignal(signal)}
     subscribeNotes(observer: Observer<NoteSignal>): Subscription {return this.#notifyNoteSignals.subscribe(observer)}
+    subscribeTransportAnchors(observer: Observer<ReadonlyArray<TransportAnchor>>): Subscription {
+        return this.#notifyTransportAnchors.subscribe(observer)
+    }
     ignoreNoteRegion(uuid: UUID.Bytes): void {this.#commands.ignoreNoteRegion(uuid)}
     suspendAutomation(uuid: UUID.Bytes): void {this.#commands.suspendAutomation(uuid)}
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void {

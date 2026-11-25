@@ -28,8 +28,10 @@ export const ErrorsPage: PageFactory<StudioService> = ({lifecycle}: PageContext<
             >here</a>.</h5>
             <code onInit={async element => {
                 element.textContent = "loading status..."
-                element.textContent = await fetch("https://logs.opendaw.studio/status.php").then(x => x.json())
-                    .then(x => Object.entries(x).map(([key, value]) => `${key}: ${value}`).join(", "))
+                const {status, value} = await Promises.tryCatch(fetch("https://logs.opendaw.studio/status.php")
+                    .then(response => response.json())
+                    .then(json => Object.entries(json).map(([key, entry]) => `${key}: ${entry}`).join(", ")))
+                element.textContent = status === "resolved" ? value : "status unavailable"
             }} style={{fontSize: "10px", marginBottom: "1em", color: Colors.blue.toString()}}/>
             <Await
                 factory={() => loadMore()}

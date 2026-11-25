@@ -85,6 +85,8 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_arpeggio.wasm", boxType: "ArpeggioDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_pitch.wasm", boxType: "PitchDeviceBox"},     // midi effect
+    {url: "/wasm/plugins/device_note_filter.wasm", boxType: "NoteFilterDeviceBox"}, // midi effect
+    {url: "/wasm/plugins/device_scale_matrix.wasm", boxType: "ScaleMatrixDeviceBox"}, // midi effect
     {url: "/wasm/plugins/device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
     {url: "/wasm/plugins/device_apparat.wasm", boxType: "ApparatDeviceBox"},   // scriptable instrument
     {url: "/wasm/plugins/device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
@@ -99,12 +101,14 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
     {url: "/wasm/plugins/device_convolver.wasm", boxType: "ConvolverDeviceBox"}, // audio effect
     {url: "/wasm/plugins/device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
-    {url: "/wasm/plugins/device_cubed.wasm", boxType: "CubedDeviceBox"},   // instrument (303-style bassline)
+    {url: "/wasm/plugins/device_cubed.wasm", boxType: "CubedDeviceBox"},
+    {url: "/wasm/plugins/device_korpus.wasm", boxType: "KorpusDeviceBox"}, // instrument (physical modelling)   // instrument (303-style bassline)
     {url: "/wasm/plugins/device_vocoder.wasm", boxType: "VocoderDeviceBox"},   // audio effect (channel vocoder + sidechain)
     {url: "/wasm/plugins/device_neural_amp.wasm", boxType: "NeuralAmpDeviceBox"}, // audio effect (NAM, via the nam bridge)
     {url: "/wasm/plugins/device_wclap.wasm", boxType: "WclapDeviceBox"}, // audio effect (CLAP plugin, via the wclap bridge)
     {url: "/wasm/plugins/device_wclap_instrument.wasm", boxType: "WclapInstrumentBox"}, // instrument (CLAP plugin, via the wclap bridge)
     {url: "/wasm/plugins/device_tuner.wasm", boxType: "TunerDeviceBox"},
+    {url: "/wasm/plugins/device_wclap_midi.wasm", boxType: "WclapMidiEffectBox"}, // midi effect (CLAP note effect, via the wclap bridge)
     {url: "/wasm/plugins/device_autotune.wasm", boxType: "AutotuneDeviceBox"}, // audio effect (pitch correction, PSOLA)
     {url: "/wasm/plugins/device_playfield_sample.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
 ]
@@ -158,14 +162,19 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
     }
 ]
 
-export const loadEngineModules = async (base: string = ""): Promise<EngineModules> => {
-    const urls = [`${base}/wasm/engine.wasm`, ...DEVICES.map(device => `${base}${device.url}`)]
+// A device module the host serves itself (absolute url), linked after the stock devices.
+export type ExtraDevice = { url: string, boxType: string }
+
+export const loadEngineModules = async (base: string = "",
+                                        extraDevices: ReadonlyArray<ExtraDevice> = []): Promise<EngineModules> => {
+    const devices = [...DEVICES.map(device => ({url: `${base}${device.url}`, boxType: device.boxType})), ...extraDevices]
+    const urls = [`${base}/wasm/engine.wasm`, ...devices.map(device => device.url)]
     const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.ok
         ? response.arrayBuffer()
         : Promise.reject(new Error(`Could not load wasm module '${url}' (${response.status} ${response.statusText})`)))))
     const [engineModule, ...deviceModules] = await Promise.all(buffers.map(bytes => WebAssembly.compile(bytes)))
     return {
-        engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType),
+        engineModule, deviceModules, deviceBoxTypes: devices.map(device => device.boxType),
         composites: COMPOSITES, effectComposites: EFFECT_COMPOSITES
     }
 }

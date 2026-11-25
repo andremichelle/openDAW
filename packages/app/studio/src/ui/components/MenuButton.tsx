@@ -4,7 +4,7 @@ import {MenuItem} from "@opendaw/studio-core"
 import {Menu} from "@/ui/components/Menu.tsx"
 import {Color, getOrProvide, isDefined, Option, Procedure, ValueOrProvider} from "@opendaw/lib-std"
 import {Layers} from "@/ui/surface/Layers.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {AnimationFrame, Html} from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "MenuButton")
 
@@ -79,6 +79,7 @@ export const MenuButton =
                     menu.moveTo(rect[horizontal ?? "left"], rect.bottom + Menu.Padding)
                     menu.attach(Layers.get(button).flyout)
                     menu.own({terminate: toggle})
+                    menu.own(AnimationFrame.add(() => {if (!button.isConnected) {menu.terminate()}}))
                     return Option.wrap(menu)
                 },
                 some: menu => {

@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-scripting",
-  "version": "0.0.88",
+  "version": "0.0.101",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "publishConfig": {
@@ -19,8 +19,8 @@
   },
   "files": [
     "dist/**/*",
-    "src/script/api.declaration.d.ts",
-    "src/script/library.d.ts",
+    "src/api.declaration.d.ts",
+    "src/library.d.ts",
     "./dist/ScriptWorker.js"
   ],
   "scripts": {
@@ -31,13 +31,13 @@
     "docs": "typedoc && node scripts/docs-postprocess.mjs ../docs/scripting /docs/scripting/"
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.96",
-    "@opendaw/lib-dsp": "^0.0.95",
-    "@opendaw/lib-runtime": "^0.0.87",
-    "@opendaw/lib-std": "^0.0.86",
-    "@opendaw/studio-adapters": "^0.3.6",
-    "@opendaw/studio-boxes": "^0.0.112",
-    "@opendaw/studio-enums": "^0.1.5"
+    "@opendaw/lib-box": "^0.0.105",
+    "@opendaw/lib-dsp": "^0.0.102",
+    "@opendaw/lib-runtime": "^0.0.90",
+    "@opendaw/lib-std": "^0.0.89",
+    "@opendaw/studio-adapters": "^0.4.3",
+    "@opendaw/studio-boxes": "^0.0.124",
+    "@opendaw/studio-enums": "^0.1.14"
   },
   "devDependencies": {
     "@clean-jsdoc-theme/typedoc": "^5.1.1",

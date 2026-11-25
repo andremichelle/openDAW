@@ -37,15 +37,23 @@ import {
     FoldDeviceBox,
     GateDeviceBox,
     GrooveShuffleBox,
+    GrooveFunctionBox,
+    GrooveRandomBox,
+    GrooveStackBox,
+    GrooveOffsetBox,
+    GrooveStackEntryBox,
     LfoModulatorBox,
     StepsModulatorBox,
     MacroModulatorBox,
     RandomModulatorBox,
     ModulationBox,
     MarkerBox,
+    KeyEventBox,
+    ChordEventBox,
     NeonDeviceBox,
     TubularDeviceBox,
     MaximizerDeviceBox,
+    MasteringDeviceBox,
     MIDIOutputDeviceBox,
     ModularAudioInputBox,
     ModularAudioOutputBox,
@@ -58,12 +66,15 @@ import {
     NanoDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
+    WclapMidiEffectBox,
     WclapInstrumentBox,
     NeuralAmpModelBox,
     NoteClipBox,
     NoteEventBox,
     NoteEventCollectionBox,
     NoteRegionBox,
+    NoteFilterDeviceBox,
+    ScaleMatrixDeviceBox,
     PitchDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
@@ -93,6 +104,7 @@ import {
     ValueEventCollectionBox,
     ValueRegionBox,
     CubedDeviceBox,
+    KorpusDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     VocoderDeviceBox,
@@ -109,6 +121,8 @@ import {AudioFileBoxAdapter} from "./audio/AudioFileBoxAdapter"
 import {AudioRegionBoxAdapter} from "./timeline/region/AudioRegionBoxAdapter"
 import {TimelineBoxAdapter} from "./timeline/TimelineBoxAdapter"
 import {MarkerBoxAdapter} from "./timeline/MarkerBoxAdapter"
+import {KeyEventBoxAdapter} from "./timeline/KeyEventBoxAdapter"
+import {ChordEventBoxAdapter} from "./timeline/ChordEventBoxAdapter"
 import {ModularAdapter} from "./modular/modular"
 import {ModuleDelayAdapter} from "./modular/modules/delay"
 import {ModuleMultiplierAdapter} from "./modular/modules/multiplier"
@@ -135,9 +149,12 @@ import {TapeDeviceBoxAdapter} from "./devices/instruments/TapeDeviceBoxAdapter"
 import {VaporisateurDeviceBoxAdapter} from "./devices/instruments/VaporisateurDeviceBoxAdapter"
 import {ArpeggioDeviceBoxAdapter} from "./devices/midi-effects/ArpeggioDeviceBoxAdapter"
 import {PitchDeviceBoxAdapter} from "./devices/midi-effects/PitchDeviceBoxAdapter"
+import {NoteFilterDeviceBoxAdapter} from "./devices/midi-effects/NoteFilterDeviceBoxAdapter"
+import {ScaleMatrixDeviceBoxAdapter} from "./devices/midi-effects/ScaleMatrixDeviceBoxAdapter"
 import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceBoxAdapter"
 import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAdapter"
 import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
+import {KorpusDeviceBoxAdapter} from "./devices/instruments/KorpusDeviceBoxAdapter"
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {TubularDeviceBoxAdapter} from "./devices/instruments/TubularDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
@@ -155,6 +172,11 @@ import {BoxAdaptersContext} from "./BoxAdaptersContext"
 import {BoxAdapter} from "./BoxAdapter"
 import {ZeitgeistDeviceBoxAdapter} from "./devices/midi-effects/ZeitgeistDeviceBoxAdapter"
 import {GrooveShuffleBoxAdapter} from "./grooves/GrooveShuffleBoxAdapter"
+import {GrooveFunctionBoxAdapter} from "./grooves/GrooveFunctionBoxAdapter"
+import {GrooveRandomBoxAdapter} from "./grooves/GrooveRandomBoxAdapter"
+import {GrooveStackBoxAdapter} from "./grooves/GrooveStackBoxAdapter"
+import {GrooveOffsetBoxAdapter} from "./grooves/GrooveOffsetBoxAdapter"
+import {GrooveStackEntryBoxAdapter} from "./grooves/GrooveStackEntryBoxAdapter"
 import {LfoModulatorBoxAdapter} from "./modulation/LfoModulatorBoxAdapter"
 import {StepsModulatorBoxAdapter} from "./modulation/StepsModulatorBoxAdapter"
 import {MacroModulatorBoxAdapter} from "./modulation/MacroModulatorBoxAdapter"
@@ -165,6 +187,7 @@ import {UnknownMidiEffectDeviceBoxAdapter} from "./devices/midi-effects/UnknownM
 import {SoundfontDeviceBoxAdapter} from "./devices/instruments/SoundfontDeviceBoxAdapter"
 import {SoundfontFileBoxAdapter} from "./soundfont/SoundfontFileBoxAdapter"
 import {MaximizerDeviceBoxAdapter} from "./devices/audio-effects/MaximizerDeviceBoxAdapter"
+import {MasteringDeviceBoxAdapter} from "./devices/audio-effects/MasteringDeviceBoxAdapter"
 import {CompressorDeviceBoxAdapter} from "./devices/audio-effects/CompressorDeviceBoxAdapter"
 import {GateDeviceBoxAdapter} from "./devices/audio-effects/GateDeviceBoxAdapter"
 import {AutotuneDeviceBoxAdapter} from "./devices/audio-effects/AutotuneDeviceBoxAdapter"
@@ -179,6 +202,7 @@ import {ConvolverDeviceBoxAdapter} from "./devices/audio-effects/ConvolverDevice
 import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroReverbDeviceBoxAdapter"
 import {NeuralAmpDeviceBoxAdapter} from "./devices/audio-effects/NeuralAmpDeviceBoxAdapter"
 import {WclapDeviceBoxAdapter} from "./devices/audio-effects/WclapDeviceBoxAdapter"
+import {WclapMidiEffectBoxAdapter} from "./devices/midi-effects/WclapMidiEffectBoxAdapter"
 import {WclapInstrumentBoxAdapter} from "./devices/instruments/WclapInstrumentBoxAdapter"
 import {WaveshaperDeviceBoxAdapter} from "./devices/audio-effects/WaveshaperDeviceBoxAdapter"
 import {WerkstattDeviceBoxAdapter} from "./devices/audio-effects/WerkstattDeviceBoxAdapter"
@@ -254,10 +278,12 @@ export class BoxAdapters implements Terminable {
             visitWarpMarkerBox: (box: WarpMarkerBox) => new WarpMarkerBoxAdapter(this.#context, box),
             visitApparatDeviceBox: (box: ApparatDeviceBox) => new ApparatDeviceBoxAdapter(this.#context, box),
             visitCubedDeviceBox: (box: CubedDeviceBox) => new CubedDeviceBoxAdapter(this.#context, box),
+            visitKorpusDeviceBox: (box: KorpusDeviceBox) => new KorpusDeviceBoxAdapter(this.#context, box),
             visitAudioRegionBox: (box: AudioRegionBox) => new AudioRegionBoxAdapter(this.#context, box),
             visitAudioUnitBox: (box: AudioUnitBox) => new AudioUnitBoxAdapter(this.#context, box),
             visitAuxSendBox: (box: AuxSendBox): BoxAdapter => new AuxSendBoxAdapter(this.#context, box),
             visitMaximizerDeviceBox: (box: MaximizerDeviceBox) => new MaximizerDeviceBoxAdapter(this.#context, box),
+            visitMasteringDeviceBox: (box: MasteringDeviceBox) => new MasteringDeviceBoxAdapter(this.#context, box),
             visitCompressorDeviceBox: (box: CompressorDeviceBox) => new CompressorDeviceBoxAdapter(this.#context, box),
             visitGateDeviceBox: (box: GateDeviceBox) => new GateDeviceBoxAdapter(this.#context, box),
             visitAutotuneDeviceBox: (box: AutotuneDeviceBox) => new AutotuneDeviceBoxAdapter(this.#context, box),
@@ -270,12 +296,19 @@ export class BoxAdapters implements Terminable {
             visitTidalDeviceBox: (box: TidalDeviceBox) => new TidalDeviceBoxAdapter(this.#context, box),
             visitFoldDeviceBox: (box: FoldDeviceBox) => new FoldDeviceBoxAdapter(this.#context, box),
             visitGrooveShuffleBox: (box: GrooveShuffleBox) => new GrooveShuffleBoxAdapter(this.#context, box),
+            visitGrooveFunctionBox: (box: GrooveFunctionBox) => new GrooveFunctionBoxAdapter(this.#context, box),
+            visitGrooveRandomBox: (box: GrooveRandomBox) => new GrooveRandomBoxAdapter(this.#context, box),
+            visitGrooveOffsetBox: (box: GrooveOffsetBox) => new GrooveOffsetBoxAdapter(this.#context, box),
+            visitGrooveStackBox: (box: GrooveStackBox) => new GrooveStackBoxAdapter(this.#context, box),
+            visitGrooveStackEntryBox: (box: GrooveStackEntryBox) => new GrooveStackEntryBoxAdapter(this.#context, box),
             visitLfoModulatorBox: (box: LfoModulatorBox) => new LfoModulatorBoxAdapter(this.#context, box),
             visitStepsModulatorBox: (box: StepsModulatorBox) => new StepsModulatorBoxAdapter(this.#context, box),
             visitMacroModulatorBox: (box: MacroModulatorBox) => new MacroModulatorBoxAdapter(this.#context, box),
             visitRandomModulatorBox: (box: RandomModulatorBox) => new RandomModulatorBoxAdapter(this.#context, box),
             visitModulationBox: (box: ModulationBox) => new ModulationBoxAdapter(this.#context, box),
             visitMarkerBox: (box: MarkerBox) => new MarkerBoxAdapter(this.#context, box),
+            visitKeyEventBox: (box: KeyEventBox) => new KeyEventBoxAdapter(this.#context, box),
+            visitChordEventBox: (box: ChordEventBox) => new ChordEventBoxAdapter(this.#context, box),
             visitSignatureEventBox: (box: SignatureEventBox) => new SignatureEventBoxAdapter(this.#context, box),
             visitMIDIOutputDeviceBox: (box: MIDIOutputDeviceBox) => new MIDIOutputDeviceBoxAdapter(this.#context, box),
             visitModularAudioInputBox: (box: ModularAudioInputBox) => new ModularAudioInputAdapter(this.#context, box),
@@ -291,6 +324,7 @@ export class BoxAdapters implements Terminable {
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => new NeuralAmpDeviceBoxAdapter(this.#context, box),
             visitWclapDeviceBox: (box: WclapDeviceBox) => new WclapDeviceBoxAdapter(this.#context, box),
+            visitWclapMidiEffectBox: (box: WclapMidiEffectBox) => new WclapMidiEffectBoxAdapter(this.#context, box),
             visitWclapInstrumentBox: (box: WclapInstrumentBox) => new WclapInstrumentBoxAdapter(this.#context, box),
             visitNeuralAmpModelBox: (box: NeuralAmpModelBox) => new NeuralAmpModelBoxAdapter(this.#context, box),
             visitNoteClipBox: (box: NoteClipBox) => new NoteClipBoxAdapter(this.#context, box),
@@ -298,6 +332,8 @@ export class BoxAdapters implements Terminable {
             visitNoteEventCollectionBox: (box: NoteEventCollectionBox): BoxAdapter => new NoteEventCollectionBoxAdapter(this.#context, box),
             visitNoteRegionBox: (box: NoteRegionBox) => new NoteRegionBoxAdapter(this.#context, box),
             visitPitchDeviceBox: (box: PitchDeviceBox) => new PitchDeviceBoxAdapter(this.#context, box),
+            visitNoteFilterDeviceBox: (box: NoteFilterDeviceBox) => new NoteFilterDeviceBoxAdapter(this.#context, box),
+            visitScaleMatrixDeviceBox: (box: ScaleMatrixDeviceBox) => new ScaleMatrixDeviceBoxAdapter(this.#context, box),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox) => new PlayfieldDeviceBoxAdapter(this.#context, box),
             visitInstrumentCompositeBox: (box: InstrumentCompositeBox) => new InstrumentCompositeBoxAdapter(this.#context, box),
             visitInstrumentCompositeCellBox: (box: InstrumentCompositeCellBox) => new InstrumentCompositeCellBoxAdapter(this.#context, box),

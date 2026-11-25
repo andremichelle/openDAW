@@ -1,3 +1,4 @@
+@use "@/audio-unit"
 @use "@/mixins"
 @use "@/colors"
 
@@ -9,17 +10,28 @@ component
   grid-row: span 7
   justify-content: center
   background-color: colors.$BRIGHTENER
-  padding: 0 0.5em 0.5em 0.5em
+  padding: var(--unit-line-width, 0.125em) 0.5em 0.5em 0.5em
+  position: relative
   box-shadow: 0 2px 4px 0 rgba(black, 0.1)
   border-radius: 1px
   color: var(--color-cream)
-  border-top: 0.125em transparent solid
 
   @include mixins.dragging
   @include mixins.unit-type-colors
+  @include audio-unit.audio-unit-line
+
+  > div.unit-line
+    position: absolute
+    top: 0
+    left: 0
+    right: 0
+    height: var(--unit-line-width, 0.125em)
+    border-radius: audio-unit.$LINE_RADIUS audio-unit.$LINE_RADIUS 0 0
+    background-color: var(--unit-line-color)
 
   > div.icon-container
     position: relative
+    outline: none
     display: flex
     align-items: center
     justify-content: center
@@ -33,9 +45,21 @@ component
       opacity: 0.9
       filter: drop-shadow(0 3px 1px rgba(black, 0.75))
 
+  button.folder-toggle
+    position: absolute
+    right: -4px
+    top: 0
+    width: 24px
+    height: 100%
+    border: none
+    padding: 0
+    background: transparent
+    color: var(--color)
+    cursor: pointer
+    font-size: 18px
+
   &.editing
-    border-top: 0.125em var(--color) solid
-    background: linear-gradient(to bottom, var(--color) -500%, rgba(white, 0.02) 10%)
+    background-image: linear-gradient(to bottom, color-mix(in srgb, var(--color) audio-unit.$EDIT_WASH_START, transparent), color-mix(in srgb, var(--color) audio-unit.$EDIT_WASH_REST, transparent) 48px)
 
   &.compact
     padding: 0.5em

@@ -20,6 +20,7 @@ import {
     EngineCommands,
     EngineState,
     EngineStateSchema,
+    EngineNotice,
     EngineToClient,
     ExportConfiguration,
     MonitoringMapEntry,
@@ -27,11 +28,13 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig
-, ScriptCompiler, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPluginInfo} from "@opendaw/studio-adapters"
+, ScriptCompiler, SignalGraph, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPanelInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {WclapBundles} from "./wclap"
 import {AudioWorklets} from "./AudioWorklets"
 import {MIDIReceiver} from "./midi"
+import {MixdownSection} from "./MixdownSection"
+import {RenderQuantum} from "./RenderQuantum"
 import type {SoundFont2} from "soundfont2"
 
 // The engine worker every offline render runs in: the wasm engine, installed by `WasmEngine.install`.
@@ -88,6 +91,7 @@ export class OfflineEngineRenderer {
         Communicator.executor<EngineToClient>(engineMessenger.channel("engine-to-client"), {
             log: (message: string): void => console.log("OFFLINE-ENGINE", message),
             error: (reason: unknown) => console.error("OFFLINE-ENGINE", reason),
+            notice: (notice: EngineNotice): void => console.warn("OFFLINE-ENGINE", notice),
             ready: (): void => {},
             fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => new Promise((resolve, reject) => {
                 const handler = source.sampleManager.getOrCreate(uuid)
@@ -125,11 +129,14 @@ export class OfflineEngineRenderer {
             wclapParam: (): void => {},
             wclapHovered: (): void => {},
             wclapResizeGui: (): void => {},
+            wclapShowGui: (): void => {},
+            wclapHideGui: (): void => {},
             wclapStatus: (): void => {},
             wclapRequestSave: (): void => {},
             notifyClipSequenceChanges: (): void => {},
             switchMarkerState: (): void => {},
             recordingStarted: (): void => {},
+            transportAnchors: (): void => {},
             deviceMessage: (uuid: string, message: string): void => {
                 console.warn(`OFFLINE-ENGINE device(${uuid}): ${message}`)
             }
@@ -156,12 +163,21 @@ export class OfflineEngineRenderer {
                 setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void { dispatcher.dispatchAndForget(this.setFrozenAudio, uuid, audioData) }
                 wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> { return dispatcher.dispatchAndReturn(this.wclapOpenGui, uuid) }
                 wclapCloseGui(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.wclapCloseGui, uuid) }
+                wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo> {
+                    return dispatcher.dispatchAndReturn(this.wclapOpenPanel, uuid, height)
+                }
                 wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
                     return dispatcher.dispatchAndReturn(this.wclapResizeGui, uuid, width, height)
                 }
                 wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void { dispatcher.dispatchAndForget(this.wclapReceive, uuid, bytes) }
                 wclapSaveState(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.wclapSaveState, uuid) }
                 wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> { return dispatcher.dispatchAndReturn(this.wclapDescribe, url) }
+                wclapRetry(url: string): void { dispatcher.dispatchAndForget(this.wclapRetry, url) }
+                scriptMessage(uuid: UUID.Bytes, message: unknown): void { dispatcher.dispatchAndForget(this.scriptMessage, uuid, message) }
+                overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void {
+                    dispatcher.dispatchAndForget(this.overrideDeviceField, uuid, key, value)
+                }
+                querySignalGraph(): Promise<SignalGraph> { return dispatcher.dispatchAndReturn(this.querySignalGraph) }
                 terminate(): void { dispatcher.dispatchAndForget(this.terminate) }
             }
         )
@@ -170,8 +186,8 @@ export class OfflineEngineRenderer {
 
         terminator.own(source.liveStreamReceiver.connect(engineMessenger.channel("engine-live-data")))
 
-        const {port, sab} = terminator.own(MIDIReceiver.create(() => 0,
-            (deviceId, data, relativeTimeInMs) => source.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
+        const {port, sab} = terminator.own(MIDIReceiver.create(MIDIReceiver.immediateClock,
+            (deviceId, data, timestamp) => source.sendMIDIFromEngine(deviceId, data, timestamp)))
 
         // The SAME wrapper as the live worklet path (`ScriptCompiler.wrap`): the registry entry must carry
         // `params`/`samples` too — the WASM script bridge reads them (the TS worker ignores the extras).
@@ -259,12 +275,50 @@ export class OfflineEngineRenderer {
                 ? {startPosition: 0 as ppqn, endPosition: source.lastRegionAction()}
                 : {startPosition: r.start, endPosition: r.end}
         })
-        const maxDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition) + 30
+        const minDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition)
+        const maxDurationSeconds = minDurationSeconds + 30
         const result = await Promises.tryCatch(
             this.create(source, optExportConfiguration, sampleRate, abortSignal).then(renderer =>
-                renderer.render({maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)))
+                renderer.render({minDurationSeconds, maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)))
         boxGraph.beginTransaction()
         enabled.setValue(wasEnabled)
+        boxGraph.endTransaction()
+        if (result.status === "rejected") {return Promise.reject(result.error)}
+        return result.value
+    }
+
+    static async renderSection(source: Project,
+                               optExportConfiguration: Option<ExportConfiguration>,
+                               section: MixdownSection,
+                               progress: DefaultObservableValue<number>,
+                               abortSignal?: AbortSignal,
+                               sampleRate: int = 48_000
+    ): Promise<AudioData> {
+        const {timelineBox: {loopArea, markerTrack}, boxGraph} = source
+        const {start, end, passes, tail} = section
+        const was = {
+            loopEnabled: loopArea.enabled.getValue(), from: loopArea.from.getValue(), to: loopArea.to.getValue(),
+            markersEnabled: markerTrack.enabled.getValue()
+        }
+        boxGraph.beginTransaction()
+        loopArea.enabled.setValue(passes === 2)
+        if (passes === 2) {
+            loopArea.from.setValue(start)
+            loopArea.to.setValue(end)
+        }
+        markerTrack.enabled.setValue(false)
+        boxGraph.endTransaction()
+        const seconds = source.tempoMap.intervalToSeconds(start, end)
+        const numFrames = Math.round(seconds * sampleRate)
+        const result = await Promises.tryCatch(
+            this.create(source, optExportConfiguration, sampleRate, abortSignal).then(renderer => tail
+                ? renderer.render({minDurationSeconds: seconds, maxDurationSeconds: seconds + 30}, start, end, progress, abortSignal)
+                : renderer.#renderFrames(start, numFrames, passes, progress, abortSignal)))
+        boxGraph.beginTransaction()
+        loopArea.enabled.setValue(was.loopEnabled)
+        loopArea.from.setValue(was.from)
+        loopArea.to.setValue(was.to)
+        markerTrack.enabled.setValue(was.markersEnabled)
         boxGraph.endTransaction()
         if (result.status === "rejected") {return Promise.reject(result.error)}
         return result.value
@@ -334,6 +388,42 @@ export class OfflineEngineRenderer {
         const channels = await this.#protocol.step(samples)
         this.#totalFrames += samples
         return channels
+    }
+
+    async #renderFrames(startPosition: ppqn,
+                        numFrames: int,
+                        passes: int,
+                        progress: DefaultObservableValue<number>,
+                        abortSignal?: AbortSignal
+    ): Promise<AudioData> {
+        const totalFrames = numFrames * passes
+        const skipFrames = totalFrames - numFrames
+        const audioData = AudioData.create(this.#sampleRate, numFrames, this.#numberOfChannels)
+        const result = await Promises.tryCatch((async () => {
+            await this.waitForLoading()
+            this.setPosition(startPosition)
+            await this.play()
+            await this.waitForLoading()
+            let rendered = 0
+            while (rendered < totalFrames) {
+                if (isDefined(abortSignal) && abortSignal.aborted) {return Promise.reject(Errors.AbortError)}
+                const numSamples = Math.min(RenderQuantum * 375, totalFrames - rendered)
+                const channels = await this.step(numSamples)
+                const sourceOffset = Math.max(0, skipFrames - rendered)
+                if (sourceOffset < numSamples) {
+                    for (let channelIndex = 0; channelIndex < this.#numberOfChannels; channelIndex++) {
+                        audioData.frames[channelIndex]
+                            .set(channels[channelIndex].subarray(sourceOffset), rendered + sourceOffset - skipFrames)
+                    }
+                }
+                rendered += numSamples
+                progress.setValue(rendered / totalFrames)
+            }
+            return audioData
+        })())
+        this.terminate()
+        if (result.status === "rejected") {return Promise.reject(result.error)}
+        return result.value
     }
 
     async render(config: OfflineEngineRenderConfig,

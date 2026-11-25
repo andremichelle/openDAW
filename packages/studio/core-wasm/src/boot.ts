@@ -1,9 +1,10 @@
 // Shared WASM-engine boot + resource plumbing for BOTH studio hosts: the realtime worklet processor and
 // the offline render worker. Links the engine + device side-modules (with the script/NAM bridges) and
 // runs the sample/soundfont load handshakes over the UNCHANGED EngineToClient RPC.
-import {isDefined, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {isDefined, Nullable, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
+import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {EngineToClient} from "@opendaw/studio-adapters"
-import {EngineExports, readPanicMessage} from "./engine-exports"
+import {EngineExports, readPanicMessage, withUnsignedPointers} from "./engine-exports"
 import {CompositeSpec, EffectCompositeSpec} from "./engine-modules"
 import {linkDevice, registerComposite, registerEffectComposite} from "./device-linker"
 import {ScriptBridges, ScriptEngine} from "./script-bridge"
@@ -11,7 +12,7 @@ import {NamBridges} from "./nam-bridge"
 import {WclapBridges} from "./wclap/wclap-bridge"
 import {simplifySoundfont} from "./soundfont-simplify"
 
-const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~343)
+export const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~343)
 
 export type WasmEngineModules = {
     engineModule: WebAssembly.Module
@@ -36,11 +37,13 @@ export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: numbe
     new WclapBridges(memory, sampleRate, {
         loadBundle: url => engineToClient.fetchWclapBundle(url),
         sendGui: (uuid, bytes) => engineToClient.wclapSend(uuid, bytes),
-        sendState: (uuid, bytes) => engineToClient.wclapState(uuid, bytes),
+        sendState: (uuid, bytes, url, clapId, cause) => engineToClient.wclapState(uuid, bytes, url, clapId, cause),
         sendParams: (uuid, params) => engineToClient.wclapParams(uuid, params),
         sendParam: (uuid, paramId, value, gesture) => engineToClient.wclapParam(uuid, paramId, value, gesture),
         sendHovered: (uuid, paramId) => engineToClient.wclapHovered(uuid, paramId),
         requestGuiResize: (uuid, width, height) => engineToClient.wclapResizeGui(uuid, width, height),
+        requestGuiShow: uuid => engineToClient.wclapShowGui(uuid),
+        requestGuiHide: uuid => engineToClient.wclapHideGui(uuid),
         sendStatus: (uuid, status) => engineToClient.wclapStatus(uuid, status),
         requestSave: uuid => engineToClient.wclapRequestSave(uuid),
         track
@@ -48,22 +51,25 @@ export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: numbe
 
 export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAssembly.Memory,
                                       sampleRate: number, engineToClient: EngineToClient,
-                                      wclapBridges: WclapBridges = createWclapBridges(memory, sampleRate, engineToClient)): EngineExports => {
+                                      wclapBridges: WclapBridges = createWclapBridges(memory, sampleRate, engineToClient),
+                                      broadcaster: Provider<Nullable<LiveStreamBroadcaster>> = () => null)
+    : { engine: EngineExports, scriptBridges: ScriptBridges } => {
     const table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
     const now: Provider<number> = isDefined(globalThis.performance)
         ? () => performance.now() * 1000.0 : () => Date.now() * 1000.0
-    const engine = new WebAssembly.Instance(modules.engineModule,
-        {env: {memory, __indirect_function_table: table, host_perf_now: now}}).exports as unknown as EngineExports
+    const engine = withUnsignedPointers(new WebAssembly.Instance(modules.engineModule,
+        {env: {memory, __indirect_function_table: table, host_perf_now: now}}).exports as unknown as EngineExports)
     engine.init(sampleRate)
+    wclapBridges.attachEngine(engine)
     const scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
-        (uuid, message) => engineToClient.deviceMessage(uuid, message))
+        (uuid, message) => engineToClient.deviceMessage(uuid, message), broadcaster)
     const namBridges = new NamBridges(memory, () => engineToClient.fetchNamWasm(), sampleRate)
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
     modules.deviceModules.forEach((deviceModule, index) =>
         linkDevice(engine, memory, table, deviceModule, modules.deviceBoxTypes[index], sampleRate, bridgeImports))
     modules.composites.forEach(composite => registerComposite(engine, memory, composite))
     modules.effectComposites.forEach(composite => registerEffectComposite(engine, memory, composite))
-    return engine
+    return {engine, scriptBridges}
 }
 
 // Pop every sample/soundfont the engine queued and run the load handshake for each: fetch + decode over
@@ -87,12 +93,17 @@ export const drainResourceRequests = (engine: EngineExports, memory: WebAssembly
         track(engineToClient.fetchAudio(uuid).then(data => {
             const {numberOfFrames, numberOfChannels, sampleRate: dataRate, frames} = data
             const bytesPerChannel = numberOfFrames * Float32Array.BYTES_PER_ELEMENT
-            const pointer = engine.sample_allocate(handle, numberOfChannels * bytesPerChannel)
+            const byteLength = numberOfChannels * bytesPerChannel
+            const pointer = byteLength <= 0xFFFFFFFF ? engine.sample_allocate(handle, byteLength) : 0
             // A dead handle (its slot was freed + generation-bumped between the request and this async
             // delivery — e.g. the AudioFileBox delete/recreate churn when a recorded take is finalized)
             // returns 0. Writing the frames at address 0 would corrupt the engine's own memory, so skip:
             // the engine re-requests against the fresh handle when the new box syncs.
-            if (pointer === 0) {return}
+            // The same 0 comes back when the frames do not fit, the slot then never resolves and plays silence.
+            if (pointer === 0) {
+                engineToClient.log(`sample not loaded: removed or does not fit into the engine memory (${byteLength} bytes)`)
+                return
+            }
             for (let channel = 0; channel < numberOfChannels; channel++) {
                 new Float32Array(memory.buffer, pointer + channel * bytesPerChannel, numberOfFrames)
                     .set(frames[channel])
@@ -112,7 +123,10 @@ export const drainResourceRequests = (engine: EngineExports, memory: WebAssembly
         track(engineToClient.fetchSoundfont(uuid).then(soundfont => {
             const blob = new Uint8Array(simplifySoundfont(soundfont))
             const pointer = engine.soundfont_allocate(handle, blob.byteLength)
-            if (pointer === 0) {return} // dead handle (see the sample path): writing at 0 would corrupt memory
+            if (pointer === 0) { // dead handle or no room (see the sample path): writing at 0 would corrupt memory
+                engineToClient.log(`soundfont not loaded: no allocation for ${blob.byteLength} bytes`)
+                return
+            }
             new Uint8Array(memory.buffer, pointer, blob.byteLength).set(blob)
             engine.soundfont_set_ready(handle)
         }, (reason: unknown) => engineToClient.log(`soundfont load failed: ${reason}`)))

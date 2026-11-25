@@ -3,6 +3,42 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.13](/compare/@opendaw/studio-icons@0.0.12...@opendaw/studio-icons@0.0.13) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
+## [0.0.12](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.11...@opendaw/studio-icons@0.0.12) (2026-11-09)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
+## [0.0.11](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.10...@opendaw/studio-icons@0.0.11) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
+## [0.0.10](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.9...@opendaw/studio-icons@0.0.10) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
+## [0.0.9](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.8...@opendaw/studio-icons@0.0.9) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
+## [0.0.8](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.7...@opendaw/studio-icons@0.0.8) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
+## [0.0.7](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.6...@opendaw/studio-icons@0.0.7) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
+## [0.0.6](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.5...@opendaw/studio-icons@0.0.6) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
+## [0.0.5](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.4...@opendaw/studio-icons@0.0.5) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/studio-icons
+
 ## [0.0.4](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-icons@0.0.3...@opendaw/studio-icons@0.0.4) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/studio-icons

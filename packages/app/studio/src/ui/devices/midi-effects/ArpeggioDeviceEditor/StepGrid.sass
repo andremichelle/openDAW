@@ -1,0 +1,131 @@
+// index, play, header, cell and toggle square borrowed from CubedDeviceEditor/PatternGrid
+component
+  flex: 1
+  display: grid
+  grid-template-columns: 5em repeat(16, minmax(1.75em, 1fr))
+  grid-template-rows: 1.75em 2px 1.75em 1fr
+  gap: 2px
+  font-size: 9px
+
+  > .corner
+    min-width: 0
+
+  > .header
+    display: flex
+    align-items: center
+    opacity: 0.4
+
+  > .index
+    display: flex
+    align-items: center
+    justify-content: center
+    opacity: 0.4
+
+    &.beyond
+      opacity: 0.1
+
+    &:nth-child(4n + 2):not(.beyond)
+      border-radius: 2px
+      background-color: rgba(white, 0.04)
+
+  > .play
+    border-radius: 2px
+    background: rgba(white, 0.05)
+
+    &.on
+      background: var(--color-blue)
+
+  > .type
+    position: relative
+    display: flex
+    align-items: center
+    justify-content: center
+    background: rgba(black, 0.12)
+    border-radius: 3px
+    cursor: pointer
+    color: var(--color-orange)
+
+    > .glyph
+      width: 6px
+      height: 6px
+      border-radius: 3px
+      background: currentColor
+      box-shadow: 0 0 1px 0 black inset
+
+    &.rest > .glyph
+      filter: saturate(25%) brightness(33%)
+
+    &.tie > .glyph
+      position: absolute
+      left: -3px
+      right: 50%
+      width: auto
+      height: 2px
+      border-radius: 0 1px 1px 0
+
+    &.chord > .glyph
+      height: 2px
+      border-radius: 1px
+      color: var(--color-cream)
+      box-shadow: 0 -3px 0 0 currentColor, 0 3px 0 0 currentColor
+
+  > .lanes
+    display: flex
+    flex-direction: column
+    justify-content: space-between
+
+    > .lane-label
+      opacity: 0.4
+      cursor: pointer
+
+      &.on
+        opacity: 1
+        color: var(--color-blue)
+
+  > .lane-area
+    grid-column: 2 / -1
+    display: grid
+    grid-template-columns: subgrid
+    touch-action: none
+    cursor: ns-resize
+
+    > .lane
+      position: relative
+      overflow: hidden
+      background: rgba(black, 0.12)
+      border-radius: 3px
+
+      > .mark
+        position: absolute
+        left: 0
+        right: 0
+        height: 1px
+        background: rgba(white, 0.08)
+
+      > .fill
+        position: absolute
+        left: 3px
+        right: 3px
+        background: color-mix(in srgb, var(--color-blue) 55%, transparent)
+        border-top: 1px solid var(--color-blue)
+
+      &.bipolar > .fill
+        border-top: none
+        outline: 1px solid color-mix(in srgb, var(--color-blue) 80%, transparent)
+        outline-offset: -1px
+
+      > .text
+        position: absolute
+        left: 0
+        right: 0
+        bottom: 2px
+        text-align: center
+        font-size: 8px
+        color: var(--color-dark)
+        pointer-events: none
+
+      &.inactive
+        cursor: default
+
+        > *
+          opacity: 0.15

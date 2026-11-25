@@ -4,6 +4,7 @@ import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
 import {BoxIO, TrackBox} from "@opendaw/studio-boxes"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
+import {isGrooveBox} from "../grooves/GrooveBoxAdapter"
 
 export namespace TransferRegions {
     /**
@@ -21,7 +22,7 @@ export namespace TransferRegions {
         for (const dependency of region.graph.dependenciesOf(region, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
-            excludeBox: (dep: Box) => dep.ephemeral
+            excludeBox: (dep: Box) => dep.ephemeral || isGrooveBox(dep)
         }).boxes) {
             uniqueBoxes.add(dependency)
         }
@@ -58,6 +59,10 @@ export namespace TransferRegions {
                 }
                 if (pointer.pointerType === Pointers.ClipCollection) {
                     return Option.wrap(targetTrack.clips.address)
+                }
+                // a groove stays where it is, it only travels within its project
+                if (pointer.pointerType === Pointers.Groove) {
+                    return address.flatMap(target => targetGraph.findVertex(target).map(() => target))
                 }
                 return Option.None
             }

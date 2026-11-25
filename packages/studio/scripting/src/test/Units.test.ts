@@ -51,6 +51,12 @@ describe("Audio units", () => {
         expect(() => project.addInstrumentUnit("Vaporisateur", {}, {bogus: 1} as any)).toThrow(TypeError)
     })
 
+    it("reports no output for the output unit", () => {
+        const {project} = createFixture()
+        expect(project.output.output).toBeNull()
+        expect(project.audioUnits.map(unit => unit.output?.kind ?? null)).toEqual([null])
+    })
+
     it("creates bus units and routes outputs", () => {
         const {project} = createFixture()
         const synth = project.addInstrumentUnit("Vaporisateur")
@@ -62,7 +68,7 @@ describe("Audio units", () => {
         expect(group.color).toBe("red")
         expect(aux.icon).toBe("Flask")
         expect(() => aux.icon = "NotAnIcon").toThrow(RangeError)
-        expect(project.audioUnits.map(unit => unit.kind)).toEqual(["instrument", "auxiliary", "group", "output"])
+        expect(project.audioUnits.map(unit => unit.kind)).toEqual(["instrument", "group", "auxiliary", "output"])
         synth.output = group
         expect(synth.output).toBe(group)
         group.output = null
@@ -127,6 +133,29 @@ describe("Audio units", () => {
         expect(unit.noteTracks.length).toBe(1)
         unit.setInstrument("Tape")
         expect(unit.instrument.key).toBe("Tape")
+    })
+
+    it("drops tracks the new instrument's capture cannot serve", () => {
+        const {project} = createFixture()
+        const unit = project.addInstrumentUnit("Vaporisateur")
+        const automation = unit.addValueTrack(unit, "volume")
+        unit.setInstrument("Tape")
+        expect(unit.noteTracks.length).toBe(0)
+        expect(unit.audioTracks.length).toBe(1)
+        expect(unit.valueTracks).toEqual([automation])
+        unit.setInstrument("Nano")
+        expect(unit.audioTracks.length).toBe(0)
+        expect(unit.noteTracks.length).toBe(1)
+        expect(unit.valueTracks.length).toBe(1)
+        expect(unit.tracks.map(track => track.index)).toEqual(unit.tracks.map((_, index) => index))
+    })
+
+    it("keeps tracks when the capture stays the same", () => {
+        const {project} = createFixture()
+        const unit = project.addInstrumentUnit("Vaporisateur")
+        const track = unit.noteTracks[0]
+        unit.setInstrument("Nano")
+        expect(unit.noteTracks).toEqual([track])
     })
 
     it("clamps and validates channel strip values", () => {

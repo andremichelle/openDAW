@@ -15,10 +15,10 @@
 //! update-clock connection) is not ported yet; it needs the parameter/automation layer + EngineContext.
 //! Until then `update_parameters` is a no-op hook, but update events are already dispatched to it.
 
-use crate::block::Block;
+use crate::block::{frame_of, Block};
 use crate::event::Event;
 use crate::event_receiver::EventReceiver;
-use crate::ppqn::{pulses_to_samples, pulses_to_seconds};
+use crate::ppqn::pulses_to_seconds;
 use crate::process_info::ProcessInfo;
 
 /// Extends `EventReceiver` (the per-block `event_input` the template drains).
@@ -50,15 +50,7 @@ pub trait AudioProcessor: EventReceiver {
             let count = self.event_input().get(block.index).len();
             for index in 0..count {
                 let event = self.event_input().get(block.index)[index]; // Copy; borrow ends immediately
-                let pulses = event.position() - block.p0;
-                let (s0, s1) = (block.s0 as usize, block.s1 as usize);
-                let raw = if pulses.abs() < 1.0e-7 {
-                    s0
-                } else {
-                    s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
-                };
-                debug_assert!(raw >= s0 && raw <= s1, "event out of block bounds");
-                let to_index = raw.clamp(s0, s1) as u32;
+                let to_index = frame_of(block, event.position(), sample_rate) as u32;
                 if chunk.s0 < to_index {
                     chunk.s1 = to_index;
                     chunk.p1 = event.position();

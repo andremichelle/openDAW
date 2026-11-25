@@ -3,6 +3,46 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.26](/compare/@opendaw/lib-inference@0.0.25...@opendaw/lib-inference@0.0.26) (2026-11-20)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
+## [0.0.25](/compare/@opendaw/lib-inference@0.0.24...@opendaw/lib-inference@0.0.25) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
+## [0.0.24](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.23...@opendaw/lib-inference@0.0.24) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
+## [0.0.23](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.22...@opendaw/lib-inference@0.0.23) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
+## [0.0.22](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.21...@opendaw/lib-inference@0.0.22) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
+## [0.0.21](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.20...@opendaw/lib-inference@0.0.21) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
+## [0.0.20](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.19...@opendaw/lib-inference@0.0.20) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
+## [0.0.19](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.18...@opendaw/lib-inference@0.0.19) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
+## [0.0.18](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.17...@opendaw/lib-inference@0.0.18) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
+## [0.0.17](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.16...@opendaw/lib-inference@0.0.17) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/lib-inference
+
 ## [0.0.16](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-inference@0.0.15...@opendaw/lib-inference@0.0.16) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/lib-inference

@@ -14,6 +14,8 @@ import {TourStep, TourSteps} from "./TourSteps"
 import {TourAnchor} from "./TourAnchor"
 import {TourCard} from "./TourCard"
 import {centerCard, frameRect, placeCard} from "./TourPlacement"
+import {DevicePreviewRoute} from "@/service/StudioNavigation"
+import {PanelType} from "@/ui/workspace/PanelType"
 
 export namespace Tour {
     // Offered once per arrival from the dashboard or a shared bundle link, never when switching between projects.
@@ -24,7 +26,7 @@ export namespace Tour {
             idle.value = optProfile.isEmpty()
             if (optProfile.isEmpty() || !wasIdle) {return}
             if (!StudioPreferences.settings.visibility["offer-studio-tour"]) {return}
-            if (RouteLocation.get().path.startsWith("/join")) {return}
+            if (RouteLocation.get().path.startsWith("/join") || RouteLocation.get().path === DevicePreviewRoute) {return}
             AnimationFrame.once(() => {
                 if (service.layout.screen.getValue() !== "default") {return}
                 offer(service)
@@ -80,9 +82,14 @@ export namespace Tour {
             this.#restore = new Terminator()
             const browseScope = service.layout.browseScope.getValue()
             const clipsVisible = service.timeline.clips.visible.getValue()
+            const browser = service.panelLayout.getByType(PanelType.BrowserPanel)
+            const browserMinimized = browser.panelState.mapOr(state => state.isMinimized, false)
             this.#restore.ownAll(
                 {terminate: () => service.layout.browseScope.setValue(browseScope)},
-                {terminate: () => service.timeline.clips.visible.setValue(clipsVisible)}
+                {terminate: () => service.timeline.clips.visible.setValue(clipsVisible)},
+                {terminate: () => browser.panelState.ifSome(state => {
+                    if (state.isMinimized !== browserMinimized) {browser.toggleMinimize()}
+                })}
             )
             this.#terminator.ownAll(
                 this.#subscribeKeys(window),
@@ -120,10 +127,10 @@ export namespace Tour {
                 card.ring.remove()
             })
             this.#card = Option.None
-            this.#restore.terminate()
             if (this.#service.hasProfile && this.#service.layout.screen.getValue() !== "default") {
                 this.#service.switchScreen("default")
             }
+            this.#restore.terminate()
         }
 
         #show(index: number): void {

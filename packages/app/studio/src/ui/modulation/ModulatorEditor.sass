@@ -1,3 +1,7 @@
+@keyframes modulator-revealed
+  0%, 66.667%
+    background-color: rgba(white, 0.12)
+
 component
   display: contents
 
@@ -35,7 +39,7 @@ component
       align-items: center
       column-gap: 0.25em
       padding: 0.25em 0 0.25em 0.25em
-      border-radius: 3px
+      border-radius: 1px
       outline: none
       cursor: pointer
       color: var(--color-cream)
@@ -71,6 +75,9 @@ component
     letter-spacing: 0.08em
     white-space: nowrap
     color: var(--color-cream)
+
+  &.revealed > .modulator > header
+    animation: modulator-revealed 1.5s linear
 
   &.disabled
     > .modulator

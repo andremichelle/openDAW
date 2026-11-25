@@ -26,7 +26,6 @@ Disallow: /icons
 Disallow: /performance
 Disallow: /preferences
 Disallow: /scripting
-Disallow: /spike-test
 Disallow: /stats
 Disallow: /test
 Disallow: /upload

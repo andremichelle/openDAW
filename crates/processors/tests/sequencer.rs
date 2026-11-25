@@ -15,7 +15,7 @@ const BPM: f32 = 120.0;
 /// A block spanning `[p0, p1)` with sample bounds derived from the tempo (so offsets are meaningful).
 fn block(p0: f64, p1: f64) -> Block {
     let s1 = pulses_to_samples(p1 - p0, BPM, SR) as usize;
-    Block {p0, p1, s0: 0, s1, bpm: BPM, discontinuous: false}
+    Block {p0, p1, anchor: p0, anchor_frame: 0, s0: 0, s1, bpm: BPM, discontinuous: false}
 }
 
 fn full_region() -> NoteRegion {

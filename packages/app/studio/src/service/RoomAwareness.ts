@@ -14,6 +14,7 @@ export type AwarenessUserState = {
     name: string
     color: string
     panel: Nullable<string>
+    recording?: boolean
 }
 
 export const readIdentity = (): { name: string, color: string } => {
@@ -42,6 +43,7 @@ export class RoomAwareness implements Terminable {
     readonly #name: DefaultObservableValue<string>
     readonly #color: DefaultObservableValue<string>
     readonly #panel: DefaultObservableValue<Nullable<string>>
+    readonly #recording: DefaultObservableValue<boolean>
 
     readonly #roomName: string
 
@@ -51,23 +53,26 @@ export class RoomAwareness implements Terminable {
         this.#name = this.#terminator.own(new DefaultObservableValue<string>(name))
         this.#color = this.#terminator.own(new DefaultObservableValue<string>(color))
         this.#panel = this.#terminator.own(new DefaultObservableValue<Nullable<string>>(null))
+        this.#recording = this.#terminator.own(new DefaultObservableValue<boolean>(false))
 
         const broadcast = this.#terminator.own(deferNextFrame(() => {
             const name = this.#name.getValue()
             const color = this.#color.getValue()
             const panel = this.#panel.getValue()
-            this.#awareness.setLocalStateField("user", {name, color, panel})
+            this.#awareness.setLocalStateField("user", {name, color, panel, recording: this.#recording.getValue()})
             writeIdentity(name, color)
         }))
         this.#terminator.own(this.#name.subscribe(broadcast.request))
         this.#terminator.own(this.#color.subscribe(broadcast.request))
         this.#terminator.own(this.#panel.subscribe(broadcast.request))
+        this.#terminator.own(this.#recording.subscribe(broadcast.request))
         broadcast.request()
     }
 
     get name(): MutableObservableValue<string> {return this.#name}
     get color(): MutableObservableValue<string> {return this.#color}
     get panel(): MutableObservableValue<Nullable<string>> {return this.#panel}
+    get recording(): MutableObservableValue<boolean> {return this.#recording}
     get roomName(): string {return this.#roomName}
     get awareness(): Awareness {return this.#awareness}
     get clientID(): number {return this.#awareness.clientID}

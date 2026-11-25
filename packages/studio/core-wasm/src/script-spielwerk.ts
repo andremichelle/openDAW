@@ -73,6 +73,24 @@ const validateNote = (note: any, from: number): string | null => {
     return null
 }
 
+type Emit = (kind: number, position: number, id: number, pitch: number, velocity: number, cent: number, duration: number) => void
+
+const releaseHeld = (runtime: SpielwerkRuntime, position: number, emit: Emit): void => {
+    for (const note of runtime.retained) {emit(KIND_NOTE_OFF, position, note.id, note.pitch, 0, 0, 0)}
+    runtime.reset()
+}
+
+// The device was disabled or removed: end every note the script started, writing the note-offs, returning the count.
+export const releaseSpielwerk = (runtime: SpielwerkRuntime, memory: ArrayBufferLike,
+                                 outPtr: number, outMax: number, position: number): number => {
+    const out = new DataView(memory, outPtr, outMax * RECORD_SIZE)
+    let outCount = 0
+    releaseHeld(runtime, position, (kind, at, id, pitch, velocity, cent, duration) => {
+        if (outCount < outMax) {writeRecord(out, outCount++, kind, at, id, pitch, velocity, cent, duration)}
+    })
+    return outCount
+}
+
 // Run one pulled range through the user generator + tracking, writing output records, returning the count.
 // Throws on a script error / validation failure / flood (the bridge catches it and silences).
 export const runSpielwerk = (runtime: SpielwerkRuntime, proc: any, memory: ArrayBufferLike,
@@ -93,8 +111,7 @@ export const runSpielwerk = (runtime: SpielwerkRuntime, proc: any, memory: Array
     // note source honours (`NoteSequencer::process_notes`). Without it a note whose span reaches past the loop
     // end never sees its end position again and the downstream instrument holds that voice forever.
     if ((flags & FLAG_DISCONTINUOUS) !== 0) {
-        for (const note of runtime.retained) {emit(KIND_NOTE_OFF, from, note.id, note.pitch, 0, 0, 0)}
-        runtime.reset()
+        releaseHeld(runtime, from, emit)
         proc.reset?.()
     }
 

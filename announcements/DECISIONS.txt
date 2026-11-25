@@ -7,10 +7,15 @@ Writing style (all channels)
 • No semicolons. Split into two sentences, or use a comma.
 • No exclamation marks, not even in headlines.
 • Plain language. No marketing speak (for example, avoid "The point:").
+• No ad style, we are not selling anything. Describe what a feature does, like a manual would. No
+  catchy sublines ("Hear It First"), no promised benefits ("lowers the barrier", "nothing can break
+  the project", "turns choosing into listening"), no "Try it", no "explains everything step by step".
 • Opening paragraph states what the thing is and what it does, in plain words. No hype openers
   like "a proper convolution reverb" or "your track sits right in it", also not on Discord.
 • No long text. Handle every subject brief and to the point.
-• No technical details unless the prompt asks for them.
+• No technical details unless the prompt asks for them. No numbers like "5 ms" in an example.
+• No stiff inserted clauses like "A limiter, for example, does X". Short sentences in the order
+  things happen, concrete first, no abstract openers.
 • Always include the education angle, unless the prompt says otherwise. Exception: Discord never
   gets the education angle unless the prompt asks for it.
 
@@ -36,6 +41,20 @@ Per channel
 Links
 • openDAW: https://opendaw.studio
 • Nextcloud manual: https://opendaw.studio/manuals/nextcloud
+
+What goes into an update post
+• Only the major features of a deploy. Fixes and small improvements stay out (2026-11-03: the live
+  room update is the call and Follow Playback, not previews, recording details or a zoom memory).
+
+Feature framing (Live Room calls and Follow Playback)
+• Calls: joined from the chat overlay, microphone or video, up to six people, audio and video go
+  directly between participants and never through the server. Screen or tab sharing with its audio.
+  Direct Audio sends the microphone in stereo without processing, for instruments, with headphones.
+• Follow Playback: click a name in the room status bar, playback follows that person's play, stop
+  and jumps.
+• Education angle: the teacher plays, the class follows along. The call holds six people, so talk of
+  small groups, never of a whole class in the call.
+• Manual: https://opendaw.studio/manuals/live-rooms
 
 Feature framing (Nextcloud)
 • Audience: schools and music classes first.
@@ -185,3 +204,38 @@ Feature framing (WebCLAP)
   be rebuilt that way (JUCE kit).
 • Lead with what WebCLAP gives, then contrast with VST. Never open a paragraph with what VST cannot do,
   nobody asked that question.
+
+Feature framing (Community Scripts)
+• A public GitHub repository, opendaw-commons, holds scripts for Werkstatt, Apparat, Spielwerk and the
+  code editor. Anyone adds one with a pull request, after the merge it is in every Studio within minutes,
+  without a Studio update.
+• Anyone can try a pull request in the Studio before the merge by pasting its link (Load button).
+• LinkedIn: no school or education angle. Engaging call for contributions ("Call for scripts"), the story
+  is that community made devices reach the studio in no time.
+• Credit Chaosmeister for Deminix 3 when it is mentioned.
+• Never say "a few lines of JavaScript" or anything about how little code a device needs. Real scripts
+  run to hundreds of lines (Deminix 3 is over a thousand). Say the devices run your own JavaScript.
+• Manual: https://opendaw.studio/manuals/community-scripts
+• Repository: https://github.com/andremichelle/opendaw-commons
+
+Feature framing (Grooves)
+• Zeitgeist is not new. It used to play one shuffle, it now plays grooves from the project's groove list.
+• A groove moves notes in time without changing them. Six types: Shuffle, Power, S-Curve, Random, Offset,
+  Stack (chains other grooves). One groove drives many places, a change reaches all of them.
+• Note and automation regions and clips take a groove from their context menu, starting at the region's
+  loop start. Audio regions do not take one yet, do not claim it.
+• The Global Shuffle is always in the list, its amount sits next to the tempo.
+• Grooves bend automation too, never announce them as notes only. A groove maps time to time.
+• Tone: sober and a bit technical (types, amount, duration range, loop behaviour), no ad sentences
+  (2026-11-05 correction "stop writing ads").
+• Education angle: the same pattern played straight and through different grooves, the written notes
+  stay unchanged.
+• Manual: https://opendaw.studio/manuals/grooves
+
+Feature framing (Key and Chords)
+• Project key, key track and chord track describe the harmony of a song, they make no sound. MIDI devices
+  follow them (Scale Matrix, Arpeggio, Autotune, Cubed randomizer, scripts).
+• Chords are steps of the key, 1 to 7. Change the key and every chord moves along.
+• Headline: "Learn and Use Scales and Harmony in openDAW" (Discord with "Update: " in front). Say harmony, not harmonics
+  (harmonics are overtones).
+• Manual: https://opendaw.studio/manuals/key-and-chords

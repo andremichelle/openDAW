@@ -2,17 +2,26 @@
 // same way the AudioWorklet does (engine-processor.ts), so a test can drive the actual DSP graph — not the
 // bare engine with an empty device table. Reuse this for any test that needs real devices / composites.
 
+import type {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
 import {createRequire} from "node:module"
 import {UUID} from "@opendaw/lib-std"
 import {ScriptBridges, ScriptEngine} from "../../src/script-bridge"
 import {NamBridges} from "../../src/nam-bridge"
-import {WclapBridges} from "../../src/wclap/wclap-bridge"
+import {WclapBridges, WclapHostCallbacks} from "../../src/wclap/wclap-bridge"
 import {linkDevice, registerComposite, registerEffectComposite} from "../../src/device-linker"
 import {COMPOSITES, EFFECT_COMPOSITES, DEVICES as DEVICE_URLS} from "../../src/engine-modules"
+import {EngineExports, withUnsignedPointers} from "../../src/engine-exports"
 
 const DIST = path.resolve(__dirname, "../../dist")
+
+export const GUARD_ENGINE_WASM = path.join(DIST, "wasm-guard", "engine.wasm")
+
+let engineWasmPath = path.join(DIST, "wasm", "engine.wasm")
+
+// The heap stress tests run on the heap-guard engine (build-guard-engine.sh); every other test on the release one.
+export const useEngineWasm = (file: string): void => {engineWasmPath = file}
 
 // ONE device/composite list for every context: the production tables from engine-modules, with the vite
 // URL mapped to the dist/ file name. The former local copies had already drifted (wrong composite cell
@@ -24,29 +33,35 @@ export type FullEngine = {
     engine: any
     memory: WebAssembly.Memory
     namBridges: NamBridges
+    scriptBridges: ScriptBridges
+    wclapBridges: WclapBridges
     deviceBuilds(): number
     // Feed a synthetic sample to every load the engine has queued (on seeing an AudioFileBox), so sample-based
     // devices (a Playfield slot) are AUDIBLE in tests. Returns how many it satisfied. The real loader fetches +
     // decodes a file; here we write a fixed 0.5 s 220 Hz mono tone, which is enough to assert real signal. Call
     // it after building the project (and again after any edit that adds a sample).
     drainSamples(): number
+    drainSoundfonts(build: (uuid: string) => ArrayBuffer): number
 }
 
 export const loadFullEngine = async (sampleRate = 48000,
-                                     onScriptMessage: (uuid: string, message: string) => void = () => {}): Promise<FullEngine> => {
+                                     onScriptMessage: (uuid: string, message: string) => void = () => {},
+                                     broadcaster: () => LiveStreamBroadcaster | null = () => null,
+                                     wclap: Partial<WclapHostCallbacks> = {},
+                                     extraDevices: ReadonlyArray<{file: string, boxType: string}> = []): Promise<FullEngine> => {
     const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
-    const engineModule = await WebAssembly.compile(readFileSync(path.join(DIST, "wasm", "engine.wasm")))
-    const engine = new WebAssembly.Instance(engineModule, {env: {
+    const engineModule = await WebAssembly.compile(readFileSync(engineWasmPath))
+    const engine: any = withUnsignedPointers(new WebAssembly.Instance(engineModule, {env: {
         memory, __indirect_function_table: table,
         host_perf_now: () => performance.now() * 1000.0 // micros clock for the render profiler
-    }}).exports as any
+    }}).exports as unknown as EngineExports)
     engine.init(sampleRate)
     // User scripts read the `sampleRate` global (an AudioWorkletGlobalScope built-in); provide it in node so the
     // scriptable devices behave exactly as in the worklet.
     ;(globalThis as any).sampleRate = sampleRate
     // The script bridge runs the scriptable devices' user JavaScript over the shared memory (see script-bridge.ts).
-    const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate, onScriptMessage)
+    const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate, onScriptMessage, broadcaster)
     // The nam bridge runs the NeuralAmp devices' nam-wasm inference; in node the binary comes from the package.
     const namBridges = new NamBridges(memory, async () => {
         const namWasmPath = createRequire(path.join(__dirname, "load-full-engine.ts")).resolve("@opendaw/nam-wasm/nam.wasm")
@@ -54,17 +69,19 @@ export const loadFullEngine = async (sampleRate = 48000,
         // A node Buffer can sit at an offset inside a pooled ArrayBuffer; hand over exactly the file's bytes.
         return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
     }, sampleRate)
-    // The wclap bridge hosts CLAP plugins; no test loads a bundle, so the loader rejects and the device passes through.
+    // The wclap bridge hosts CLAP plugins; without a loader from the test it rejects and the device passes through.
     const wclapBridges = new WclapBridges(memory, sampleRate, {
         loadBundle: () => Promise.reject(new Error("no wclap bundles in node tests")),
         sendGui: () => {}, sendState: () => {}, sendParams: () => {}, sendParam: () => {}, sendHovered: () => {},
-        requestGuiResize: () => {},
-        sendStatus: () => {}, requestSave: () => {}, track: () => {}
+        requestGuiResize: () => {}, requestGuiShow: () => {}, requestGuiHide: () => {},
+        sendStatus: () => {}, requestSave: () => {}, track: () => {},
+        ...wclap
     })
+    wclapBridges.attachEngine(engine) // as instantiateWasmEngine does: the bridge resolves the slots' samples
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
 
-    for (const {file, boxType} of DEVICES) {
-        const module = await WebAssembly.compile(readFileSync(path.join(DIST, file)))
+    for (const {file, boxType} of [...DEVICES.map(({file, boxType}) => ({file: path.join(DIST, file), boxType})), ...extraDevices]) {
+        const module = await WebAssembly.compile(readFileSync(file))
         linkDevice(engine, memory, table, module, boxType, sampleRate, bridgeImports)
     }
     for (const composite of COMPOSITES) {
@@ -109,5 +126,5 @@ export const loadFullEngine = async (sampleRate = 48000,
         }
         return satisfied
     }
-    return {engine, memory, namBridges, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
+    return {engine, memory, namBridges, scriptBridges, wclapBridges, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
 }

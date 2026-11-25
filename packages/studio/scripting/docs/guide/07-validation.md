@@ -23,7 +23,7 @@ synth.instrument.cutoff = 5  // stored as 20
 |---------------------------------------------|---------------------------------------------------|
 | wrong type (`cutoff = "high"`)              | `cutoff: expected a number, got string`           |
 | `NaN`                                       | `cutoff: NaN is not a valid value`                |
-| unknown enumeration (`mode: 7` on Arpeggio) | `mode: 7 is not one of 0, 1, 2`                   |
+| unknown enumeration (`retrigger: 7` on Arpeggio) | `retrigger: 7 is not one of 0, 1, 2, 3`      |
 | `+Infinity` on a gain                       | `volume: +Infinity is not a valid gain`           |
 | overlapping regions                         | `Region [0, 3840] overlaps existing region ...`   |
 | removing the output unit                    | `The output unit cannot be removed`               |

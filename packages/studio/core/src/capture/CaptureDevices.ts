@@ -48,6 +48,9 @@ export class CaptureDevices implements Terminable {
     get project(): Project {return this.#project}
 
     get(uuid: UUID.Bytes): Option<Capture> {return this.#captures.opt(uuid)}
+    audio(uuid: UUID.Bytes): Option<CaptureAudio> {
+        return this.get(uuid).flatMap(capture => capture instanceof CaptureAudio ? Option.wrap(capture) : Option.None)
+    }
 
     setArm(subject: Capture, exclusive: boolean): void {
         if (this.#project.audioUnitFreeze.isFrozenUuid(subject.audioUnitBox.address.uuid)) {return}

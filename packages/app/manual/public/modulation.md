@@ -1,7 +1,7 @@
 # Modulation
 
 Modulators are project-wide sources that move device parameters on their own. They sit on the **Modulation**
-screen (⇧6), and one modulator can drive as many parameters as you like, each with its own depth.
+screen (⇧3), and one modulator can drive as many parameters as you like, each with its own depth.
 
 ---
 

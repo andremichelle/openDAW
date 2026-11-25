@@ -13,8 +13,17 @@ export type WclapBundle = { files: ReadonlyArray<WclapBundleFile> }
 export type WclapGuiInfo = { uri: string, width: number, height: number, resizable: boolean, aspectRatio: number }
 // the size the plugin's clap.gui adjust_size accepted
 export type WclapGuiSize = { width: number, height: number }
+// the device panel page (opendaw.device-panel/1), uri "" = none, width 0 = the plugin names no width
+export type WclapPanelInfo = { uri: string, width: number }
 // one plugin of a bundle's factory, `features` as CLAP lists them ("instrument", "audio-effect", ...)
 export type WclapPluginInfo = { clapId: string, name: string, vendor: string, features: ReadonlyArray<string> }
+// the engine's live processor graph, latencies and compensation delays in frames
+export type SignalGraphNode = { id: int, label: string, owner: Nullable<UUID.Bytes>, latency: int, arrival: int }
+// `data` false = the edge only orders the render (a sidechain tap)
+export type SignalGraphEdge = { source: int, target: int, data: boolean, delay: int }
+export type SignalGraph = {
+    sampleRate: number, maxCompensation: int, nodes: ReadonlyArray<SignalGraphNode>, edges: ReadonlyArray<SignalGraphEdge>
+}
 // one clap_param_info of a loaded plugin, values in plain CLAP units, `flags` the clap_param_info_flags bits
 export type WclapParamInfo = {
     id: number, name: string, module: string, min: number, max: number, defaultValue: number, value: number, flags: number
@@ -22,11 +31,17 @@ export type WclapParamInfo = {
 // one audio input port of a loaded plugin (clap.audio-ports), in port order
 export type WclapAudioPort = { name: string, channels: number }
 // inputs: the loaded plugin's audio input ports, empty until ready
+// editor: once ready, whether the plugin offers a window of its own (clap.webview)
+// panel: once ready, whether the plugin offers a device panel page (opendaw:device-panel + opendaw.device-panel/1)
 export type WclapStatus = {
-    state: "loading" | "ready" | "failed", message: string, inputs: ReadonlyArray<WclapAudioPort>
+    state: "loading" | "ready" | "failed", message: string, inputs: ReadonlyArray<WclapAudioPort>, editor?: boolean,
+    panel?: boolean
 }
 // a parameter change the plugin reports (its GUI, a preset): 0 = value, 1 = gesture begin, 2 = gesture end
 export type WclapParamGesture = 0 | 1 | 2
+// what a plugin's state save carries: "own" a change outside its parameters (clap.state mark_dirty), an undo step of
+// its own; "params" its parameter edits, it joins their step; "other" anything else (a load), it joins the next step
+export type WclapSaveCause = "own" | "params" | "other"
 
 export interface EngineCommands extends Terminable {
     play(): void
@@ -55,24 +70,48 @@ export interface EngineCommands extends Terminable {
     // WCLAP webview relay
     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo>
     wclapCloseGui(uuid: UUID.Bytes): void
+    // a gui session like wclapOpenGui, closed with wclapCloseGui
+    wclapOpenPanel(uuid: UUID.Bytes, height: number): Promise<WclapPanelInfo>
     wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize>
     wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void
     // save the plugin's state now (answered through EngineToClient.wclapState when it changed)
     wclapSaveState(uuid: UUID.Bytes): void
     // the plugins a bundle offers (fetches and instantiates the module once, cached per url)
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>>
+    // loads every failed plugin of this url again (its bundle became available)
+    wclapRetry(url: string): void
+    querySignalGraph(): Promise<SignalGraph>
+    // a script view's host.send(message): handed to the device's Processor.message() before its next process call
+    scriptMessage(uuid: UUID.Bytes, message: unknown): void
+    // a local value for a device's plain field: never written to the box, not undoable, not synced
+    overrideDeviceField(uuid: UUID.Bytes, key: int, value: boolean | number): void
 }
+
+// a point on the transport timeline in audio context time: the transport started, jumped or stopped there
+export type TransportAnchor = {
+    readonly kind: "start" | "jump" | "stop"
+    readonly contextTime: number
+    readonly position: ppqn
+    readonly recording: boolean
+}
+
+// a non-fatal engine event for the user: a sidechain closed a feedback loop, or a device in one overflowed and was reset
+export type EngineNotice =
+    | { readonly type: "sidechain-loop", readonly device: string, readonly source: string }
+    | { readonly type: "non-finite", readonly device: string }
 
 export interface EngineToClient {
     log(message: string): void
     error(reason: unknown): void
+    notice(notice: EngineNotice): void
     deviceMessage(uuid: string, message: string): void
     fetchAudio(uuid: UUID.Bytes): Promise<AudioData>
     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2>
     fetchNamWasm(): Promise<ArrayBuffer>
     fetchWclapBundle(url: string): Promise<WclapBundle>
     wclapSend(uuid: string, bytes: ArrayBuffer): void
-    wclapState(uuid: string, bytes: ArrayBuffer): void
+    // url and clapId of the plugin instance that saved
+    wclapState(uuid: string, bytes: ArrayBuffer, url: string, clapId: string, cause: WclapSaveCause): void
     // the loaded plugin's parameter list (once per load) and its own parameter changes
     wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void
     wclapParam(uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void
@@ -80,11 +119,15 @@ export interface EngineToClient {
     wclapHovered(uuid: string, paramId: number): void
     // clap.gui request_resize: the plugin asks for another window size (logical pixels)
     wclapResizeGui(uuid: string, width: number, height: number): void
+    // clap.gui request_show / request_hide: the plugin's page asks for its window
+    wclapShowGui(uuid: string): void
+    wclapHideGui(uuid: string): void
     wclapStatus(uuid: string, status: WclapStatus): void
     // the plugin's state changed, the host answers with `wclapSaveState` between render quanta
     wclapRequestSave(uuid: string): void
     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void
     switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void
     recordingStarted(contextTime: number, position: ppqn, generation: int): void
+    transportAnchors(anchors: ReadonlyArray<TransportAnchor>): void
     ready(): void
 }

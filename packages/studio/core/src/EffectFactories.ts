@@ -13,7 +13,6 @@ import {
     FoldDeviceBox,
     FrequencySplitBox,
     GateDeviceBox,
-    GrooveShuffleBox,
     MaximizerDeviceBox,
     ModularAudioInputBox,
     ModularAudioOutputBox,
@@ -21,7 +20,10 @@ import {
     ModularDeviceBox,
     ModuleConnectionBox,
     NeuralAmpDeviceBox,
+    NoteFilterDeviceBox,
+    ScaleMatrixDeviceBox,
     WclapDeviceBox,
+    WclapMidiEffectBox,
     PitchDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
@@ -60,6 +62,43 @@ export namespace EffectFactories {
         create: ({boxGraph}, hostField, index) =>
             ArpeggioDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Arpeggio")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+                box.version.setValue(1)
+            })
+    }
+
+    export const NoteFilter: EffectFactory = {
+        defaultName: "Note Filter",
+        defaultIcon: IconSymbol.Piano,
+        briefDescription: "Note Filter",
+        description: "Passes a key range and transposes or sets the keys",
+        manualPage: DeviceManualUrls.NoteFilter,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "NoteFilterDeviceBox",
+        create: ({boxGraph}, hostField, index) =>
+            NoteFilterDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Note Filter")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const ScaleMatrix: EffectFactory = {
+        defaultName: "Scale Matrix",
+        defaultIcon: IconSymbol.Piano,
+        briefDescription: "Scale Quantiser",
+        description: "Moves every note onto the nearest key of a scale",
+        manualPage: DeviceManualUrls.ScaleMatrix,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "ScaleMatrixDeviceBox",
+        create: ({boxGraph}, hostField, index) =>
+            ScaleMatrixDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Scale Matrix")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -116,13 +155,7 @@ export namespace EffectFactories {
             hostField,
             index
         ): ZeitgeistDeviceBox => {
-            const useGlobal = false // TODO First Zeitgeist should be true
-            const shuffleBox = useGlobal
-                ? rootBoxAdapter.groove.box
-                : GrooveShuffleBox.create(boxGraph, UUID.generate(), (box) => {
-                    box.label.setValue("Shuffle")
-                    box.duration.setValue(480)
-                })
+            const shuffleBox = rootBoxAdapter.groove.box
             return ZeitgeistDeviceBox.create(
                 boxGraph,
                 UUID.generate(),
@@ -462,6 +495,24 @@ export namespace EffectFactories {
             })
     }
 
+    export const WclapMidi: EffectFactory = {
+        defaultName: "WebCLAP",
+        defaultIcon: IconSymbol.WebClap,
+        briefDescription: "WebCLAP Note Effect",
+        description: "Hosts a CLAP note effect compiled to WebAssembly (WebCLAP bundle).",
+        manualPage: DeviceManualUrls.Wclap,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        boxName: "WclapMidiEffectBox",
+        create: ({boxGraph}, hostField, index): WclapMidiEffectBox =>
+            WclapMidiEffectBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("WebCLAP")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Vocoder: EffectFactory = {
         defaultName: "Vocoder",
         defaultIcon: IconSymbol.Vocoder,
@@ -644,9 +695,12 @@ export namespace EffectFactories {
 
     export const MidiNamed = {
         Arpeggio,
+        NoteFilter,
         Pitch,
+        ScaleMatrix,
         Spielwerk,
         Velocity,
+        WclapMidi,       // WebCLAP
         Zeitgeist
     }
 

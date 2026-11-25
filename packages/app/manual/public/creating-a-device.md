@@ -454,7 +454,7 @@ npm run build        # TypeScript packages
 npm run build-wasm   # the engine + all device crates (needs the Rust toolchain + binaryen)
 ```
 
-The device should now appear in the audio effects menu when adding effects to a track. Hard-reload the
+The device should now appear in the Device Browser when you click a **+** in the audio effect chain. Hard-reload the
 studio after `build-wasm` so the browser drops the cached wasm.
 
 **Parity test:** add your device to `packages/studio/core-wasm/test/param-mapping-parity.test.ts` — it loads the

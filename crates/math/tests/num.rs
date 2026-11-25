@@ -42,12 +42,13 @@ fn lerp_endpoints_and_midpoint() {
 
 #[test]
 fn mod_euclid_mirrors_ts_mod_bit_exactly() {
-    // TS lib-std `mod = fract(value / range) * range` rounds through the divided domain: mod(7200, 6240)
-    // is 959.9999999999993, NOT 960. A value-region loop wrap reads its curve at this local position, so an
-    // update-clock tick landing exactly on a curve event must resolve to the SAME side of the event in both
-    // engines (the atstil stutter `enable` flipped one tick early in wasm with an exact modulo).
-    assert_eq!(mod_euclid(7200.0, 6240.0), 959.9999999999993);
+    // TS lib-std `mod = ((value % range) + range) % range` is exact: whole ticks stay whole in any loop length.
+    assert_eq!(mod_euclid(7200.0, 6240.0), 960.0);
+    assert_eq!(mod_euclid(3840.0, 2880.0), 960.0);
+    assert_eq!(mod_euclid(6720.0, 5760.0), 960.0);
     assert_eq!(mod_euclid(960.0, 6240.0), 960.0);
     assert_eq!(mod_euclid(0.0, 6240.0), 0.0);
     assert_eq!(mod_euclid(-1.0, 8.0), 7.0, "negative input wraps into [0, m)");
+    assert_eq!(mod_euclid(-0.1, 1.0), 0.9);
+    assert_eq!(mod_euclid(-1.0e-20, 1.0), 0.0, "a tiny negative input stays below m");
 }

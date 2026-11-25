@@ -16,6 +16,8 @@ use value::event::EventCollection;
 use value::note::NoteEvent;
 
 const TRACK: [u8; 16] = [1; 16];
+const GROOVE: [u8; 16] = [7; 16];
+const STRETCH: [u8; 16] = [8; 16];
 
 struct OneRegion {
     region: NoteRegion,
@@ -32,6 +34,13 @@ impl NoteTrackAccess for OneRegion {
         None
     }
     fn clip_events(&self, _clip: &[u8; 16], _visit: &mut dyn FnMut(&EventCollection<NoteEvent>)) {}
+    // GROOVE moves every position 30 later, STRETCH doubles the distance from its origin
+    fn warp(&self, groove: &[u8; 16], position: f64) -> f64 {
+        if groove == &GROOVE {position + 30.0} else if groove == &STRETCH {position * 2.0} else {position}
+    }
+    fn unwarp(&self, groove: &[u8; 16], position: f64) -> f64 {
+        if groove == &GROOVE {position - 30.0} else if groove == &STRETCH {position * 0.5} else {position}
+    }
 }
 
 impl NoteContentSource for OneRegion {
@@ -57,7 +66,7 @@ fn pull(sequencer: &mut NoteSequencer, from: f64, to: f64) -> Vec<Event> {
 
 #[test]
 fn a_note_completing_inside_the_block_emits_its_off_in_the_same_block() {
-    let region = NoteRegion {position: 0.0, duration: 960.0, loop_offset: 0.0, loop_duration: 960.0, mute: false};
+    let region = NoteRegion {position: 0.0, duration: 960.0, loop_offset: 0.0, loop_duration: 960.0, mute: false, groove: None};
     let mut sequencer = sequencer(region, &[NoteEvent::new(0.0, 10.0, 60, 0.0, 1.0)]);
     let events = pull(&mut sequencer, 0.0, 480.0);
     assert!(matches!(events.first(), Some(Event::NoteStart {position, ..}) if *position == 0.0), "note-on first: {events:?}");
@@ -68,7 +77,7 @@ fn a_note_completing_inside_the_block_emits_its_off_in_the_same_block() {
 #[test]
 fn by_default_a_note_rings_past_the_region_end() {
     // TS `truncateNotesAtRegionEnd` defaults to FALSE: the note keeps its full duration.
-    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
+    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
     let mut sequencer = sequencer(region, &[NoteEvent::new(50.0, 200.0, 60, 0.0, 1.0)]);
     let first = pull(&mut sequencer, 0.0, 100.0);
     assert!(matches!(first.first(), Some(Event::NoteStart {duration, ..}) if *duration == 200.0),
@@ -83,7 +92,7 @@ fn by_default_a_note_rings_past_the_region_end() {
 #[test]
 fn truncate_mode_cuts_notes_at_the_loop_cycle_end() {
     // TS truncate mode: `end = min(rawEnd, region.complete)`, so a note near the cycle end is cut there.
-    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
     let mut sequencer = sequencer(region, &[NoteEvent::new(90.0, 50.0, 60, 0.0, 1.0)]);
     sequencer.set_truncate_at_region_end(true);
     let first = pull(&mut sequencer, 0.0, 100.0);
@@ -121,7 +130,7 @@ fn the_chance_roll_stream_matches_the_ts_sequencer_seed() {
 fn chance_gates_notes_on_the_seeded_stream() {
     // chance 60 with the 0xFFF_F123 stream: roll 74.66 SKIPS the first pass, roll 48.38 PLAYS the second.
     // (The exact scenario of the Open Up vocal: TS skipped the first pass, the old WASM always played.)
-    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
     let mut note = NoteEvent::new(10.0, 20.0, 60, 0.0, 1.0);
     note.chance = 60.0;
     let mut sequencer = sequencer(region, &[note]);
@@ -136,7 +145,7 @@ fn chance_gates_notes_on_the_seeded_stream() {
 #[test]
 fn chance_100_notes_never_roll_and_always_play() {
     // A chance-100 note must NOT advance the RNG stream (TS short-circuits `chance < 100.0`).
-    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
+    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
     let mut gated = NoteEvent::new(50.0, 10.0, 62, 0.0, 1.0);
     gated.chance = 70.0;
     let plain = NoteEvent::new(10.0, 10.0, 60, 0.0, 1.0);
@@ -153,7 +162,7 @@ fn play_count_ratchets_the_note_linearly() {
     // lands EXACTLY on the pre-note grid point (index -1), which TS's `searchPosition >= searchStart`
     // includes — so the faithful result is FIVE repeats starting at 0 (the grid-aligned phantom), 10, 20,
     // 30, 40, each 10 long.
-    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
+    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: None};
     let mut note = NoteEvent::new(10.0, 40.0, 60, 0.0, 1.0);
     note.play_count = 4;
     let mut sequencer = sequencer(region, &[note]);
@@ -173,7 +182,7 @@ fn play_count_ratchets_the_note_linearly() {
 fn a_ratchet_spanning_blocks_retriggers_via_the_lookback() {
     // The note STARTS before the second block's window; the max-duration lookback must still find it so
     // the repeats inside the window fire (TS iterates from `localStart - collection.maxDuration`).
-    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 200.0, mute: false};
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 200.0, mute: false, groove: None};
     let mut note = NoteEvent::new(0.0, 160.0, 60, 0.0, 1.0);
     note.play_count = 4; // repeats at 0, 40, 80, 120
     let mut sequencer = sequencer(region, &[note]);
@@ -225,7 +234,7 @@ fn a_launched_clip_replaces_the_timeline_at_the_handover() {
     let mut clip_notes = EventCollection::new();
     clip_notes.add(NoteEvent::new(0.0, 10.0, 72, 0.0, 1.0));
     let source = TrackWithClip {
-        region: NoteRegion {position: 0.0, duration: 7680.0, loop_offset: 0.0, loop_duration: 7680.0, mute: false},
+        region: NoteRegion {position: 0.0, duration: 7680.0, loop_offset: 0.0, loop_duration: 7680.0, mute: false, groove: None},
         region_notes,
         clip_notes,
         clip: CLIP
@@ -245,7 +254,7 @@ fn a_launched_clip_replaces_the_timeline_at_the_handover() {
 }
 
 fn chance_region() -> (NoteRegion, Vec<NoteEvent>) {
-    let region = NoteRegion {position: 0.0, duration: 9600.0, loop_offset: 0.0, loop_duration: 9600.0, mute: false};
+    let region = NoteRegion {position: 0.0, duration: 9600.0, loop_offset: 0.0, loop_duration: 9600.0, mute: false, groove: None};
     let notes = (0..96).map(|step| {
         let mut note = NoteEvent::new(step as f64 * 100.0, 300.0, 60, 0.0, 1.0);
         note.chance = 50.0;
@@ -289,4 +298,82 @@ fn known_limit_a_layer_with_shifted_windows_may_resolve_chance_differently() {
     let (region, notes) = chance_region();
     let shifted = kept_positions(&mut sequencer(region, &notes), 45.0);
     assert_ne!(straight, shifted);
+}
+
+fn starts(events: &[Event]) -> Vec<(f64, f64)> {
+    events.iter().filter_map(|event| match event {
+        Event::NoteStart {position, duration, ..} => Some((*position, *duration)),
+        _ => None
+    }).collect()
+}
+
+#[test]
+fn a_grooved_region_moves_its_notes_and_keeps_their_length() {
+    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: Some(GROOVE)};
+    let mut sequencer = sequencer(region, &[NoteEvent::new(10.0, 20.0, 60, 0.0, 1.0)]);
+    assert!(starts(&pull(&mut sequencer, 0.0, 30.0)).is_empty(), "nothing before the grooved start");
+    let events = pull(&mut sequencer, 30.0, 60.0);
+    assert_eq!(starts(&events), vec![(40.0, 20.0)]);
+    assert!(events.iter().any(|event| matches!(event, Event::NoteComplete {position, ..} if *position == 60.0)) ||
+        pull(&mut sequencer, 60.0, 90.0).iter().any(|event| matches!(event, Event::NoteComplete {position, ..} if *position == 60.0)),
+        "released at 60");
+}
+
+#[test]
+fn an_offset_groove_moves_every_cycle_alike() {
+    let region = NoteRegion {position: 0.0, duration: 300.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: Some(GROOVE)};
+    let mut sequencer = sequencer(region, &[NoteEvent::new(0.0, 10.0, 60, 0.0, 1.0), NoteEvent::new(50.0, 10.0, 62, 0.0, 1.0)]);
+    let mut all = Vec::new();
+    for block in 0..30 {
+        all.extend(starts(&pull(&mut sequencer, block as f64 * 10.0, (block + 1) as f64 * 10.0)));
+    }
+    assert_eq!(all.iter().map(|start| start.0).collect::<Vec<_>>(), vec![30.0, 80.0, 130.0, 180.0, 230.0, 280.0]);
+}
+
+#[test]
+fn a_note_the_groove_moves_into_the_next_cycle_sounds_there_one_moved_past_the_region_end_does_not() {
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: Some(GROOVE)};
+    let mut sequencer = sequencer(region, &[NoteEvent::new(20.0, 10.0, 60, 0.0, 1.0), NoteEvent::new(80.0, 10.0, 62, 0.0, 1.0)]);
+    let mut all = Vec::new();
+    for block in 0..20 {
+        all.extend(starts(&pull(&mut sequencer, block as f64 * 10.0, (block + 1) as f64 * 10.0)));
+    }
+    assert_eq!(all.iter().map(|start| start.0).collect::<Vec<_>>(), vec![50.0, 110.0, 150.0]);
+}
+
+#[test]
+fn a_note_moved_past_the_region_end_stays_silent_also_when_a_block_spans_the_end() {
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: Some(GROOVE)};
+    let mut sequencer = sequencer(region, &[NoteEvent::new(20.0, 10.0, 60, 0.0, 1.0), NoteEvent::new(80.0, 10.0, 62, 0.0, 1.0)]);
+    let mut all = Vec::new();
+    for block in 0..12 {
+        all.extend(starts(&pull(&mut sequencer, block as f64 * 20.0 - 5.0, block as f64 * 20.0 + 15.0)));
+    }
+    assert_eq!(all.iter().map(|start| start.0).collect::<Vec<_>>(), vec![50.0, 110.0, 150.0]);
+}
+
+#[test]
+fn a_grooved_region_starts_its_groove_where_its_loop_starts() {
+    // the region starts 40 into its content, the groove still counts from the content start
+    let region = NoteRegion {position: 1000.0, duration: 60.0, loop_offset: 40.0, loop_duration: 100.0, mute: false, groove: Some(GROOVE)};
+    let mut sequencer = sequencer(region, &[NoteEvent::new(50.0, 10.0, 60, 0.0, 1.0)]);
+    let mut all = Vec::new();
+    for block in 0..20 {
+        let from = 1000.0 + block as f64 * 5.0;
+        all.extend(starts(&pull(&mut sequencer, from, from + 5.0)));
+    }
+    assert_eq!(all.iter().map(|start| start.0).collect::<Vec<_>>(), vec![1040.0]);
+}
+
+#[test]
+fn the_groove_runs_on_across_loop_cycles_instead_of_restarting() {
+    // a 100 loop played 4 times, the groove doubles every distance from the loop start: cycle k's note at 10 sounds at
+    // 2 * (100k + 10), the ones past the region end (400) do not
+    let region = NoteRegion {position: 0.0, duration: 400.0, loop_offset: 0.0, loop_duration: 100.0, mute: false, groove: Some(STRETCH)};
+    let mut sequencer = sequencer(region, &[NoteEvent::new(10.0, 5.0, 60, 0.0, 1.0)]);
+    let mut all = Vec::new();
+    for block in 0..80 {
+        all.extend(starts(&pull(&mut sequencer, block as f64 * 10.0, (block + 1) as f64 * 10.0)));
+    }
+    assert_eq!(all, vec![(20.0, 10.0), (220.0, 10.0)]);
 }

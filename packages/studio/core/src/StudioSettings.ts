@@ -1,4 +1,5 @@
 import {z} from "zod"
+import {ColorSchemes, DefaultColorScheme} from "@opendaw/studio-enums"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
 export const OverlappingRegionsBehaviourOptions = ["clip", "push-existing", "keep-existing"] as const
@@ -28,21 +29,25 @@ export const StudioSettingsSchema = z.object({
         "markers": z.boolean(),
         "tempo": z.boolean(),
         "signature": z.boolean(),
+        "key": z.boolean().catch(false),
+        "chords": z.boolean().catch(false),
         "clips": z.boolean(),
         "follow-cursor": z.boolean()
     }).default({
         "markers": true,
         "tempo": false,
         "signature": false,
+        "key": false,
+        "chords": false,
         "clips": true,
         "follow-cursor": false
     }),
     "appearance": z.object({
-        "neutral-hue": z.number().catch(197),
-        "neutral-saturation": z.number().catch(100)
+        "color-scheme": z.enum(ColorSchemes).catch(DefaultColorScheme),
+        "clamp-to-60fps": z.boolean().catch(true)
     }).default({
-        "neutral-hue": 197,
-        "neutral-saturation": 100
+        "color-scheme": DefaultColorScheme,
+        "clamp-to-60fps": true
     }),
     "time-display": z.object({
         "musical": z.boolean(),
@@ -73,10 +78,12 @@ export const StudioSettingsSchema = z.object({
     }),
     "editing": z.object({
         "overlapping-regions-behaviour": z.enum(OverlappingRegionsBehaviourOptions),
-        "show-clipboard-menu": z.boolean()
+        "show-clipboard-menu": z.boolean(),
+        "new-instrument-note-region": z.boolean().catch(true)
     }).default({
         "overlapping-regions-behaviour": "clip",
-        "show-clipboard-menu": false
+        "show-clipboard-menu": false,
+        "new-instrument-note-region": true
     }),
     "webclap": z.object({
         "default-zoom": z.union(WclapZoomOptions.map(value => z.literal(value))).catch(({input}) => nearestWclapZoom(input))
@@ -97,11 +104,6 @@ export const StudioSettingsSchema = z.object({
         "show-cpu-stats": false,
         "enable-beta-features": false,
         "enable-debug-menu": false
-    }),
-    "storage": z.object({
-        "auto-delete-orphaned-samples": z.boolean()
-    }).default({
-        "auto-delete-orphaned-samples": false
     })
 })
 

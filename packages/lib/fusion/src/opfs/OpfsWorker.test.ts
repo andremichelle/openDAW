@@ -1,12 +1,21 @@
 import {beforeEach, describe, expect, it, vi} from "vitest"
 import {OpfsProtocol} from "./OpfsProtocol"
 
-type FileData = { kind: "file", data: Uint8Array }
+type FileData = { kind: "file", data: Uint8Array, used?: number }
 type DirData = { kind: "directory", children: Map<string, FileData | DirData> }
 type EntryData = FileData | DirData
 
 const createMockFileSystem = () => {
     const root: Map<string, EntryData> = new Map()
+    const log: Array<string> = []
+    const locked: Set<string> = new Set()
+    const failTruncate: Set<string> = new Set()
+    const failWrite: Set<string> = new Set()
+    const shortRead: Set<string> = new Set()
+    const quota: { free: number, mode: "short" | "throw" } = {free: Number.POSITIVE_INFINITY, mode: "short"}
+    const containsLocked = (name: string, entry: EntryData): boolean => entry.kind === "file"
+        ? locked.has(name)
+        : Array.from(entry.children).some(([childName, child]) => containsLocked(childName, child))
     const resolveDir = (segments: ReadonlyArray<string>, create: boolean): Map<string, EntryData> => {
         let current = root
         for (const segment of segments) {
@@ -24,15 +33,28 @@ const createMockFileSystem = () => {
         }
         return current
     }
-    const createSyncAccessHandle = (fileEntry: FileData): FileSystemSyncAccessHandle => ({
+    const createSyncAccessHandle = (name: string, fileEntry: FileData): FileSystemSyncAccessHandle => ({
         getSize: () => fileEntry.data.length,
-        read: (buffer: Uint8Array) => {
-            buffer.set(fileEntry.data.subarray(0, buffer.length))
-            return Math.min(buffer.length, fileEntry.data.length)
-        },
-        write: (buffer: ArrayBuffer, options?: {at?: number}) => {
-            const src = new Uint8Array(buffer)
+        read: (buffer: Uint8Array, options?: {at?: number}) => {
             const at = options?.at ?? 0
+            const part = fileEntry.data.subarray(at, at + (shortRead.has(name) ? 1 : buffer.length))
+            buffer.set(part)
+            return part.length
+        },
+        // the disk holds what was written: growing past it takes free bytes, cutting gives them back
+        write: (buffer: ArrayBuffer, options?: {at?: number}) => {
+            if (failWrite.has(name)) {throw new DOMException("Broken", "InvalidStateError")}
+            const all = new Uint8Array(buffer)
+            const at = options?.at ?? 0
+            const used = fileEntry.used ?? 0
+            const room = Math.max(0, used - at) + quota.free
+            if (all.length > room && quota.mode === "throw") {
+                throw new DOMException("No space available for this operation", "QuotaExceededError")
+            }
+            const src = all.subarray(0, Math.min(all.length, room))
+            const growth = Math.max(0, at + src.length - used)
+            quota.free -= growth
+            fileEntry.used = used + growth
             if (at + src.length > fileEntry.data.length) {
                 const newData = new Uint8Array(at + src.length)
                 newData.set(fileEntry.data)
@@ -41,7 +63,18 @@ const createMockFileSystem = () => {
             fileEntry.data.set(src, at)
             return src.length
         },
-        truncate: (size: number) => {fileEntry.data = new Uint8Array(size)},
+        truncate: (size: number) => {
+            if (failTruncate.has(name)) {throw new DOMException("Broken", "InvalidStateError")}
+            log.push(`truncate ${name} ${size}`)
+            const used = fileEntry.used ?? 0
+            if (size < used) {
+                quota.free += used - size
+                fileEntry.used = size
+            }
+            const resized = new Uint8Array(size)
+            resized.set(fileEntry.data.subarray(0, size))
+            fileEntry.data = resized
+        },
         flush: () => {},
         close: () => {}
     } as unknown as FileSystemSyncAccessHandle)
@@ -50,7 +83,10 @@ const createMockFileSystem = () => {
         name,
         isSameEntry: async (_other: FileSystemHandle) => false,
         getFile: async () => new File([fileEntry.data.slice()], name),
-        createSyncAccessHandle: async () => createSyncAccessHandle(fileEntry)
+        createSyncAccessHandle: async () => {
+            if (locked.has(name)) {throw new DOMException("Locked", "NoModificationAllowedError")}
+            return createSyncAccessHandle(name, fileEntry)
+        }
     } as unknown as FileSystemFileHandle)
     const createDirectoryHandle = (children: Map<string, EntryData>, dirName: string = ""): FileSystemDirectoryHandle => {
         const handle: FileSystemDirectoryHandle = {
@@ -79,6 +115,11 @@ const createMockFileSystem = () => {
                 return createFileHandle(name, entry)
             },
             async removeEntry(name: string, _options?: FileSystemRemoveOptions) {
+                const entry = children.get(name)
+                if (entry === undefined) {throw new DOMException("Not found", "NotFoundError")}
+                // like OPFS: an entry with an open sync access handle cannot be removed
+                if (containsLocked(name, entry)) {throw new DOMException("Locked", "NoModificationAllowedError")}
+                log.push(`remove ${name}`)
                 children.delete(name)
             },
             async *values() {
@@ -90,9 +131,10 @@ const createMockFileSystem = () => {
             },
             async *entries() {
                 for (const [name, entry] of children) {
-                    yield [name, entry.kind === "file"
+                    const pair: [string, FileSystemHandle] = [name, entry.kind === "file"
                         ? createFileHandle(name, entry)
-                        : createDirectoryHandle(entry.children)] as any
+                        : createDirectoryHandle(entry.children, name)]
+                    yield pair
                 }
             },
             async *keys() {
@@ -102,7 +144,7 @@ const createMockFileSystem = () => {
         } as unknown as FileSystemDirectoryHandle
         return handle
     }
-    return {root, createDirectoryHandle: () => createDirectoryHandle(root)}
+    return {root, log, locked, failTruncate, failWrite, shortRead, quota, createDirectoryHandle: () => createDirectoryHandle(root)}
 }
 
 let protocol: OpfsProtocol
@@ -161,6 +203,112 @@ describe("OpfsWorker", () => {
             await protocol.write("empty.bin", new Uint8Array(0))
             const entry = mockFs.root.get("empty.bin") as FileData
             expect(entry.data.length).toBe(0)
+        })
+        it("writes only the bytes of a view, not its whole buffer", async () => {
+            const buffer = new Uint8Array([9, 9, 1, 2, 3, 9])
+            await protocol.write("view.bin", buffer.subarray(2, 5))
+            expect(Array.from((mockFs.root.get("view.bin") as FileData).data)).toEqual([1, 2, 3])
+        })
+    })
+
+    // Chrome writes what fits and returns the count instead of throwing (Riffle, Chromium 153)
+    describe("full disk", () => {
+        const silence = () => vi.spyOn(console, "error").mockImplementation(() => {})
+        it("rejects a short write with a QuotaExceededError", async () => {
+            const error = silence()
+            mockFs.quota.free = 2
+            const result = await protocol.write("short.bin", new Uint8Array([1, 2, 3, 4])).then(() => null, reason => reason)
+            expect(result).toBeInstanceOf(DOMException)
+            expect((result as DOMException).name).toBe("QuotaExceededError")
+            expect((result as DOMException).message).toBe("Wrote 2 of 4 bytes to 'short.bin'")
+            error.mockRestore()
+        })
+        it("empties the file of a short write", async () => {
+            const error = silence()
+            mockFs.quota.free = 2
+            await expect(protocol.write("short.bin", new Uint8Array([1, 2, 3, 4]))).rejects.toThrow()
+            expect((mockFs.root.get("short.bin") as FileData).data.length).toBe(0)
+            error.mockRestore()
+        })
+        it("empties the file of a write that throws", async () => {
+            const error = silence()
+            mockFs.quota.mode = "throw"
+            mockFs.quota.free = 2
+            const result = await protocol.write("full.bin", new Uint8Array([1, 2, 3, 4])).then(() => null, reason => reason)
+            expect((result as DOMException).name).toBe("QuotaExceededError")
+            expect((mockFs.root.get("full.bin") as FileData).data.length).toBe(0)
+            error.mockRestore()
+        })
+        it("restores an existing file that a failed write overwrote in part", async () => {
+            const error = silence()
+            await protocol.write("old.bin", new Uint8Array([7, 7, 7, 7]))
+            mockFs.quota.free = 1
+            const result = await protocol.write("old.bin", new Uint8Array([1, 2, 3, 4, 5, 6])).then(() => null, reason => reason)
+            expect((result as DOMException).name).toBe("QuotaExceededError")
+            expect(Array.from((mockFs.root.get("old.bin") as FileData).data)).toEqual([7, 7, 7, 7])
+            error.mockRestore()
+        })
+        it("restores an existing file when the disk is full and the write throws", async () => {
+            const error = silence()
+            await protocol.write("meta.json", new Uint8Array([1, 2, 3]))
+            mockFs.quota.mode = "throw"
+            mockFs.quota.free = 0
+            await expect(protocol.write("meta.json", new Uint8Array([4, 5, 6, 7, 8]))).rejects.toThrow()
+            expect(Array.from((mockFs.root.get("meta.json") as FileData).data)).toEqual([1, 2, 3])
+            error.mockRestore()
+        })
+        it("gives the bytes of a failed write back to the disk", async () => {
+            const error = silence()
+            await protocol.write("old.bin", new Uint8Array([7, 7]))
+            mockFs.quota.free = 3
+            await expect(protocol.write("old.bin", new Uint8Array(10))).rejects.toThrow()
+            expect(mockFs.quota.free).toBe(3)
+            error.mockRestore()
+        })
+        it("empties a file it could not read beforehand", async () => {
+            const error = silence()
+            await protocol.write("old.bin", new Uint8Array([7, 7, 7, 7]))
+            mockFs.shortRead.add("old.bin")
+            mockFs.failWrite.add("old.bin")
+            await expect(protocol.write("old.bin", new Uint8Array([1, 2, 3, 4, 5, 6]))).rejects.toThrow("Broken")
+            expect((mockFs.root.get("old.bin") as FileData).data.length).toBe(0)
+            error.mockRestore()
+        })
+        it("empties an existing file it cannot restore", async () => {
+            const error = silence()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            await protocol.write("old.bin", new Uint8Array([7, 7, 7, 7]))
+            mockFs.failWrite.add("old.bin")
+            await expect(protocol.write("old.bin", new Uint8Array([1, 2, 3, 4, 5, 6]))).rejects.toThrow("Broken")
+            expect((mockFs.root.get("old.bin") as FileData).data.length).toBe(0)
+            expect(warn.mock.calls[0][0]).toBe("[OPFS] could not restore 'old.bin' after a failed write")
+            warn.mockRestore()
+            error.mockRestore()
+        })
+        it("leaves a file untouched when it cannot even be sized", async () => {
+            const error = silence()
+            await protocol.write("kept.bin", new Uint8Array([7, 7]))
+            mockFs.failTruncate.add("kept.bin")
+            await expect(protocol.write("kept.bin", new Uint8Array([1, 2, 3]))).rejects.toThrow()
+            expect(Array.from((mockFs.root.get("kept.bin") as FileData).data)).toEqual([7, 7])
+            error.mockRestore()
+        })
+        it("writes whole files again once there is room", async () => {
+            const error = silence()
+            mockFs.quota.free = 2
+            await expect(protocol.write("again.bin", new Uint8Array([1, 2, 3]))).rejects.toThrow()
+            mockFs.quota.free = Number.POSITIVE_INFINITY
+            await protocol.write("again.bin", new Uint8Array([1, 2, 3]))
+            expect(Array.from((mockFs.root.get("again.bin") as FileData).data)).toEqual([1, 2, 3])
+            error.mockRestore()
+        })
+        it("releases the path lock after a failed write", async () => {
+            const error = silence()
+            mockFs.quota.free = 0
+            await expect(protocol.write("lock.bin", new Uint8Array([1]))).rejects.toThrow()
+            mockFs.quota.free = Number.POSITIVE_INFINITY
+            await expect(protocol.read("lock.bin")).resolves.toEqual(new Uint8Array(0))
+            error.mockRestore()
         })
     })
 
@@ -225,6 +373,96 @@ describe("OpfsWorker", () => {
             await protocol.write("b.bin", new Uint8Array([2]))
             await protocol.delete("")
             expect(mockFs.root.size).toBe(0)
+        })
+    })
+
+    // Chrome adds nothing to the saved usage for sync-handle writes but subtracts a removed file's size,
+    // unless the file was truncated to 0 first (issue #527, Chromium 436552046 / 401692415)
+    describe("truncate before remove (issue #527)", () => {
+        it("truncates a file to 0 before removing it", async () => {
+            await protocol.write("doomed.bin", new Uint8Array([1, 2, 3]))
+            mockFs.log.length = 0
+            await protocol.delete("doomed.bin")
+            expect(mockFs.log).toEqual(["truncate doomed.bin 0", "remove doomed.bin"])
+        })
+        it("truncates a nested file before removing it", async () => {
+            await protocol.write("x/y/z.bin", new Uint8Array([1]))
+            mockFs.log.length = 0
+            await protocol.delete("x/y/z.bin")
+            expect(mockFs.log).toEqual(["truncate z.bin 0", "remove z.bin"])
+        })
+        it("truncates every file of a directory before removing it", async () => {
+            await protocol.write("rm/a.bin", new Uint8Array([1]))
+            await protocol.write("rm/sub/b.bin", new Uint8Array([2]))
+            mockFs.log.length = 0
+            await protocol.delete("rm")
+            expect(mockFs.log).toEqual([
+                "truncate a.bin 0", "remove a.bin", "truncate b.bin 0", "remove b.bin", "remove sub", "remove rm"])
+            expect(mockFs.root.has("rm")).toBe(false)
+        })
+        it("removes meta.json of a folder before its other files", async () => {
+            await protocol.write("entry/audio.wav", new Uint8Array([1]))
+            await protocol.write("entry/peaks.bin", new Uint8Array([2]))
+            await protocol.write("entry/meta.json", new Uint8Array([3]))
+            mockFs.log.length = 0
+            await protocol.delete("entry")
+            expect(mockFs.log.filter(entry => entry.startsWith("remove"))).toEqual([
+                "remove meta.json", "remove audio.wav", "remove peaks.bin", "remove entry"])
+        })
+        it("leaves no meta.json behind when a folder removal is cut short", async () => {
+            await protocol.write("entry/audio.wav", new Uint8Array([1]))
+            await protocol.write("entry/meta.json", new Uint8Array([3]))
+            mockFs.locked.add("audio.wav")
+            await protocol.delete("entry")
+            const dir = mockFs.root.get("entry") as DirData
+            expect(Array.from(dir.children.keys())).toEqual(["audio.wav"])
+        })
+        it("truncates every file before clearing the root", async () => {
+            await protocol.write("file1.bin", new Uint8Array([1]))
+            await protocol.write("dir/file2.bin", new Uint8Array([2]))
+            mockFs.log.length = 0
+            await protocol.delete("")
+            expect(mockFs.log).toEqual(["truncate file1.bin 0", "remove file1.bin", "truncate file2.bin 0", "remove file2.bin", "remove dir"])
+            expect(mockFs.root.size).toBe(0)
+        })
+        it("never leaves an emptied file behind when a directory cannot be removed", async () => {
+            await protocol.write("rm/open.bin", new Uint8Array([1]))
+            await protocol.write("rm/busy.bin", new Uint8Array([2, 3]))
+            mockFs.locked.add("busy.bin")
+            mockFs.log.length = 0
+            await protocol.delete("rm")
+            expect(mockFs.log).toEqual(["truncate open.bin 0", "remove open.bin"])
+            const dir = mockFs.root.get("rm") as DirData
+            expect(Array.from(dir.children.keys())).toEqual(["busy.bin"])
+            expect(Array.from((dir.children.get("busy.bin") as FileData).data)).toEqual([2, 3])
+        })
+        it("leaves a locked file intact and warns", async () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            await protocol.write("busy.bin", new Uint8Array([4, 5]))
+            mockFs.locked.add("busy.bin")
+            mockFs.log.length = 0
+            await expect(protocol.delete("busy.bin")).resolves.toBeUndefined()
+            expect(mockFs.log).toEqual([])
+            expect(Array.from((mockFs.root.get("busy.bin") as FileData).data)).toEqual([4, 5])
+            expect(warn.mock.calls[0][0]).toBe("[OPFS] could not open 'busy.bin' to empty it before removal")
+            warn.mockRestore()
+        })
+        it("warns and still removes a file that cannot be truncated", async () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            await protocol.write("stubborn.bin", new Uint8Array([1]))
+            mockFs.failTruncate.add("stubborn.bin")
+            mockFs.log.length = 0
+            await protocol.delete("stubborn.bin")
+            expect(mockFs.log).toEqual(["remove stubborn.bin"])
+            expect(warn).toHaveBeenCalledTimes(1)
+            expect(warn.mock.calls[0][0]).toBe("[OPFS] could not empty 'stubborn.bin' before removal")
+            warn.mockRestore()
+        })
+        it("does not truncate when the path does not exist", async () => {
+            mockFs.log.length = 0
+            await expect(protocol.delete("nope/nothing")).resolves.toBeUndefined()
+            await expect(protocol.delete("nothing.bin")).resolves.toBeUndefined()
+            expect(mockFs.log.filter(entry => entry.startsWith("truncate"))).toEqual([])
         })
     })
 
@@ -299,6 +537,62 @@ describe("OpfsWorker", () => {
             expect(results).toHaveLength(2)
             expect(results).toContain("a")
             expect(results).toContain("b")
+        })
+    })
+
+    describe("lock wait warnings", () => {
+        it("names the holder and the step it hangs at", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            // a sync access handle that never opens, holding the path lock forever
+            const hangingRoot = {getFileHandle: async () => ({createSyncAccessHandle: () => new Promise(() => {})})}
+            vi.stubGlobal("navigator", {storage: {getDirectory: async () => hangingRoot}})
+            void protocol.read("stuck.json")
+            void protocol.read("stuck.json")
+            await vi.advanceTimersByTimeAsync(1900)
+            expect(warn).not.toHaveBeenCalled()
+            await vi.advanceTimersByTimeAsync(200)
+            expect(warn).toHaveBeenCalledTimes(1)
+            expect(warn.mock.calls[0][0]).toMatch(
+                /^\[OPFS] read 'stuck\.json' waits \d+\.\ds for read held for \d+\.\ds at 'create sync access handle'$/)
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+        it("stays silent when the holder finishes in time", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            await protocol.write("quick.bin", new Uint8Array([1]))
+            await Promise.all([protocol.read("quick.bin"), protocol.read("quick.bin"), protocol.write("quick.bin", new Uint8Array([2]))])
+            await vi.advanceTimersByTimeAsync(5000)
+            expect(warn).not.toHaveBeenCalled()
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+        it("a lone hanging operation names its own step after 5s", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            // no second caller, so no waiter warning can fire
+            const hangingRoot = {getFileHandle: async () => ({createSyncAccessHandle: () => new Promise(() => {})})}
+            vi.stubGlobal("navigator", {storage: {getDirectory: async () => hangingRoot}})
+            void protocol.read("alone.json")
+            await vi.advanceTimersByTimeAsync(4900)
+            expect(warn).not.toHaveBeenCalled()
+            await vi.advanceTimersByTimeAsync(200)
+            expect(warn).toHaveBeenCalledTimes(1)
+            expect(warn.mock.calls[0][0]).toMatch(/^\[OPFS] read 'alone\.json' runs for \d+\.\ds at 'create sync access handle'$/)
+            await vi.advanceTimersByTimeAsync(20000)
+            expect(warn).toHaveBeenCalledTimes(1)
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+        it("a failing operation clears its hold warning", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            await expect(protocol.read("missing.json")).rejects.toBeDefined()
+            await vi.advanceTimersByTimeAsync(10000)
+            expect(warn).not.toHaveBeenCalled()
+            warn.mockRestore()
+            vi.useRealTimers()
         })
     })
 

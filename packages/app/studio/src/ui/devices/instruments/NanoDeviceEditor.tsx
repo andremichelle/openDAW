@@ -6,11 +6,11 @@ import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DeviceHost, InstrumentFactories, NanoDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {CanvasPainter, MenuItem} from "@opendaw/studio-core"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@opendaw/studio-enums"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {Icon} from "@/ui/components/Icon"
-import {Checkbox} from "@/ui/components/Checkbox"
+import {RadioGroup} from "@/ui/components/RadioGroup"
 import {AutomationControl} from "@/ui/components/AutomationControl"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
@@ -18,7 +18,12 @@ import {StudioService} from "@/service/StudioService"
 import {paintWaveform} from "./NanoDeviceEditor/WaveformPainter"
 import {attachMarkerDragging} from "./NanoDeviceEditor/MarkerDragging"
 import {subscribePlayheads} from "./NanoDeviceEditor/PlayheadPainter"
-import {ControlContext, createParameterRow, createParameterStack} from "./NanoDeviceEditor/ParameterControls"
+import {
+    ControlContext,
+    createParameterRow,
+    createParameterStack,
+    createParameterToggle
+} from "./NanoDeviceEditor/ParameterControls"
 
 const className = Html.adoptStyleSheet(css, "NanoDeviceEditor")
 
@@ -31,18 +36,8 @@ type Construct = {
 
 export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {
-        volume,
-        octave,
-        attack,
-        release,
-        sampleStart,
-        sampleEnd,
-        rootKey,
-        loop,
-        loopFade,
-        loopStart,
-        loopEnd,
-        tune
+        volume, panning, octave, attack, release, sampleStart, sampleEnd, rootKey, polyphone, oneShot, fixedPitch,
+        loop, loopFade, loopStart, loopEnd, tune
     } = adapter.namedParameter
     const {project} = service
     const {editing, midiLearning, liveStreamReceiver} = project
@@ -125,7 +120,28 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       populateControls={() => (
                           <div className={className}>
                               {display}
-                              {createParameterStack(controls, "main", "Main", rootKey, volume)}
+                              <div className="parameter-stack wide play">
+                                  <div className="label">Play</div>
+                                  {createParameterRow(controls, rootKey)}
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={polyphone}>
+                                      <RadioGroup lifecycle={lifecycle}
+                                                  appearance={{framed: true}}
+                                                  className="mode"
+                                                  model={EditWrapper.forAutomatableParameter(editing, polyphone)}
+                                                  elements={[
+                                                      {value: false, element: (<span>Mono</span>)},
+                                                      {value: true, element: (<span>Poly</span>)}
+                                                  ]}/>
+                                  </AutomationControl>
+                                  <div className="name">Fixed</div>
+                                  {createParameterToggle(controls, fixedPitch)}
+                                  <div className="name second">Shot</div>
+                                  {createParameterToggle(controls, oneShot)}
+                              </div>
                               {createParameterStack(controls, "pitch", "Pitch", tune, octave)}
                               {createParameterStack(controls, "envelope", "Envelope", attack, release)}
                               {createParameterStack(controls, "waveform", "Waveform", sampleStart, sampleEnd)}
@@ -135,19 +151,9 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                   {createParameterRow(controls, loopFade, "Fade", true)}
                                   {createParameterRow(controls, loopEnd, "End")}
                                   <div className="name second">On</div>
-                                  <AutomationControl lifecycle={lifecycle}
-                                                     editing={editing}
-                                                     midiLearning={midiLearning}
-                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
-                                                     parameter={loop}>
-                                      <Checkbox lifecycle={lifecycle}
-                                                model={EditWrapper.forAutomatableParameter(editing, loop)}
-                                                className="toggle"
-                                                appearance={{activeColor: Colors.green}}>
-                                          <Icon symbol={IconSymbol.Checkbox}/>
-                                      </Checkbox>
-                                  </AutomationControl>
+                                  {createParameterToggle(controls, loop)}
                               </div>
+                              {createParameterStack(controls, "mix", "Mix", volume, panning)}
                           </div>
                       )}
                       populateMeter={() => (

@@ -16,3 +16,7 @@ openDAW is dual-licensed:
 
 - **AGPL v3 (or later)** — the open-source option. You may use, modify and distribute openDAW as long as the combined work is released under AGPL-compatible terms; this also covers public use over a network (SaaS).
 - **Commercial License** — for incorporating openDAW into closed-source or otherwise licence-incompatible software or SaaS, without the copyleft obligations. Email `andre.michelle@opendaw.org` to obtain it.
+
+## Third-party code
+
+Mastering is based on [Matchering](https://github.com/sergree/matchering) by Sergree, licensed under the GPL-3.0. The port is part of the studio only, not of the SDK, and it is not covered by the commercial license.

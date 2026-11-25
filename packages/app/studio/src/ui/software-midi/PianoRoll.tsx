@@ -44,7 +44,7 @@ export const PianoRoll = ({lifecycle, pianoLayout}: Construct): SVGElement => {
                     <Frag>
                         <rect classList="black" data-key={key} x={x} y={-2} rx={1} ry={1}
                               width={blackKeys.width} height={blackKeys.height}/>
-                        <text x={(x + blackKeys.width / 2).toString()}
+                        <text classList="black" x={(x + blackKeys.width / 2).toString()}
                               y={(blackKeys.height - 6).toString()}
                               fill="white"
                               font-size={fontSize}

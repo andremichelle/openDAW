@@ -4,7 +4,8 @@ import {Pointers} from "@opendaw/studio-enums"
 const CaptureAttributes = {
     1: {type: "string", name: "device-id"},
     2: {type: "string", name: "record-mode", value: "normal"}, // "normal" | "replace" | "punch"
-    ...reserveMany(3, 4, 5, 6, 7, 8, 9)
+    3: {type: "boolean", name: "armed", value: false},
+    ...reserveMany(4, 5, 6, 7, 8, 9)
 } as const satisfies FieldRecord<Pointers>
 
 export const CaptureAudioBox: BoxSchema<Pointers> = {
@@ -24,7 +25,10 @@ export const CaptureAudioBox: BoxSchema<Pointers> = {
             12: {
                 type: "float32", name: "input-latency",
                 value: -2.0, constraints: "any", unit: "s"
-            }
+            },
+            // bit n = input channel n feeds that side, 0 on both = follow request-channels
+            13: {type: "int32", name: "left-inputs", value: 0, constraints: "any", unit: ""},
+            14: {type: "int32", name: "right-inputs", value: 0, constraints: "any", unit: ""}
         })
     }, pointerRules: {accepts: [Pointers.Capture], mandatory: true}
 }

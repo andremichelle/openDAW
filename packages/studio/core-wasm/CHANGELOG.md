@@ -3,6 +3,72 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.1.5](/compare/@opendaw/studio-core-wasm@0.1.4...@opendaw/studio-core-wasm@0.1.5) (2026-11-20)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.1.4](/compare/@opendaw/studio-core-wasm@0.1.3...@opendaw/studio-core-wasm@0.1.4) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.1.3](/compare/@opendaw/studio-core-wasm@0.1.2...@opendaw/studio-core-wasm@0.1.3) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.1.2](/compare/@opendaw/studio-core-wasm@0.1.1...@opendaw/studio-core-wasm@0.1.2) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.1.1](/compare/@opendaw/studio-core-wasm@0.1.0...@opendaw/studio-core-wasm@0.1.1) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+# [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.28...@opendaw/studio-core-wasm@0.1.0) (2026-11-10)
+
+### Bug Fixes
+
+- delete group subtrees instead of ungrouping children ([775fa97](https://github.com/andremichelle/openDAW/commit/775fa9767fff9081bc137da8101dddedb8454f4b))
+
+### Features
+
+- add nested audio group model, routing and duplication ([b2599ee](https://github.com/andremichelle/openDAW/commit/b2599ee4b00ddf73688235fcb7abf775d289b852))
+
+## [0.0.28](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.27...@opendaw/studio-core-wasm@0.0.28) (2026-11-09)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.0.27](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.26...@opendaw/studio-core-wasm@0.0.27) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.0.26](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.25...@opendaw/studio-core-wasm@0.0.26) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.0.25](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.24...@opendaw/studio-core-wasm@0.0.25) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.0.24](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.23...@opendaw/studio-core-wasm@0.0.24) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.0.23](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.22...@opendaw/studio-core-wasm@0.0.23) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.0.22](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.21...@opendaw/studio-core-wasm@0.0.22) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.0.21](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.20...@opendaw/studio-core-wasm@0.0.21) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
+## [0.0.20](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.19...@opendaw/studio-core-wasm@0.0.20) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/studio-core-wasm
+
 ## [0.0.19](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-wasm@0.0.18...@opendaw/studio-core-wasm@0.0.19) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/studio-core-wasm

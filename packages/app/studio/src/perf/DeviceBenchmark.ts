@@ -82,6 +82,7 @@ const audioEffects: ReadonlyArray<DeviceSpec> = [
         addToUnit: (boxGraph, unit) => DelayDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
             box.index.setValue(0)
+            box.version.setValue(1)
         })
     },
     {

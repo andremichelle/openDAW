@@ -24,16 +24,20 @@ import {
 import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider, TrafficMeter} from "@opendaw/studio-p2p"
 import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
+import {TrackGrouping} from "@/ui/timeline/tracks/audio-unit/TrackGrouping"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {createPanelFactory} from "@/ui/workspace/PanelFactory.tsx"
-import {SpotlightDataSupplier} from "@/ui/spotlight/SpotlightDataSupplier.ts"
+import {Spotlight} from "@/ui/spotlight/Spotlight"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
+import {GrooveReveal} from "@/ui/grooves/GrooveReveal"
+import {panelTab} from "@/ui/grooves/PanelTabs"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
 import {SamplePlayback} from "@/service/SamplePlayback"
+import {SampleEditorService} from "@/service/SampleEditorService"
 import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioNavigation} from "./StudioNavigation"
 import {StudioSignal} from "./StudioSignal"
@@ -45,6 +49,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {
+    AssetCache,
     AudioContentFactory,
     AudioContexts,
     AudioMaterialAnalyzer,
@@ -75,6 +80,7 @@ import {
 import {ProjectDialogs} from "@/project/ProjectDialogs"
 import {PresetService} from "@/ui/browse/PresetService"
 import {AudioFileBox, AudioUnitBox} from "@opendaw/studio-boxes"
+import {WasmEngine} from "@opendaw/studio-core-wasm"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
@@ -82,7 +88,12 @@ import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
 import {RoomAwareness} from "@/service/RoomAwareness"
+import {MidiAccessOnLoad} from "@/service/MidiAccessOnLoad"
+import {ArmedCaptures} from "@/service/ArmedCaptures"
 import {ChatService} from "@/chat/ChatService"
+import {CallService} from "@/call/CallService"
+import {FollowService} from "@/follow/FollowService"
+import {StudioAssetCache} from "@/storage/StudioAssetCache"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -100,30 +111,38 @@ const snapping = new Snapping(range)
 const STRETCH_WASM_URL = `${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wasm.wasm`
 
 export class StudioService implements ProjectEnv {
+    readonly storeArmed = true
     readonly layout = {
         screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default"),
-        browseScope: new DefaultObservableValue<BrowseScope>(BrowseScope.Presets)
+        browseScope: new DefaultObservableValue<BrowseScope>(BrowseScope.Samples)
     } as const
     readonly timeline = {
         range,
         snapping,
         clips: {
             count: new DefaultObservableValue(3),
+            columns: new DefaultObservableValue(8),
+            scroll: new DefaultObservableValue(0),
             visible: StudioPreferences.createMutableObservableValue("timeline", "clips")
         },
         followCursor: StudioPreferences.createMutableObservableValue("timeline", "follow-cursor"),
         primaryVisibility: {
             markers: StudioPreferences.createMutableObservableValue("timeline", "markers"),
             tempo: StudioPreferences.createMutableObservableValue("timeline", "tempo"),
-            signature: StudioPreferences.createMutableObservableValue("timeline", "signature")
+            signature: StudioPreferences.createMutableObservableValue("timeline", "signature"),
+            key: StudioPreferences.createMutableObservableValue("timeline", "key"),
+            chords: StudioPreferences.createMutableObservableValue("timeline", "chords")
         }
     } as const
     readonly menu = populateStudioMenu(this)
     readonly panelLayout = new PanelContents(createPanelFactory(this))
-    readonly spotlightDataSupplier = new SpotlightDataSupplier()
+    readonly spotlight = new Spotlight(this)
     readonly samplePlayback: SamplePlayback
+    readonly assetCache: AssetCache
+    readonly sampleEditor: SampleEditorService
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
+    readonly engineErrors = new Notifier<Event>()
     readonly presets = new PresetService(this)
     readonly materialAnalyzer = new AudioMaterialAnalyzer(STRETCH_WASM_URL)
 
@@ -138,6 +157,8 @@ export class StudioService implements ProjectEnv {
     readonly #roomAwareness = new DefaultObservableValue<Nullable<RoomAwareness>>(null)
     readonly #trafficMeter = new DefaultObservableValue<Nullable<TrafficMeter>>(null)
     readonly #chatService = new MutableObservableOption<ChatService>()
+    readonly #callService = new MutableObservableOption<CallService>()
+    readonly #followService = new MutableObservableOption<FollowService>()
 
     #shadertoyState: Option<ShadertoyState> = Option.None
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
@@ -164,8 +185,18 @@ export class StudioService implements ProjectEnv {
             soundfont
         }))
         this.samplePlayback = new SamplePlayback()
-        ModulatorReveal.requested.subscribe(option =>
-            option.ifSome(() => {if (this.hasProfile) {this.switchScreen("modulation")}}))
+        this.assetCache = StudioAssetCache.create(sampleManager, soundfontManager)
+        this.sampleEditor = new SampleEditorService(this)
+        ModulatorReveal.requested.subscribe(option => option.ifSome(() => {
+            if (!this.hasProfile) {return}
+            panelTab.setValue("modulators")
+            this.switchScreen("modulation")
+        }))
+        GrooveReveal.requested.subscribe(option => option.ifSome(() => {
+            if (!this.hasProfile) {return}
+            panelTab.setValue("grooves")
+            this.switchScreen("modulation")
+        }))
         this.#projectProfileService = new ProjectProfileService({
             env: this,
             sampleService: this.#sampleService, sampleManager: this.sampleManager,
@@ -175,7 +206,6 @@ export class StudioService implements ProjectEnv {
         this.#navigation = new StudioNavigation(this.layout.screen, this.#projectProfileService)
         this.#listenProject()
         this.#installConsoleCommands()
-        this.#populateSpotlightData()
         this.#configBeforeUnload()
         this.#checkRecovery()
         this.#listenPreferences()
@@ -187,6 +217,7 @@ export class StudioService implements ProjectEnv {
     get projectProfileService(): ProjectProfileService {return this.#projectProfileService}
 
     panicEngine(): void {this.runIfProject(({engine}) => engine.panic())}
+    restartEngine(): void {this.runIfProject(({engine}) => engine.restart())}
 
     async newProject() {
         if (!await this.#projectProfileService.approveLosingChanges()) {return}
@@ -245,7 +276,7 @@ export class StudioService implements ProjectEnv {
                     RuntimeNotifier.notify({message: "No stems to export.", icon: "Info"})
                     return
                 }
-                const {status: dialogStatus, error: dialogError, value: config} =
+                const {status: dialogStatus, error: dialogError, value: result} =
                     await Promises.tryCatch(ProjectDialogs.showExportStemsDialog(project))
                 if (dialogStatus === "rejected") {
                     if (Errors.isAbort(dialogError)) {return}
@@ -253,9 +284,10 @@ export class StudioService implements ProjectEnv {
                     RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                     return
                 }
-                ExportConfiguration.sanitizeExportNamesInPlace(config)
+                const {configuration, section} = result
+                ExportConfiguration.sanitizeExportNamesInPlace(configuration)
                 await this.audioContext.suspend()
-                const {status, error} = await Promises.tryCatch(Mixdowns.exportStems(profile, config))
+                const {status, error} = await Promises.tryCatch(Mixdowns.exportStems(profile, configuration, section))
                 if (status === "rejected" && !Errors.isAbort(error)) {
                     console.warn(error)
                     RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
@@ -271,6 +303,12 @@ export class StudioService implements ProjectEnv {
     }
 
     async exportDawproject() {
+        const approved = await Dialogs.approve({
+            headline: "Export DAWproject",
+            message: "DAWproject is an experimental exchange format by Bitwig.\nDevices and their settings may not survive the conversion, so the exported file is not a reliable copy of your project. Do not use it as a backup. To back up your work or send it to another user, use 'Save Bundle File to Disk...' instead.",
+            approveText: "Export"
+        })
+        if (!approved) {return}
         return this.#projectProfileService.getValue().ifSome(profile => DawProjectService.exportDawproject(profile))
     }
 
@@ -383,6 +421,8 @@ export class StudioService implements ProjectEnv {
     get trafficMeter(): DefaultObservableValue<Nullable<TrafficMeter>> {return this.#trafficMeter}
     setTrafficMeter(value: Nullable<TrafficMeter>): void {this.#trafficMeter.setValue(value)}
     get chatService(): MutableObservableOption<ChatService> {return this.#chatService}
+    get callService(): MutableObservableOption<CallService> {return this.#callService}
+    get followService(): MutableObservableOption<FollowService> {return this.#followService}
 
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
     get activeCodeEditor(): MutableObservableOption<CodeEditorState> {return this.#activeCodeEditor}
@@ -458,11 +498,16 @@ export class StudioService implements ProjectEnv {
                 if (timelineBoxAdapter.signatureTrack.size > 0) {
                     this.timeline.primaryVisibility.signature.setValue(true)
                 }
+                // Key + Chords
+                this.timeline.primaryVisibility.key.setValue(!timelineBoxAdapter.keyTrack.events.isEmpty())
+                this.timeline.primaryVisibility.chords.setValue(!timelineBoxAdapter.chordTrack.events.isEmpty())
                 // Clips
                 const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()
                         .reduce((max, track) => Math.max(max, track.clips.collection
                             .getMinFreeIndex()), 0)), 0)
+                this.timeline.clips.scroll.setValue(0)
+                this.timeline.clips.columns.setValue(Math.max(8, maxClipIndex + 1))
                 if (maxClipIndex > 0) {
                     this.timeline.clips.count.setValue(Math.max(maxClipIndex + 1, 3))
                     this.timeline.clips.visible.setValue(true)
@@ -472,6 +517,7 @@ export class StudioService implements ProjectEnv {
                 let screen: Nullable<Workspace.ScreenKeys> = null
                 const restart: RestartWorklet = {
                     unload: async (event: unknown) => {
+                        if (event instanceof Event) {this.engineErrors.notify(event)}
                         screen = this.layout.screen.getValue()
                         // we need to restart the screen to subscribe to new broadcaster instances
                         this.switchScreen(null)
@@ -487,6 +533,19 @@ export class StudioService implements ProjectEnv {
                         if (!this.#projectProfileService.getValue().contains(profile)) {return}
                         this.engine.setWorklet(engine)
                         this.switchScreen(screen)
+                    },
+                    failedToStart: (event: unknown) => {
+                        WasmEngine.probe(this.audioContext)
+                            .catch(reason => console.warn("[WorkletProbe] failed", reason))
+                            .finally(() => {if (event instanceof Event) {this.engineErrors.notify(event)}})
+                        this.switchScreen(null)
+                        this.engine.releaseWorklet()
+                        Dialogs.show({
+                            headline: "Audio-Engine Error",
+                            content: "This machine cannot run the audio engine.",
+                            excludeOk: true,
+                            cancelable: false
+                        }).catch(EmptyExec)
                     }
                 }
                 this.engine.releaseWorklet()
@@ -509,11 +568,14 @@ export class StudioService implements ProjectEnv {
                 lifeTime.ownAll(
                     project,
                     snapping.registerSignatureTrackAdapter(project.timelineBoxAdapter.signatureTrack),
+                    TrackGrouping.deselectHiddenTracks(project),
                     userEditingManager.timeline.catchupAndSubscribe(option => option
                         .ifSome(() => AnimationFrame.once(() => this.panelLayout.showIfAvailable(PanelType.ContentEditor)))),
                     timelineBox.durationInPulses.catchupAndSubscribe(owner => range.maxUnits = owner.getValue() + PPQN.Bar)
                 )
                 this.#navigation.onProjectOpened()
+                ArmedCaptures.restore(project)
+                MidiAccessOnLoad.check(project).finally()
             } else {
                 this.engine.releaseWorklet()
                 range.maxUnits = PPQN.fromSignature(128, 1)
@@ -548,17 +610,11 @@ export class StudioService implements ProjectEnv {
         ConsoleCommands.exportMethod("engine.isPlaying", () => this.engine.isPlaying.getValue())
     }
 
-    #populateSpotlightData(): void {
-        this.spotlightDataSupplier.registerAction("Create Synth", EmptyExec)
-        this.spotlightDataSupplier.registerAction("Create Drumcomputer", EmptyExec)
-        this.spotlightDataSupplier.registerAction("Create ModularSystem", EmptyExec)
-    }
-
     #configBeforeUnload(): void {
         if (Browser.isLocalHost()) {return}
         window.addEventListener("beforeunload", (event: Event) => {
             if (!navigator.onLine) {event.preventDefault()}
-            if (this.hasProfile && this.profile.hasUnsavedChanges()) {
+            if ((this.hasProfile && this.profile.hasUnsavedChanges()) || this.sampleEditor.hasUnsavedChanges) {
                 event.preventDefault()
             }
         })
@@ -579,5 +635,7 @@ export class StudioService implements ProjectEnv {
             document.body.classList.toggle("experimental-visible", value), "debug", "enable-beta-features")
         StudioPreferences.catchupAndSubscribe(value =>
             document.body.classList.toggle("help-hidden", !value), "visibility", "visible-help-hints")
+        StudioPreferences.catchupAndSubscribe(value =>
+            AnimationFrame.clampTo60fps = value, "appearance", "clamp-to-60fps")
     }
 }

@@ -1,0 +1,59 @@
+import {ContextMenu, ElementCapturing, MenuItem} from "@opendaw/studio-core"
+import {ChordEventBoxAdapter} from "@opendaw/studio-adapters"
+import {Arrays, Editing, Func, int, Procedure} from "@opendaw/lib-std"
+import {Harmony} from "@opendaw/lib-dsp"
+import {DebugMenus} from "@/ui/menu/debug"
+
+export namespace ChordContextMenu {
+    export const install = (element: Element,
+                            capturing: ElementCapturing<ChordEventBoxAdapter>,
+                            editing: Editing,
+                            targetsOf: Func<ChordEventBoxAdapter, ReadonlyArray<ChordEventBoxAdapter>>,
+                            onChange: Procedure<ChordEventBoxAdapter>) =>
+        ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
+            const adapter = capturing.captureEvent(client)
+            if (adapter === null) {return}
+            const targets = targetsOf(adapter)
+            const modify = (procedure: Procedure<ChordEventBoxAdapter>) => {
+                editing.modify(() => targets.forEach(procedure))
+                onChange(adapter)
+            }
+            const shifts: ReadonlyArray<[string, int]> = [["♭ Lowered", -1], ["Natural", 0], ["♯ Raised", 1]]
+            const notes: ReadonlyArray<[string, int]> = [["Triad", 3], ["7th", 4], ["9th", 5]]
+            const inversions: ReadonlyArray<string> = ["Root Position", "1st Inversion", "2nd Inversion", "3rd Inversion", "4th Inversion"]
+            const source = adapter.trackAdapter
+                .flatMap(({keyTrack}) => Harmony.chordSource(keyTrack.keyAt(adapter.position)))
+            source.ifSome(source => addItems(MenuItem.default({label: `Chords from ${source}`, selectable: false})))
+            addItems(
+                MenuItem.default({label: "Degree", separatorBefore: source.nonEmpty()}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                    ...Arrays.create(index => MenuItem.default({
+                        label: String(index + 1),
+                        checked: index + 1 === adapter.degree
+                    }).setTriggerProcedure(() => modify(({box}) => box.degree.setValue(index + 1))), 7))),
+                MenuItem.default({label: "Shift"}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                    ...shifts.map(([label, shift]) => MenuItem.default({label, checked: shift === adapter.shift})
+                        .setTriggerProcedure(() => modify(({box}) => box.shift.setValue(shift)))))),
+                MenuItem.default({label: "Notes"}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                    ...notes.map(([label, count]) => MenuItem.default({label, checked: count === adapter.notes, selectable: adapter.shape === 0})
+                        .setTriggerProcedure(() => modify(({box}) => {
+                            box.notes.setValue(count)
+                            box.inversion.setValue(Math.min(box.inversion.getValue(), box.shape.getValue() === 0
+                                ? count - 1 : Harmony.countNotes(box.shape.getValue()) - 1))
+                        }))))),
+                MenuItem.default({label: "Inversion"}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                    ...inversions.slice(0, adapter.shape === 0 ? adapter.notes : Harmony.countNotes(adapter.shape))
+                        .map((label, index) => MenuItem.default({label, checked: index === adapter.inversion})
+                            .setTriggerProcedure(() => modify(({box}) => box.inversion.setValue(index)))))),
+                MenuItem.default({label: "Shape"}).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                    MenuItem.default({label: "From Scale", checked: adapter.shape === 0})
+                        .setTriggerProcedure(() => modify(({box}) => box.shape.setValue(0))),
+                    ...Harmony.ChordShapes.map((shape, index) => MenuItem.default({
+                        label: shape.name,
+                        checked: shape.bits === adapter.shape,
+                        separatorBefore: index === 0
+                    }).setTriggerProcedure(() => modify(({box}) => box.shape.setValue(shape.bits)))))),
+                MenuItem.default({label: "Delete"})
+                    .setTriggerProcedure(() => editing.modify(() => targets.forEach(({box}) => box.delete()))),
+                DebugMenus.debugBox(adapter.box))
+        })
+}

@@ -1,14 +1,15 @@
-import {Client, Option, Subscription} from "@opendaw/lib-std"
+import {Client, Exec, Func, Option, Subscription, Terminable} from "@opendaw/lib-std"
 import {Events} from "@opendaw/lib-dom"
 import {MenuItem, MenuRootData} from "../menu/MenuItems"
 
 export namespace ContextMenu {
     export const CONTEXT_MENU_EVENT_TYPE = "--context-menu" as const
 
-    export type MenuFactory = (menuItem: MenuItem, event: MouseEvent) => void
+    export type MenuFactory = (menuItem: MenuItem, event: MouseEvent, watch: Func<Exec, Terminable>) => void
 
     export interface Collector {
         addItems(...items: MenuItem[]): this
+        closeWhen(observe: Func<Exec, Subscription>): void
 
         get client(): Client
     }
@@ -17,6 +18,7 @@ export namespace ContextMenu {
         static collecting: Option<CollectorImpl> = Option.None
 
         readonly #root = MenuItem.root()
+        readonly #observers: Array<Func<Exec, Subscription>> = []
 
         #chain: Promise<void> = Promise.resolve()
 
@@ -40,6 +42,10 @@ export namespace ContextMenu {
             return this
         }
 
+        readonly closeWhen = (observe: Func<Exec, Subscription>): void => {this.#observers.push(observe)}
+
+        readonly watch = (close: Exec): Terminable => Terminable.many(...this.#observers.map(observe => observe(close)))
+
         readonly appendToChain = (fn: () => unknown): void => {
             this.#chain = this.#chain.then(async () => {await fn()})
         }
@@ -62,7 +68,7 @@ export namespace ContextMenu {
             await collector.waitForChain()
             if (CollectorImpl.collecting.nonEmpty()) {
                 if (collector.hasItems) {
-                    menuFactory(collector.root, mouseEvent)
+                    menuFactory(collector.root, mouseEvent, collector.watch)
                 }
                 CollectorImpl.collecting = Option.None
             }

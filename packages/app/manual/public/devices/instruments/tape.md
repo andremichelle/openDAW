@@ -1,6 +1,6 @@
-# Tape
+# Audio Track
 
-A tape machine playback instrument that visualizes audio regions from the track as a vintage reel-to-reel recorder.
+Plays the audio regions and clips on its track. The display shows playback as a reel-to-reel tape machine.
 
 ---
 
@@ -10,7 +10,7 @@ A tape machine playback instrument that visualizes audio regions from the track 
 
 ## 0. Overview
 
-_Tape_ plays audio regions placed on its track, displaying the playback as a classic tape machine with spinning reels. Unlike MIDI-triggered instruments, Tape responds to audio clips in the timeline.
+_Audio Track_ plays audio regions placed on its track, displaying the playback as a classic tape machine with spinning reels. Unlike MIDI-triggered instruments, Audio Track responds to audio clips in the timeline.
 
 Example uses:
 
@@ -38,6 +38,6 @@ The small horizontal bar between the reels. Lights up when an audio region is cu
 
 ## 2. Usage
 
-1. Add audio regions to the Tape track in the timeline
+1. Add audio regions to the Audio Track in the timeline
 2. Press play to watch the tape machine animate
 3. The reels rotate in sync with the transport position

@@ -98,7 +98,9 @@ export namespace AudioUnitAsLayer {
         }
         const uuidMap = TransferUtils.mapUuids(sources)
         const fresh = sources.filter(source =>
-            !TransferUtils.keepsIdentity(source) || boxGraph.findBox(source.address.uuid).isEmpty())
+            (!TransferUtils.keepsIdentity(source) || boxGraph.findBox(source.address.uuid).isEmpty())
+            && !TransferUtils.isEntryOfExistingStack(source, boxGraph))
+        const present = TransferUtils.presentIn(uuidMap, boxGraph)
         // a note or audio lane targets its unit itself, never the copied unit still living in this project
         const unitFields = new Map<string, Address>([
             [sourceUnit.address.toString(), targetUnit.address],
@@ -120,9 +122,10 @@ export namespace AudioUnitAsLayer {
                 if (unitField.nonEmpty()) {return unitField}
                 return address.flatMap(addr => boxGraph.findBox(addr.uuid).nonEmpty()
                     ? Option.wrap(addr)
-                    : TransferUtils.mapModulatorCollection(pointer, boxGraph))
+                    : TransferUtils.mapRootPointer(pointer, boxGraph))
             }
         }, () => TransferUtils.cloneBoxes(fresh, uuidMap, boxGraph))
+        TransferUtils.normalizeGrooves(boxGraph, TransferUtils.createdBy(uuidMap, present))
         sources.filter((box): box is TrackBox => isInstanceOf(box, TrackBox))
             .sort((left, right) => left.index.getValue() - right.index.getValue())
             .forEach((source, offset) => boxGraph.findBox(uuidMap.get(source.address.uuid, "track").target)

@@ -8,10 +8,12 @@ import {MutableObservableOption, Terminable} from "@opendaw/lib-std"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
-import {EngineModules, loadEngineModules} from "./engine-modules"
+import {EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, Project, SampleLoadEvent} from "@opendaw/studio-core"
+import {EngineModules, ExtraDevice, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
+import {WorkletProbe} from "./WorkletProbe"
 import {createSyncLoopback} from "./sync/loopback"
+import {UpdateHistory} from "./sync/update-history"
 import {
     WASM_ENGINE_PROCESSOR_NAME,
     WASM_SYNC_CHANNEL,
@@ -25,11 +27,17 @@ export type WasmEngineUrls = {
     offlineWorkerUrl: string
     // Base URL serving the binaries (dist/wasm/*): `${wasmUrl}/wasm/engine.wasm` + `${wasmUrl}/wasm/plugins/*.wasm`.
     wasmUrl: string
+    // Device modules the host ships itself (not part of this package), for the realtime and the offline engine.
+    extraDevices?: ReadonlyArray<ExtraDevice>
 }
 
 export namespace WasmEngine {
     const modules = new MutableObservableOption<EngineModules>()
     const config = new MutableObservableOption<WasmEngineUrls>()
+    const history = new UpdateHistory()
+
+    // The last update ops sent to the realtime engine (box types and field keys, no values), for trap reports.
+    export const recentUpdates = (): ReadonlyArray<string> => history.entries()
 
     // Whether the wasm modules are compiled and the processor is registered (i.e. `ensureReady` succeeded).
     export const isReady = (): boolean => modules.nonEmpty()
@@ -39,10 +47,10 @@ export namespace WasmEngine {
     // caller that gets false has no working engine and must say so rather than carry on.
     export const ensureReady = async (context: BaseAudioContext): Promise<boolean> => {
         if (modules.nonEmpty()) {return true}
-        const {processorUrl, wasmUrl} = config.unwrap("WasmEngine.install must run before ensureReady")
+        const {processorUrl, wasmUrl, extraDevices} = config.unwrap("WasmEngine.install must run before ensureReady")
         const {status, value, error} = await Promises.tryCatch((async () => {
             await context.audioWorklet.addModule(processorUrl)
-            return loadEngineModules(wasmUrl)
+            return loadEngineModules(wasmUrl, extraDevices)
         })())
         if (status === "rejected") {
             console.warn("WASM engine unavailable:", error)
@@ -52,11 +60,21 @@ export namespace WasmEngine {
         return true
     }
 
+    // Logs which step of a worklet start fails on this machine, for the report after a failed engine start.
+    export const probe = async (context: BaseAudioContext): Promise<void> => {
+        if (modules.isEmpty()) {
+            console.warn("[WorkletProbe] engine modules not loaded")
+            return
+        }
+        const {engineModule, deviceModules} = modules.unwrap()
+        return WorkletProbe.run(context, engineModule, deviceModules)
+    }
+
     export const install = (urls: WasmEngineUrls): void => {
         config.wrap(urls)
         // The OFFLINE render path (mixdown/stems/freeze/benchmarks): the worker self-loads the wasm
         // artifacts from `wasmUrl`, so no preloading is needed here.
-        OfflineEngineRenderer.install(urls.offlineWorkerUrl, {wasmUrl: urls.wasmUrl})
+        OfflineEngineRenderer.install(urls.offlineWorkerUrl, {wasmUrl: urls.wasmUrl, extraDevices: urls.extraDevices ?? []})
         EngineVariant.install((): EngineWorkletVariant => {
             const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} =
                 modules.unwrap("WasmEngine.ensureReady must succeed before an engine boots")
@@ -65,7 +83,8 @@ export namespace WasmEngine {
             return {
                 processorName: WASM_ENGINE_PROCESSOR_NAME,
                 attachment,
-                connectSync: (messenger: Messenger, project: Project): Terminable => connectSync(messenger, project)
+                connectSync: (messenger: Messenger, project: Project): Terminable => connectSync(messenger, project),
+                recordSampleLoad: (event: SampleLoadEvent): void => history.recordSample(event)
                 // No connectFrozenAudio: the memory is worklet-owned (non-shared), so frozen PCM travels
                 // through the `setFrozenAudio` engine command and is copied worklet-side.
             }
@@ -90,6 +109,7 @@ export namespace WasmEngine {
                 }
             })
         const throttle = {next: 0}
+        history.reset()
         const verifyChecksum = (): void => {
             const now = performance.now()
             if (now < throttle.next) {return}
@@ -99,6 +119,7 @@ export namespace WasmEngine {
         }
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates: (tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void => {
+                history.record(tasks)
                 sender.applyUpdates(serializeUpdateTasks(tasks))
                 verifyChecksum()
             },

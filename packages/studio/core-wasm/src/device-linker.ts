@@ -16,14 +16,15 @@ export type BridgeImports = Record<string, (...args: Array<number>) => number | 
 // The engine exports a device side-module imports from `env` (wasm-to-wasm via the loader binding). This
 // list is the CONTRACT: extend it here when the engine gains a host export, never in a loader.
 const HOST_IMPORTS: ReadonlyArray<string> = [
-    "host_pull_events", "host_pulse_to_offset",
+    "host_pull_events", "host_pulse_to_offset", "host_block_at",
     "host_bind_parameter", "host_bind_broadcast", "host_broadcast_ptr", "host_broadcast_active",
     "host_update_parameters", "host_first_update_position", "host_next_update_position",
     "host_resolve_sample", "host_observe_sample",
     "host_resolve_soundfont", "host_observe_soundfont",
     "host_observe_field", "host_observe_target_string",
     "host_bind_sidechain", "host_resolve_input", "host_self_uuid", "host_panic",
-    "host_base_frequency"
+    "host_base_frequency", "host_bar_at", "host_harmony_at", "host_set_latency",
+    "host_observe_groove", "host_groove_warp", "host_groove_unwarp", "host_loop_area"
 ]
 
 // The device exports the linker touches. `state_size` takes the sample rate (devices size their state from
@@ -39,6 +40,7 @@ export type DeviceExports = {
     sample_changed?: (statePtr: number, id: number, handle: number, present: number) => void
     soundfont_changed?: (statePtr: number, id: number, handle: number, present: number) => void
     reset?: (statePtr: number) => void
+    release_all?: (statePtr: number, position: number, outPtr: number, max: number) => number
     // Fires ONCE, only when the device's INSTANCE dies (a genuine removal — never a chain-edit survivor):
     // releases resources it holds outside its state block (e.g. a bridge's JS-side instance).
     terminate?: (statePtr: number) => void
@@ -46,6 +48,10 @@ export type DeviceExports = {
     audio_effects_field?: () => number
     observe_param_collection_field?: () => number
     observe_sample_collection_field?: () => number
+    observe_sidechain_collection_field?: () => number
+    observe_record_collection_field?: () => number
+    observe_buffer_collection_field?: () => number
+    data_changed?: (statePtr: number, collection: number, ptr: number, records: number, fields: number) => void
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -58,6 +64,9 @@ export type LinkerEngine = {
                       soundfontChangedIndex: number, resetIndex: number, terminateIndex: number, midiEffectsField: number,
                       audioEffectsField: number, paramCollectionField: number, sampleCollectionField: number) => number
     device_set_box_type: (deviceId: number, nameLen: number) => void
+    device_set_sidechain_collection_field: (deviceId: number, field: number) => void
+    device_set_release_all: (deviceId: number, releaseAllIndex: number) => void
+    device_set_record_collection: (deviceId: number, recordField: number, bufferField: number, dataChangedIndex: number) => void
     composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number,
                          cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
                          childEnabledKey: number, childMuteKey: number, childSoloKey: number,
@@ -162,6 +171,14 @@ export const linkDevice = (engine: LinkerEngine, memory: WebAssembly.Memory, tab
         device.midi_effects_field?.() ?? 0, device.audio_effects_field?.() ?? 0,
         device.observe_param_collection_field?.() ?? 0, device.observe_sample_collection_field?.() ?? 0)
     engine.device_set_box_type(deviceId, writeName(engine, memory, boxType))
+    if (device.release_all !== undefined) {engine.device_set_release_all(deviceId, installOptional(device.release_all))}
+    const sidechainField = device.observe_sidechain_collection_field?.() ?? 0
+    if (sidechainField !== 0) {engine.device_set_sidechain_collection_field(deviceId, sidechainField)}
+    const recordField = device.observe_record_collection_field?.() ?? 0
+    const bufferField = device.observe_buffer_collection_field?.() ?? 0
+    if (recordField !== 0 || bufferField !== 0) {
+        engine.device_set_record_collection(deviceId, recordField, bufferField, installOptional(device.data_changed))
+    }
 }
 
 // Register one COMPOSITE box type (a box hosting a child collection of its own instruments): write its

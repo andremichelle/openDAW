@@ -14,6 +14,8 @@ import {Address} from "@opendaw/lib-box"
 import {BoxAdapter} from "../BoxAdapter"
 import {MarkerTrackAdapter} from "./MarkerTrackAdapter"
 import {SignatureTrackAdapter} from "./SignatureTrackAdapter"
+import {KeyTrackAdapter} from "./KeyTrackAdapter"
+import {ChordTrackAdapter} from "./ChordTrackAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {ValueEventCollectionBoxAdapter} from "./collection/ValueEventCollectionBoxAdapter"
@@ -25,6 +27,8 @@ export class TimelineBoxAdapter implements BoxAdapter {
 
     readonly #markerTrack: MarkerTrackAdapter
     readonly #signatureTrack: SignatureTrackAdapter
+    readonly #keyTrack: KeyTrackAdapter
+    readonly #chordTrack: ChordTrackAdapter
     readonly #tempoTrackEvents: MutableObservableOption<ValueEventCollectionBoxAdapter>
     readonly #tempoAutomation: Notifier<Option<ValueEventCollectionBoxAdapter>>
 
@@ -33,6 +37,8 @@ export class TimelineBoxAdapter implements BoxAdapter {
 
         this.#markerTrack = new MarkerTrackAdapter(context, box.markerTrack)
         this.#signatureTrack = new SignatureTrackAdapter(context, box.signature, box.signatureTrack)
+        this.#keyTrack = this.#terminator.own(new KeyTrackAdapter(context, box.keyTrack))
+        this.#chordTrack = this.#terminator.own(new ChordTrackAdapter(context, box.chordTrack, this.#keyTrack))
         this.#tempoTrackEvents = new MutableObservableOption<ValueEventCollectionBoxAdapter>()
         this.#tempoAutomation = new Notifier<Option<ValueEventCollectionBoxAdapter>>()
 
@@ -66,6 +72,8 @@ export class TimelineBoxAdapter implements BoxAdapter {
     get address(): Address {return this.#box.address}
     get markerTrack(): MarkerTrackAdapter {return this.#markerTrack}
     get signatureTrack(): SignatureTrackAdapter {return this.#signatureTrack}
+    get keyTrack(): KeyTrackAdapter {return this.#keyTrack}
+    get chordTrack(): ChordTrackAdapter {return this.#chordTrack}
     get tempoTrackEvents(): ObservableOption<ValueEventCollectionBoxAdapter> {return this.#tempoTrackEvents}
     get signature(): Readonly<[int, int]> {
         const {nominator, denominator} = this.#box.signature

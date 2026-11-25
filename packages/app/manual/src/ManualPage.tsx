@@ -8,6 +8,7 @@ import {Icon} from "@opendaw/studio-icons"
 import {installScrollbars} from "@opendaw/studio-scrollbars"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {toast} from "./Toast"
+import {SearchField} from "./SearchField"
 
 const className = Html.adoptStyleSheet(css, "ManualPage")
 
@@ -67,21 +68,37 @@ const addManuals = (lifecycle: Lifecycle, manuals: ReadonlyArray<Manual>): Reado
         }
     })
 
-const loadMarkdown = (path: string): Promise<string> =>
+const fetchMarkdown = (path: string): Promise<string> =>
     fetch(manualsMarkdownHref(path), {cache: "no-store"}).then(response => {
-        if (!response.ok) {return Promise.reject(response.statusText)}
+        const type = response.headers.get("content-type") ?? ""
+        if (!response.ok || type.startsWith("text/html")) {return Promise.reject("Not available")}
         return response.text()
     })
 
+const preloads = new Map<string, Promise<string>>()
+
+export const preloadMarkdown = (path: string): Promise<string> => {
+    const markdown = fetchMarkdown(path)
+    preloads.set(path, markdown)
+    return markdown
+}
+
+const loadMarkdown = (path: string): Promise<string> => {
+    const markdown = preloads.get(path) ?? fetchMarkdown(path)
+    preloads.delete(path)
+    return markdown
+}
+
 export const ManualPage: PageFactory<null> = ({lifecycle, path}: PageContext<null>) => (
     <div className={className}>
-        <aside onConnect={host => lifecycle.own(installScrollbars(host))}>
-            <nav>{...addManuals(lifecycle, Manuals)}</nav>
+        <aside>
+            <SearchField lifecycle={lifecycle}/>
+            <nav onConnect={host => lifecycle.own(installScrollbars(host))}>{...addManuals(lifecycle, Manuals)}</nav>
         </aside>
         <div className="manual" onConnect={host => lifecycle.own(installScrollbars(host))}>
             <Await
                 factory={() => loadMarkdown(path)}
-                failure={(error) => `Unknown request (${error.reason})`}
+                failure={(error) => <p>{error.reason}</p>}
                 loading={() => <p>Loading…</p>}
                 success={text => <Markdown text={text} onCopied={() => toast("Copied to clipboard", IconSymbol.Copy)}/>}
             />

@@ -3,6 +3,84 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.5](/compare/@opendaw/app-studio@0.4.4...@opendaw/app-studio@0.4.5) (2026-11-20)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.4.4](/compare/@opendaw/app-studio@0.4.3...@opendaw/app-studio@0.4.4) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.4.3](/compare/@opendaw/app-studio@0.4.2...@opendaw/app-studio@0.4.3) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.4.2](/compare/@opendaw/app-studio@0.4.1...@opendaw/app-studio@0.4.2) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.4.1](/compare/@opendaw/app-studio@0.4.0...@opendaw/app-studio@0.4.1) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+# [0.4.0](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.8...@opendaw/app-studio@0.4.0) (2026-11-10)
+
+### Bug Fixes
+
+- version realtime offline and stretch engine URLs per build ([e004b6e](https://github.com/andremichelle/openDAW/commit/e004b6e42d7944b0b6856cbd0a0c6036782d84c2))
+
+### Features
+
+- add track group selection, folders and arrangement overview ([98b7ed0](https://github.com/andremichelle/openDAW/commit/98b7ed090f6ce5916bb82371676d85d9530c5499))
+
+### Reverts
+
+- Revert "Restore top selection borders on regular mixer channels" ([6fb52fb](https://github.com/andremichelle/openDAW/commit/6fb52fb34f70ba3fdd3fcc04662acab9640bbbe0))
+
+## [0.3.8](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.7...@opendaw/app-studio@0.3.8) (2026-11-09)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.3.7](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.6...@opendaw/app-studio@0.3.7) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.3.6](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.5...@opendaw/app-studio@0.3.6) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.3.5](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.4...@opendaw/app-studio@0.3.5) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.3.4](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.3...@opendaw/app-studio@0.3.4) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.3.3](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.2...@opendaw/app-studio@0.3.3) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.3.2](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.1...@opendaw/app-studio@0.3.2) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.3.1](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.3.0...@opendaw/app-studio@0.3.1) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+# [0.3.0](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.2.6...@opendaw/app-studio@0.3.0) (2026-10-19)
+
+### Bug Fixes
+
+- align clip drop preview with resized track rows ([2af2fe8](https://github.com/andremichelle/openDAW/commit/2af2fe8d6ea59b8c295385deba98c98fb43f8d87))
+- preserve clip layout and add smooth horizontal scrolling ([f302d1d](https://github.com/andremichelle/openDAW/commit/f302d1d97849379043b468cb11e5ae5c12f4b0e9))
+- preserve track lookup when creating clips ([c54b124](https://github.com/andremichelle/openDAW/commit/c54b124141476b2d22fb2c13dc0a41842137b7c0))
+
+### Features
+
+- resize timeline tracks from the control header ([acc7f24](https://github.com/andremichelle/openDAW/commit/acc7f2442e5421611e06749d8b84f97c28c60eff))
+
 ## [0.2.6](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.2.5...@opendaw/app-studio@0.2.6) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/app-studio

@@ -1,7 +1,12 @@
 import {Option} from "@opendaw/lib-std"
+import {RenderQuantum} from "@opendaw/lib-dsp"
+import {EngineNotice, SignalGraph, SignalGraphEdge, SignalGraphNode} from "@opendaw/studio-adapters"
 // The engine wasm module's export surface, shared by every host that instantiates it (the wasm app's own
 // worklet, the offline perf renderer, and the studio's wasm engine processor).
 import {decodeUtf8} from "./utf8"
+
+// WASM CONTRACT: mirrors abi FIELD_KIND_* (crates/abi/src/lib.rs), the numeric kinds `override_device_field` takes.
+export enum FieldKind {Int = 0, Float = 1, Bool = 2}
 
 export type EngineExports = {
     init: (sampleRate: number) => void
@@ -13,6 +18,9 @@ export type EngineExports = {
     // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
+    device_set_sidechain_collection_field: (deviceId: number, field: number) => void
+    device_set_release_all: (deviceId: number, releaseAllIndex: number) => void
+    device_set_record_collection: (deviceId: number, recordField: number, bufferField: number, dataChangedIndex: number) => void
     // Register a composite box type (a box hosting a child collection of its own instruments): the composite
     // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
     // host field key + the child index/routing key are passed. Mirrors device_set_box_type.
@@ -25,6 +33,7 @@ export type EngineExports = {
     bind: () => number
     render: () => void
     output_ptr: () => number
+    analysis_ptr: () => number // the master mix without the metronome
     output_len: () => number
     heap_used: () => number
     heap_claimed: () => number
@@ -52,10 +61,12 @@ export type EngineExports = {
     broadcast_entry: (index: number, outPtr: number) => number
     broadcast_set_active: (index: number, active: number) => void
     // Transport: `play` starts advancing, `pause` freezes (state kept), `stop` rewinds to 0 + resets all
-    // plugins, `set_position` moves the playhead keeping all plugin state (the TS engine's `setPosition`).
+    // plugins, `stop_faded` the same after the next quantum faded the mix out (the user's stop, no click),
+    // `set_position` moves the playhead keeping all plugin state (the TS engine's `setPosition`).
     play: () => void
     pause: () => void
     stop: () => void
+    stop_faded: () => void
     set_position: (position: number) => void
     // RECORDING (TS EngineCommands.prepareRecordingState/stopRecording/ignoreNoteRegion): count_in_bars
     // comes from the caller's preferences; the ignored region uuid is written into the input scratch first.
@@ -105,6 +116,12 @@ export type EngineExports = {
     // `marker_changes_take` (reserve `marker_changes_count() * 24` input bytes first).
     marker_changes_count: () => number
     marker_changes_take: (outPtr: number) => number
+    // the last quantum's transport jumps (sample inside the quantum, position after the jump) and the
+    // sample `pauseOnLoopDisabled` paused at (-1 none)
+    transport_jump_count: () => number
+    transport_jump_sample: (index: number) => number
+    transport_jump_position: (index: number) => number
+    transport_pause_sample: () => number
     // MIDI-OUT drain (TS MIDISender feed): every MIDI-output unit's queued messages + the transport
     // clock, drained once per quantum into the studio's unchanged MIDISender SAB ring. 16-byte records
     // [device u32 LE][status u8][data1 u8][data2 u8][length u8][timeMs f64 LE] (reserve
@@ -120,6 +137,7 @@ export type EngineExports = {
     // Maps a pulse position to its sample offset in the current quantum; a generative device (arp) times
     // its emitted events with it.
     host_pulse_to_offset: (pulse: number) => number
+    host_block_at: (pulse: number, outPtr: number) => number
     // Route D parameter hooks. `host_bind_parameter` registers a parameter by its field-key path (a u16
     // slice in the device's memory) from `init`, returning its id (the host is mapping-agnostic — the device
     // maps). `host_update_parameters` pulls the device's parameters that changed at a position into a
@@ -156,6 +174,13 @@ export type EngineExports = {
     // The project's tuning reference in Hz (TS EngineContext.baseFrequency, RootBox.baseFrequency): a device
     // whose TS counterpart tunes against it (the Vaporisateur) pulls it per note-on.
     host_base_frequency: () => number
+    host_bar_at: (pulse: number, outPtr: number) => void
+    host_harmony_at: (pulse: number, outPtr: number) => void
+    host_observe_groove: (pathPtr: number, pathLen: number) => number
+    host_groove_warp: (slot: number, pulse: number) => number
+    host_groove_unwarp: (slot: number, pulse: number) => number
+    host_loop_area: (outPtr: number) => number
+    host_set_latency: (frames: number) => void
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
@@ -165,6 +190,8 @@ export type EngineExports = {
     set_allow_takes: (enabled: number) => void
     set_pause_on_loop_disabled: (enabled: number) => void
     set_truncate_notes_at_region_end: (enabled: number) => void
+    // a LOCAL value for a device's observed plain field (not written to the box), 1 if delivered
+    override_device_field: (uuidPtr: number, key: number, kind: FieldKind, bits: number) => number
     // PANIC readout: the engine's panic handler (and a device's, via the shared host_panic deposit) formats
     // the panic message + location into a static buffer BEFORE trapping. After catching the RuntimeError the
     // host reads it back here, so a production panic is never anonymous (panic=abort strips it otherwise).
@@ -174,7 +201,38 @@ export type EngineExports = {
     report_message_ptr: () => number
     report_message_len: () => number
     report_message_clear: () => void
+    // non-fatal notices for the user, one tab-separated line each, read and cleared after `render`
+    notice_message_ptr: () => number
+    notice_message_len: () => number
+    notice_message_clear: () => void
+    // the signal graph as text lines (see engine `signal_graph_report`), returns the full length
+    signal_graph_report: (outPtr: number, max: number) => number
+    compensation_latency: () => number // frames the heard output lags the timeline through delay compensation
+    compensation_exceeded: () => number // 1 when a path needs more compensation than the cap
+    compensation_pending: () => number // 1 while a latency change awaits the next render's compensation pass
 }
+
+// A wasm32 pointer arrives as a signed i32, negative above 2 GiB of memory.
+export const withUnsignedPointers = (raw: EngineExports): EngineExports => ({
+    ...raw,
+    device_alloc: size => raw.device_alloc(size) >>> 0,
+    input_ptr: () => raw.input_ptr() >>> 0,
+    input_reserve: length => raw.input_reserve(length) >>> 0,
+    output_ptr: () => raw.output_ptr() >>> 0,
+    analysis_ptr: () => raw.analysis_ptr() >>> 0,
+    engine_state_ptr: () => raw.engine_state_ptr() >>> 0,
+    click_allocate: (frameCount, channels) => raw.click_allocate(frameCount, channels) >>> 0,
+    checksum_ptr: () => raw.checksum_ptr() >>> 0,
+    monitor_input_ptr: () => raw.monitor_input_ptr() >>> 0,
+    monitor_output_ptr: () => raw.monitor_output_ptr() >>> 0,
+    stem_output_ptr: () => raw.stem_output_ptr() >>> 0,
+    frozen_allocate: (frameCount, channels) => raw.frozen_allocate(frameCount, channels) >>> 0,
+    soundfont_allocate: (handle, byteLength) => raw.soundfont_allocate(handle, byteLength) >>> 0,
+    sample_allocate: (handle, byteLength) => raw.sample_allocate(handle, byteLength) >>> 0,
+    panic_message_ptr: () => raw.panic_message_ptr() >>> 0,
+    report_message_ptr: () => raw.report_message_ptr() >>> 0,
+    notice_message_ptr: () => raw.notice_message_ptr() >>> 0
+})
 
 // Read the panic message the trapped engine left behind (empty when the failure was not a wasm panic).
 // Decoded WITHOUT TextDecoder — the AudioWorkletGlobalScope has none, and this runs exactly when a
@@ -191,4 +249,55 @@ export const takeReportMessage = (exports: EngineExports, memory: WebAssembly.Me
     const message = decodeUtf8(new Uint8Array(memory.buffer, exports.report_message_ptr(), length))
     exports.report_message_clear()
     return Option.wrap(message)
+}
+
+export const takeNotices = (exports: EngineExports, memory: WebAssembly.Memory): ReadonlyArray<EngineNotice> => {
+    const length = exports.notice_message_len()
+    if (length === 0) {return []}
+    const lines = decodeUtf8(new Uint8Array(memory.buffer, exports.notice_message_ptr(), length)).split("\n")
+    exports.notice_message_clear()
+    return lines.flatMap((line): ReadonlyArray<EngineNotice> => {
+        const [type, device, source] = line.split("\t")
+        if (type === "sidechain-loop") {return [{type, device, source}]}
+        if (type === "non-finite") {return [{type, device}]}
+        return []
+    })
+}
+
+export const readSignalGraph = (exports: EngineExports, memory: WebAssembly.Memory): SignalGraph => {
+    const read = (capacity: number): string => {
+        const pointer = exports.input_reserve(capacity)
+        const length = exports.signal_graph_report(pointer, capacity)
+        return length > capacity ? read(length) : decodeUtf8(new Uint8Array(memory.buffer, pointer, length))
+    }
+    const [header, ...lines] = read(1 << 16).split("\n").map(line => line.split("\t"))
+    const nodes: Array<SignalGraphNode> = []
+    const edges: Array<SignalGraphEdge> = []
+    for (const fields of lines) {
+        if (fields[0] === "n") {
+            const [, id, latency, arrival, owner, ...label] = fields
+            nodes.push({
+                id: Number(id), label: label.join("\t"), latency: Number(latency), arrival: Number(arrival),
+                owner: owner === "-" ? null : Uint8Array.from(owner.match(/../g) ?? [], hex => parseInt(hex, 16))
+            })
+        } else if (fields[0] === "e") {
+            const [, source, target, data, delay] = fields
+            edges.push({source: Number(source), target: Number(target), data: data === "1", delay: Number(delay)})
+        }
+    }
+    return {sampleRate: Number(header[1]), maxCompensation: Number(header[2]), nodes, edges}
+}
+
+// Before an offline render: idle quanta until every device reported its latency (a script or a hosted plug-in
+// reports on its first process) and no compensation pass is pending, then reset to `position`, so the render is
+// aligned from its first frame. Returns the frames to trim from the start.
+export const settleCompensation = (exports: EngineExports, sampleRate: number, position: number, playing: boolean,
+                                   render: () => void): number => {
+    exports.pause()
+    const limit = Math.ceil(sampleRate / RenderQuantum)
+    for (let quantum = 0; quantum < limit && (quantum < 2 || exports.compensation_pending() !== 0); quantum++) {render()}
+    exports.stop()
+    exports.set_position(position)
+    if (playing) {exports.play()}
+    return exports.compensation_latency()
 }

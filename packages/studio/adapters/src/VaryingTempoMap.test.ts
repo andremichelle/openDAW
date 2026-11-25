@@ -8,8 +8,9 @@ import {
     ValueEvent
 } from "@opendaw/lib-dsp"
 import {bpm, ppqn, seconds} from "@opendaw/lib-dsp"
-import {quantizeCeil, quantizeFloor} from "@opendaw/lib-std"
-import {TempoGridCursor} from "./VaryingTempoMap"
+import {Option, quantizeCeil, quantizeFloor, Terminable} from "@opendaw/lib-std"
+import {TempoGridCursor, VaryingTempoMap} from "./VaryingTempoMap"
+import {TimelineBoxAdapter} from "./timeline/TimelineBoxAdapter"
 
 describe("intervalToSeconds across ppqn=0", () => {
     const barPpqn = 4 * PPQN.Quarter
@@ -207,6 +208,34 @@ describe("VaryingTempoMap grid helpers", () => {
         for (let ppqn = 0; ppqn <= last; ppqn += PPQN.Bar * 3 + 17) {
             const targetSeconds = cursor.integrate(events,0, ppqn, storageBpm)
             expect(cursor.advance(events,0, 0, targetSeconds, storageBpm)).toBeCloseTo(ppqn, 4)
+        }
+    })
+})
+
+// Live error 1269: a take recorded in the count-in starts at a negative position. Its seconds duration read as
+// ppqn lost the part before zero, a duration edit wrote that back, and the region read as duration(0).
+describe("VaryingTempoMap before ppqn=0", () => {
+    const createTempoMap = (tempo: bpm) => new VaryingTempoMap({
+        box: {bpm: {getValue: () => tempo, subscribe: () => Terminable.Empty}},
+        catchupAndSubscribeTempoAutomation: () => Terminable.Empty,
+        tempoTrackEvents: Option.None
+    } as unknown as TimelineBoxAdapter)
+
+    it("converts an interval that starts before zero back to the same span", () => {
+        const tempoMap = createTempoMap(120)
+        const startSeconds = tempoMap.ppqnToSeconds(-3600)
+        expect(tempoMap.intervalToPPQN(startSeconds, startSeconds + 3.71)).toBeCloseTo(PPQN.secondsToPulses(3.71, 120))
+        expect(tempoMap.intervalToPPQN(startSeconds, startSeconds + 1.0)).toBeCloseTo(PPQN.secondsToPulses(1.0, 120))
+    })
+
+    it("round-trips a seconds duration at a negative position", () => {
+        const tempoMap = createTempoMap(97)
+        for (const position of [-3600, -960, -1]) {
+            for (const duration of [100, 3600, 7123]) {
+                const seconds = tempoMap.intervalToSeconds(position, position + duration)
+                const startSeconds = tempoMap.ppqnToSeconds(position)
+                expect(tempoMap.intervalToPPQN(startSeconds, startSeconds + seconds)).toBeCloseTo(duration, 6)
+            }
         }
     })
 })

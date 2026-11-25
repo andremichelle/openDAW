@@ -75,7 +75,7 @@ fn automated_volume_retargets_at_the_update_clock_inside_the_quantum() {
     use engine_env::block_flags::BlockFlags;
     let params = Rc::new(StripParams::new());
     let automation = Rc::new(StripAutomation::new());
-    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool| if position < 10.0 {0.0} else {-96.0}));
+    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool, _lag: u32| if position < 10.0 {0.0} else {-96.0}));
     let mut strip = ChannelStripProcessor::new(params, automation.clone(), SR);
     let input = shared_audio_buffer();
     {
@@ -86,7 +86,7 @@ fn automated_volume_retargets_at_the_update_clock_inside_the_quantum() {
         }
     }
     strip.set_audio_source(input);
-    let block = Block {index: 0, flags: BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING), p0: 8.0, p1: 13.12, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0};
+    let block = Block {index: 0, flags: BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING), p0: 8.0, p1: 13.12, anchor: 8.0, anchor_frame: 0, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0};
     strip.process(&ProcessInfo {blocks: &[block]});
     let output = strip.audio_output();
     let buffer = output.borrow();

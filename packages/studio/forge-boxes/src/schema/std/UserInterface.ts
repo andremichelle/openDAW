@@ -37,6 +37,11 @@ export const UserInterfaceBox: BoxSchema<Pointers> = {
                 type: "field",
                 name: "midi-controllers",
                 pointerRules: {accepts: [Pointers.MIDIControllers], mandatory: false}
+            },
+            40: {
+                type: "field",
+                name: "view-states",
+                pointerRules: {accepts: [Pointers.ViewState], mandatory: false}
             }
         },
         name: "UserInterfaceBox"

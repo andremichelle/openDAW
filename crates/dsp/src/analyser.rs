@@ -5,7 +5,7 @@
 //! buffers and is built IN PLACE inside the engine-allocated state block via `init`.
 
 pub const NUM_BINS: usize = 512; // TS AudioAnalyser.DEFAULT_SIZE
-const FFT_SIZE: usize = NUM_BINS << 1;
+pub(crate) const FFT_SIZE: usize = NUM_BINS << 1;
 const LEVELS: u32 = 32 - FFT_SIZE.trailing_zeros(); // bit-reversal shift for the fixed frame size
 const DEFAULT_DECAY: f32 = 0.90; // TS AudioAnalyser.DEFAULT_DECAY
 
@@ -83,6 +83,13 @@ impl AudioAnalyser {
                 self.update();
             }
         }
+    }
+
+    pub(crate) fn analyse_ring(&mut self, ring: &[f32; FFT_SIZE], write_index: usize) {
+        for index in 0..FFT_SIZE {
+            self.real[index] = ring[(write_index + index) & (FFT_SIZE - 1)];
+        }
+        self.update();
     }
 
     fn update(&mut self) {

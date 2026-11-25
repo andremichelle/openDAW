@@ -12,6 +12,7 @@ import {
     Option,
     panic,
     Procedure,
+    RuntimeNotifier,
     Subscription,
     Terminator,
     UUID
@@ -72,6 +73,16 @@ export class MidiDevices {
                 await Promises.tryCatch(this.#memoizedRequest())
             if (status === "rejected") {
                 console.warn(error)
+                if (Errors.isNotAllowed(error) || (Errors.isDOMException(error) && error.name === "SecurityError")) {
+                    const help = await RuntimeNotifier.approve({
+                        headline: "MIDI Blocked",
+                        message: "MIDI is blocked on this website. Allow it in your browser's site settings and reload the page.",
+                        approveText: "How to Allow",
+                        cancelText: "OK"
+                    })
+                    if (help) {window.open("/manuals/permissions", "manuals")}
+                    throw Errors.AbortError
+                }
                 return Errors.warn("Could not request MIDI")
             }
             const numberOfInputs = midiAccess.inputs.size

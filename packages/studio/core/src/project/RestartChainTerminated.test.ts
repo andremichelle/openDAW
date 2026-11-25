@@ -32,6 +32,8 @@ const createFakeWorklet = () => {
     return {
         playbackTimestamp: new DefaultObservableValue(0),
         countInBeatsRemaining: new DefaultObservableValue(0),
+        compensationLatency: new DefaultObservableValue(0),
+        compensationExceeded: new DefaultObservableValue(false),
         position: new DefaultObservableValue(0),
         bpm: new DefaultObservableValue(120),
         isPlaying: new DefaultObservableValue(false),
@@ -40,6 +42,7 @@ const createFakeWorklet = () => {
         markerState: new DefaultObservableValue(null),
         cpuLoad: new DefaultObservableValue(0),
         recordingStart: new MutableObservableOption(),
+        subscribeTransportAnchors: () => Terminable.Empty,
         preferences: {update: () => {}, subscribeAll: () => Terminable.Empty},
         context: {destination: {}},
         addEventListener: (type: string, listener: (event: unknown) => void) => {
@@ -107,6 +110,50 @@ describe("Worklet restart chain on a terminated project (live error 1083)", () =
         expect(worklets.length, "a fresh engine was booted").toBe(2)
         expect(loads.length).toBe(1)
         expect(loads[0], "load receives the fresh engine").toBe(worklets[1])
+        project.terminate()
+    })
+})
+
+describe("Engine that cannot start (live errors 1240 to 1264, 1310 to 1315)", () => {
+    const start = async (ready: boolean) => {
+        const {Project} = await import("./Project")
+        const worklets: Array<FakeWorklet> = []
+        const env = createEnv(worklets)
+        const createEngine = env.audioWorklets.createEngine
+        Reflect.set(env.audioWorklets, "createEngine", (...args: Parameters<typeof createEngine>) => {
+            const worklet = createEngine(...args)
+            if (ready) {Reflect.set(worklet, "isReady", () => Promise.resolve())}
+            return worklet
+        })
+        const project = Project.fromSkeleton(env, ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const failed: Array<unknown> = []
+        const unloaded: Array<unknown> = []
+        const restart: RestartWorklet = {
+            unload: async event => {unloaded.push(event)},
+            load: () => {},
+            failedToStart: event => {failed.push(event)}
+        }
+        project.startAudioWorklet(restart, {})
+        await flushRestartChain()
+        return {project, worklets, failed, unloaded}
+    }
+    it("an error before the processor is ready calls failedToStart and does not restart", async () => {
+        const {project, worklets, failed, unloaded} = await start(false)
+        const event = {type: "processorerror"}
+        worklets[0].dispatch("processorerror", event)
+        await flushRestartChain()
+        expect(failed).toEqual([event])
+        expect(unloaded.length).toBe(0)
+        expect(worklets.length, "no restart").toBe(1)
+        project.terminate()
+    })
+    it("an error after the processor is ready still restarts", async () => {
+        const {project, worklets, failed, unloaded} = await start(true)
+        worklets[0].dispatch("processorerror", {type: "processorerror"})
+        await flushRestartChain()
+        expect(failed.length).toBe(0)
+        expect(unloaded.length).toBe(1)
+        expect(worklets.length).toBe(2)
         project.terminate()
     })
 })

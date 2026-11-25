@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-core",
-  "version": "0.2.8",
+  "version": "0.3.5",
   "license": "AGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./StorageScan": {
+      "types": "./dist/opfs/StorageScan.d.ts",
+      "default": "./dist/opfs/StorageScan.js"
     },
     "./FFmpegWorker": {
       "types": "./dist/ffmpeg/FFmpegWorker.d.ts",
@@ -33,19 +37,20 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.96",
-    "@opendaw/lib-dawproject": "^0.0.80",
-    "@opendaw/lib-dom": "^0.0.91",
-    "@opendaw/lib-dsp": "^0.0.95",
-    "@opendaw/lib-fusion": "^0.0.105",
-    "@opendaw/lib-midi": "^0.0.76",
-    "@opendaw/lib-runtime": "^0.0.87",
-    "@opendaw/lib-std": "^0.0.86",
+    "@opendaw/lib-box": "^0.0.105",
+    "@opendaw/lib-dawproject": "^0.0.87",
+    "@opendaw/lib-dom": "^0.0.96",
+    "@opendaw/lib-dsp": "^0.0.102",
+    "@opendaw/lib-fusion": "^0.0.115",
+    "@opendaw/lib-midi": "^0.0.83",
+    "@opendaw/lib-runtime": "^0.0.90",
+    "@opendaw/lib-std": "^0.0.89",
     "@opendaw/nam-wasm": "^1.2.0",
-    "@opendaw/studio-adapters": "^0.3.6",
-    "@opendaw/studio-boxes": "^0.0.112",
-    "@opendaw/studio-enums": "^0.1.5",
+    "@opendaw/studio-adapters": "^0.4.3",
+    "@opendaw/studio-boxes": "^0.0.124",
+    "@opendaw/studio-enums": "^0.1.14",
     "dropbox": "^10.34.0",
+    "mediabunny": "^1.0.3",
     "y-websocket": "^1.4.5",
     "yjs": "^13.6.27",
     "zod": "^4.1.12"
@@ -58,9 +63,9 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@opendaw/eslint-config": "^0.0.28",
-    "@opendaw/studio-core-processors": "^0.0.141",
-    "@opendaw/studio-core-workers": "^0.0.130",
-    "@opendaw/studio-forge-boxes": "^0.0.112",
+    "@opendaw/studio-core-processors": "^0.0.154",
+    "@opendaw/studio-core-workers": "^0.0.143",
+    "@opendaw/studio-forge-boxes": "^0.2.2",
     "@opendaw/typescript-config": "^0.0.32"
   },
   "gitHead": "8350421e29d38c9f31e88def06e1f2e6d174acff"

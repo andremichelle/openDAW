@@ -15,6 +15,8 @@ a strong focus on **education** and data-privacy.
 
 Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular updates.
 
+How do we use AI, and why will openDAW never generate your music? [opendaw.studio/manuals/ai](https://opendaw.studio/manuals/ai) gives the honest answer.
+
 New to the codebase? [introduction.md](introduction.md) maps every component of this repository and how they depend on
 each other.
 
@@ -138,6 +140,7 @@ skyboundzoo, JHINZ, Mark Dammer, fork-kun, Martin Eigel
 #### Ported Plugins (Excluded in commercial license)
 
 * [Compressor](https://github.com/p-hlp/CTAGDRC) (CTAG Dynamic Range Compressor)
+* [Mastering](https://github.com/sergree/matchering) (Matchering by Sergree, GPL-3.0, studio only, not part of the SDK)
 
 ### WebCLAP
 
@@ -153,13 +156,21 @@ import your own `.wclap` bundle.
 #### Available in the openDAW cloud
 
 * [Basics] Analyser, Chorus, Crunch, Frequency Shifter, Limiter, Reverb (Signalsmith Audio)
+* coopiano (Peter Cooper)
+* Droplets (aquanode)
 * MNO (Charlie Culbert)
 * OB-Xf (Surge Synth Team)
+* Odin2 (TheWaveWarden)
+* OpenSpatialDelay (Spatial Media Lab)
+* oXygen (Wamphyre)
+* Polarity-SC-Dark (Polarity-Music)
 * Pro54 (Cmajor)
 * RipplerX (Tilr)
 * Six Sines (BaconPaul)
 * Slide (Charlie Culbert)
+* Surge XT (Surge Synth Team)
 * Tapa (Charlie Culbert)
+* TapElectric (aquanode)
 
 ### Repositories
 

@@ -27,6 +27,9 @@ component
         width: max-content
         column-gap: 0.125em
 
+        &:has(> div:not(:empty))
+          padding-right: 25%
+
         > div
           display: flex
           pointer-events: auto

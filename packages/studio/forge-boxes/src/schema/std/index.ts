@@ -1,5 +1,6 @@
 import {RootBox} from "./RootBox"
 import {SelectionBox} from "./SelectionBox"
+import {ViewStateBox} from "./ViewStateBox"
 import {UserInterfaceBox} from "./UserInterface"
 import {UploadFileBox} from "./UploadFileBox"
 import {TimelineBox} from "./timeline/TimelineBox"
@@ -12,7 +13,14 @@ import {SoundfontFileBox} from "./SoundfontFileBox"
 import {NeuralAmpModelBox} from "./NeuralAmpModelBox"
 import {AudioBusBox, AudioUnitBox, AuxSendBox} from "./AudioUnitBox"
 import {CaptureAudioBox, CaptureMidiBox} from "./CaptureBox"
-import {GrooveShuffleBox} from "./GrooveBoxes"
+import {
+    GrooveFunctionBox,
+    GrooveOffsetBox,
+    GrooveRandomBox,
+    GrooveShuffleBox,
+    GrooveStackBox,
+    GrooveStackEntryBox
+} from "./GrooveBoxes"
 import {LfoModulatorBox} from "./modulators/LfoModulatorBox"
 import {StepsModulatorBox} from "./modulators/StepsModulatorBox"
 import {MacroModulatorBox} from "./modulators/MacroModulatorBox"
@@ -38,18 +46,20 @@ import {MetaDataBox} from "./MetaDataBox"
 import {ProjectMetaBox} from "./ProjectMetaBox"
 import {MIDIControllerBox} from "./MIDIControllerBox"
 import {SignatureEventBox} from "./timeline/SignatureEventBox"
+import {KeyEventBox} from "./timeline/KeyEventBox"
+import {ChordEventBox} from "./timeline/ChordEventBox"
 
 export const Definitions = [
     MetaDataBox, ProjectMetaBox,
-    RootBox, SelectionBox, UserInterfaceBox, UploadFileBox, ShadertoyBox, MIDIControllerBox,
+    RootBox, SelectionBox, ViewStateBox, UserInterfaceBox, UploadFileBox, ShadertoyBox, MIDIControllerBox,
     TimelineBox, TrackBox,
     NoteEventBox, NoteEventRepeatBox, NoteEventCollectionBox, NoteRegionBox, NoteClipBox,
     ValueEventBox, ValueEventCollectionBox, ValueEventCurveBox, ValueRegionBox, ValueClipBox, SignatureEventBox,
     AudioRegionBox, AudioClipBox, AudioPitchStretchBox, AudioTimeStretchBox, AudioSignalsmithBox, TransientMarkerBox, WarpMarkerBox,
-    MarkerBox,
+    MarkerBox, KeyEventBox, ChordEventBox,
     AudioFileBox, SoundfontFileBox, NeuralAmpModelBox,
     AudioUnitBox, CaptureAudioBox, CaptureMidiBox,
     AudioBusBox, AuxSendBox,
-    GrooveShuffleBox,
+    GrooveShuffleBox, GrooveFunctionBox, GrooveRandomBox, GrooveStackBox, GrooveStackEntryBox, GrooveOffsetBox,
     LfoModulatorBox, StepsModulatorBox, MacroModulatorBox, RandomModulatorBox, ModulationBox
 ]

@@ -112,7 +112,7 @@ export const ProjectBrowser = ({service, lifecycle, select, empty}: Construct) =
                                                event.stopPropagation()
                                                Dialogs.approve({
                                                    headline: "Delete Project?",
-                                                   message: "Are you sure? This cannot be undone."
+                                                   message: `Delete "${meta.name}"? This cannot be undone.`
                                                }).then(approved => {
                                                    if (approved) {
                                                        service.deleteProject(uuid, meta).then(() => row.remove())

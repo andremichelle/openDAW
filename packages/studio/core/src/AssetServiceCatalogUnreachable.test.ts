@@ -91,4 +91,16 @@ describe("replaceMissingFiles with an unreachable catalog (live error 1096)", ()
         expect(approvals).toHaveLength(1)
         expect(approvals[0]).toContain("missing.wav")
     })
+
+    // offline the catalogue may never arrive: a project without such files must not wait for it
+    it("does not ask for the catalog when the project has no such files", async () => {
+        let asked = false
+        const service = new TestSampleService(() => {
+            asked = true
+            return new Promise(() => {})
+        })
+        const {boxGraph} = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        await expect(service.replaceMissingFiles(boxGraph, manager)).resolves.toBeUndefined()
+        expect(asked).toBe(false)
+    })
 })

@@ -9,6 +9,7 @@ type PresetCommon = {
     created: number
     modified: number
     hasTimeline?: boolean
+    tags?: ReadonlyArray<string>
 }
 
 export const CATEGORIES = [

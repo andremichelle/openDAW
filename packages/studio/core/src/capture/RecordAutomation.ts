@@ -215,7 +215,7 @@ export namespace RecordAutomation {
         loopEnabled: boolean,
         loopTo: ppqn
     ): void => {
-        const {editing} = project
+        const editing = project.recordingSession.editing
         editing.modify(() => {
             for (const state of activeRecordings.values()) {
                 if (!state.regionBox.isAttached()) {continue}
@@ -246,7 +246,8 @@ export namespace RecordAutomation {
         loopFrom: ppqn,
         loopTo: ppqn
     ): void => {
-        const {editing, boxGraph} = project
+        const {boxGraph} = project
+        const editing = project.recordingSession.editing
         editing.modify(() => {
             const snapshot = [...activeRecordings.values()]
             for (const state of snapshot) {
@@ -282,7 +283,8 @@ export namespace RecordAutomation {
     }
 
     export const start = (project: Project): Terminable => {
-        const {editing, engine, parameterFieldAdapters, timelineBox} = project
+        const {engine, parameterFieldAdapters, timelineBox} = project
+        const editing = project.recordingSession.editing
         const ctx: RecorderContext = {project}
         const activeRecordings: SortedSet<Address, RecordingState> =
             Address.newSet<RecordingState>(state => state.adapter.address)

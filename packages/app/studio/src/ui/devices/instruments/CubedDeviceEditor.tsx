@@ -81,7 +81,7 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   {knob(volume)}
                               </div>
                               <div className="body">
-                                  <PatternControls lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                                  <PatternControls lifecycle={lifecycle} project={project} editing={editing} midiLearning={midiLearning}
                                                    adapter={adapter} stepRange={stepRange}/>
                                   <PatternGrid lifecycle={lifecycle} editing={editing} adapter={adapter}
                                                stepRange={stepRange} receiver={project.liveStreamReceiver}/>

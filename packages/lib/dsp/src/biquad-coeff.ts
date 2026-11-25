@@ -6,6 +6,9 @@ import {assert, clamp, TAU, unitValue} from "@opendaw/lib-std"
 // https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/audio/biquad.cc
 // quickly tested all biquad modes
 
+// a Q of 0 would make the low/high-pass coefficients NaN
+const MinResonance = 1.0e-6
+
 export class BiquadCoeff {
     a1: number = 0.0
     a2: number = 0.0
@@ -23,7 +26,7 @@ export class BiquadCoeff {
             this.setNormalizedCoefficients(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
         } else if (cutoff > 0.0) {
             const theta = TAU * cutoff
-            const alpha = Math.sin(theta) / (2.0 * resonance)
+            const alpha = Math.sin(theta) / (2.0 * Math.max(resonance, MinResonance))
             const cosw = Math.cos(theta)
             const beta = (1.0 - cosw) / 2.0
             const b0 = beta
@@ -45,7 +48,7 @@ export class BiquadCoeff {
             this.setNormalizedCoefficients(0, 0, 0, 1, 0, 0)
         } else if (cutoff > 0) {
             const theta = TAU * cutoff
-            const alpha = Math.sin(theta) / (2 * resonance)
+            const alpha = Math.sin(theta) / (2.0 * Math.max(resonance, MinResonance))
             const cosw = Math.cos(theta)
             const beta = (1 + cosw) / 2
             const b0 = beta

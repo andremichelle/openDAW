@@ -6,6 +6,21 @@ component
   align-items: center
   gap: 0.25em
   @include mixins.Control
+  position: relative
+  .follow
+    position: absolute
+    top: 0.5em
+    right: 0.25em
+    display: flex
+    align-items: center
+    column-gap: 0.375em
+    font-size: 9px
+    color: var(--color-shadow)
+    .toggle > label
+      width: 14px
+      height: 14px
+      min-width: 0
+      margin: 0
   .knobs
     display: grid
     grid-template: repeat(2, auto) / repeat(3, 3.5em)

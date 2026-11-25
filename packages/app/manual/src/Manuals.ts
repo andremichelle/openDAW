@@ -32,19 +32,29 @@ export const Manuals: ReadonlyArray<Manual> = [
         label: "General",
         files: [
             {type: "page", label: "Introduction", path: "/manuals/"},
+            {type: "page", label: "AI", path: "/manuals/ai"},
             {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
             {type: "page", label: "Automation", path: "/manuals/automation"},
             {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
             {type: "page", label: "Capture MIDI", path: "/manuals/capture-midi"},
             {type: "page", label: "Cloud Backup", path: "/manuals/cloud-backup"},
+            {type: "page", label: "Community Scripts", path: "/manuals/community-scripts"},
+            {type: "page", label: "Community WebCLAPs", path: "/manuals/community-webclaps"},
             {type: "page", label: "Connect MIDI Device", path: "/manuals/connect-midi-device"},
+            {type: "page", label: "Delay Compensation", path: "/manuals/delay-compensation"},
+            {type: "page", label: "Device Browser", path: "/manuals/device-browser"},
             {type: "page", label: "Education", path: "/manuals/education"},
             {type: "page", label: "Firefox MIDI", path: "/manuals/firefox-midi"},
             {type: "page", label: "Freeze AudioUnit", path: "/manuals/freeze-audiounit"},
+            {type: "page", label: "Grooves", path: "/manuals/grooves"},
+            {type: "page", label: "Group Bus", path: "/manuals/group-bus"},
+            {type: "page", label: "Key & Chords", path: "/manuals/key-and-chords"},
             {type: "page", label: "Keyboard Shortcuts", path: "/manuals/keyboard-shortcuts"},
             {type: "page", label: "Latency", path: "/manuals/latency"},
+            {type: "page", label: "Latency Calibration", path: "/manuals/latency-calibration"},
             {type: "page", label: "Live Rooms", path: "/manuals/live-rooms"},
             {type: "page", label: "Mixer", path: "/manuals/mixer"},
+            {type: "page", label: "Mastering", path: "/manuals/mastering"},
             {type: "page", label: "Modulation", path: "/manuals/modulation"},
             {type: "page", label: "Nextcloud", path: "/manuals/nextcloud"},
             {type: "page", label: "Open Source", path: "/manuals/open-source"},
@@ -54,7 +64,8 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Project Management", path: "/manuals/project-management"},
             {type: "page", label: "Recording", path: "/manuals/recording"},
             {type: "page", label: "Script Editor", path: "/manuals/script-editor"},
-            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"}
+            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
+            {type: "page", label: "Spotlight", path: "/manuals/spotlight"}
         ]
     },
     {
@@ -93,16 +104,17 @@ export const Manuals: ReadonlyArray<Manual> = [
                 type: "folder",
                 label: "Instruments",
                 files: [
+                    {type: "page", label: "Audio Track", path: "/manuals/devices/instruments/tape", icon: IconSymbol.Tape},
                     {type: "page", label: "Apparat", path: "/manuals/devices/instruments/apparat", icon: IconSymbol.Code},
                     {type: "page", label: "Cubed", path: "/manuals/devices/instruments/cubed", icon: IconSymbol.Cube},
                     {type: "page", label: "Composite", path: "/manuals/devices/instruments/composite", icon: IconSymbol.Stack},
+                    {type: "page", label: "Korpus", path: "/manuals/devices/instruments/korpus", icon: IconSymbol.DrumSet},
                     {type: "page", label: "MIDIOutput", path: "/manuals/devices/instruments/midioutput", icon: IconSymbol.Midi},
                     {type: "page", label: "Nano", path: "/manuals/devices/instruments/nano", icon: IconSymbol.NanoWave},
                     {type: "page", label: "Neon", path: "/manuals/devices/instruments/neon", icon: IconSymbol.Neon},
                     {type: "page", label: "Tubular", path: "/manuals/devices/instruments/tubular", icon: IconSymbol.Tubular},
                     {type: "page", label: "Playfield", path: "/manuals/devices/instruments/playfield", icon: IconSymbol.Playfield},
                     {type: "page", label: "Soundfont", path: "/manuals/devices/instruments/soundfont", icon: IconSymbol.SoundFont},
-                    {type: "page", label: "Tape", path: "/manuals/devices/instruments/tape", icon: IconSymbol.Tape},
                     {type: "page", label: "Vaporisateur", path: "/manuals/devices/instruments/vaporisateur", icon: IconSymbol.Vaporisateur},
                     {type: "page", label: "WebCLAP", path: "/manuals/devices/audio/wclap", icon: IconSymbol.WebClap}
                 ]
@@ -112,7 +124,9 @@ export const Manuals: ReadonlyArray<Manual> = [
                 label: "MIDI FX",
                 files: [
                     {type: "page", label: "Arpeggio", path: "/manuals/devices/midi/arpeggio", icon: IconSymbol.Stack},
+                    {type: "page", label: "Note Filter", path: "/manuals/devices/midi/note-filter", icon: IconSymbol.Piano},
                     {type: "page", label: "Pitch", path: "/manuals/devices/midi/pitch", icon: IconSymbol.Note},
+                    {type: "page", label: "Scale Matrix", path: "/manuals/devices/midi/scale-matrix", icon: IconSymbol.Piano},
                     {type: "page", label: "Spielwerk", path: "/manuals/devices/midi/spielwerk", icon: IconSymbol.Code},
                     {type: "page", label: "Velocity", path: "/manuals/devices/midi/velocity", icon: IconSymbol.Velocity},
                     {type: "page", label: "Zeitgeist", path: "/manuals/devices/midi/zeitgeist", icon: IconSymbol.Zeitgeist}

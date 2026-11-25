@@ -10,6 +10,7 @@ import {AutotuneTuner} from "@/ui/devices/audio-effects/AutotuneTuner.tsx"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
+import {createParameterToggle} from "@/ui/devices/instruments/NanoDeviceEditor/ParameterControls"
 
 const className = Html.adoptStyleSheet(css, "AutotuneDeviceEditor")
 
@@ -23,6 +24,7 @@ type Construct = {
 export const AutotuneDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     const {editing, midiLearning} = project
+    const {follow, ...knobs} = adapter.namedParameter
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
@@ -33,8 +35,12 @@ export const AutotuneDeviceEditor = ({lifecycle, service, adapter, deviceHost}: 
                               <AutotuneTuner lifecycle={lifecycle}
                                              receiver={project.liveStreamReceiver}
                                              address={adapter.address.append(0)}/>
+                              <div className="follow">
+                                  <span>{follow.name}</span>
+                                  {createParameterToggle({lifecycle, editing, midiLearning, deviceHost}, follow)}
+                              </div>
                               <div className="knobs">
-                                  {Object.values(adapter.namedParameter)
+                                  {Object.values(knobs)
                                       .map(parameter => ControlBuilder.createKnob({
                                           lifecycle,
                                           editing,

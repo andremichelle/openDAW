@@ -155,6 +155,16 @@ impl ResamplerStereo {
         Self {left: ResamplerMono::new(factor), right: ResamplerMono::new(factor)}
     }
 
+    // up + down group delay in frames, measured by cross-correlation (#482)
+    pub const fn latency(factor: usize) -> u32 {
+        match factor {
+            2 => 15,
+            4 => 23,
+            8 => 26,
+            _ => 0
+        }
+    }
+
     pub fn reset(&mut self) {
         self.left.reset();
         self.right.reset();

@@ -7,6 +7,9 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+heap-guard = []
+
 [dependencies]
 signalsmith = {path = "../signalsmith"}
 boxgraph = {path = "../boxgraph"}
@@ -19,4 +22,4 @@ math = {path = "../math"}
 value = {path = "../value"}
 bindings = {path = "../bindings"}
 processors = {path = "../processors"}
-talc = {version = "5.0.3", features = ["counters"]}
+talc = {version = "5.0.4", features = ["counters"]}

@@ -23,19 +23,17 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
             .lowerEqual(region.position, prev => prev !== region && prev.isSelected))
             .match({
                 none: () => position,
-                some: prev => position < prev.complete && prev.complete <= region.complete - PPQN.SemiQuaver
-                    ? prev.complete
+                some: prev => position < prev.complete && Math.ceil(prev.complete) <= region.complete - PPQN.SemiQuaver
+                    ? Math.ceil(prev.complete)
                     : position
             })
     }
     readComplete(region: AnyRegionBoxAdapter): ppqn {return region.complete}
-    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {
-        // just for the preview. it behaves like having an effect-offset
-        return region.loopOffset + this.#computeDelta(region)
-    }
+    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
-        return region.loopDuration - this.#computeDelta(region)
+        return region.loopDuration - (this.readPosition(region) - region.position)
     }
+    readContentShift(region: AnyRegionBoxAdapter): ppqn {return region.position - this.readPosition(region)}
     readMirror(region: AnyRegionBoxAdapter): boolean {return region.isMirrowed}
     translateTrackIndex(value: int): int {return value}
     iterateRange<R extends AnyRegionBoxAdapter>(regions: RegionCollection<R>, from: ppqn, to: ppqn): Iterable<R> {
@@ -109,7 +107,7 @@ export class RegionContentStartModifier implements RegionModifier {
         return this.#adapters.reduce((maxDelta, adapter) => {
             const maxByDuration = adapter.duration - PPQN.SemiQuaver
             const maxByLoopDuration = adapter.loopDuration - PPQN.SemiQuaver
-            return Math.min(maxDelta, maxByDuration, maxByLoopDuration)
+            return Math.min(maxDelta, Math.floor(maxByDuration), Math.floor(maxByLoopDuration))
         }, Infinity)
     }
 

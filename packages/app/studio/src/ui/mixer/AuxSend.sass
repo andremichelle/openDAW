@@ -11,6 +11,19 @@ component
   border-radius: 0.25em
   font-size: 0.5em
 
+  .target
+    position: relative
+    display: flex
+
+    &::after
+      content: ""
+      position: absolute
+      right: -0.25em
+      bottom: 0
+      border-left: 2px solid transparent
+      border-right: 2px solid transparent
+      border-top: 2px solid currentColor
+
   span
     white-space: nowrap
     text-overflow: ellipsis

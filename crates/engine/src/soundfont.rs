@@ -9,11 +9,10 @@
 //! the loader writes the blob there, and the engine marks the slot READY. The storage is talc-owned and kept
 //! alive in the slot, so the pointer is stable until the soundfont is freed (its box removed).
 
-use alloc::vec;
 use alloc::vec::Vec;
 use abi::SoundfontRef;
 use boxgraph::address::Uuid;
-use crate::sample::{decode_handle, encode_handle, HANDLE_GENERATION_MASK, HANDLE_INDEX_MASK};
+use crate::sample::{decode_handle, encode_handle, try_filled, HANDLE_GENERATION_MASK, HANDLE_INDEX_MASK};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum State {
@@ -117,7 +116,10 @@ impl SoundfontResource {
         let Some(slot) = self.slot_mut(handle) else {
             return 0;
         };
-        slot.storage = vec![0u8; byte_len];
+        let Some(storage) = try_filled(byte_len, 0u8) else {
+            return 0;
+        };
+        slot.storage = storage;
         slot.byte_len = byte_len as u32;
         slot.state = State::Allocated;
         slot.storage.as_ptr() as u32
@@ -173,6 +175,15 @@ mod tests {
         resource.set_ready(first);
         let reference = resource.resolve(first).expect("ready resolves");
         assert_eq!((reference.ptr, reference.len), (pointer, 128));
+    }
+
+    #[test]
+    fn a_refused_allocation_returns_zero_and_never_resolves() {
+        let mut resource = SoundfontResource::new();
+        let handle = resource.request(uuid(4));
+        assert_eq!(resource.allocate(handle, usize::MAX), 0, "an allocation that cannot be satisfied returns 0");
+        assert!(resource.resolve(handle).is_none(), "a refused allocation never resolves");
+        assert_ne!(resource.allocate(handle, 16), 0, "the slot still takes a smaller allocation");
     }
 
     #[test]

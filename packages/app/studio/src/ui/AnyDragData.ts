@@ -1,6 +1,7 @@
 import {byte, int, Nullable, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, Sample, Soundfont} from "@opendaw/studio-adapters"
 import {EffectFactories, PresetCategory, PresetSource} from "@opendaw/studio-core"
+import {CommunityScript} from "@/opendaw-api/CommunityIndex"
 
 export type DragCopyHint = { copy?: boolean }
 export type DragSample = { type: "sample", sample: Sample } & DragCopyHint
@@ -37,7 +38,6 @@ export type DragDevice = (
         index: byte
         uuid: string
     }) & DragCopyHint
-export type DragChannelStrip = { type: "channelstrip", uuid: string, start_index: int } & DragCopyHint
 // One timeline track lane dragged to reorder it among the lanes sharing its device group (same unit, same
 // track type, same device).
 export type DragTrack = { type: "track", uuid: UUID.String } & DragCopyHint
@@ -56,6 +56,7 @@ export type DragPreset = {
     uuid: UUID.String
     device: Nullable<InstrumentFactories.Keys>
 } & DragCopyHint
+export type DragScript = { type: "script", script: CommunityScript } & DragCopyHint
 
 // The dragged modulators, reordering them in the modulation panel's list: the whole selection when the one
 // under the pointer belongs to it, else that one alone. `index` is the dragged one's own place, which tells
@@ -67,5 +68,5 @@ export type DragModulator = {
 } & DragCopyHint
 
 export type AnyDragData =
-    DragSample | DragFile | DragDevice | DragChannelStrip | DragTrack | DragSoundfont | DragPreset
-    | DragCompositeEntry | DragModulator
+    DragSample | DragFile | DragDevice | DragTrack | DragSoundfont | DragPreset
+    | DragCompositeEntry | DragModulator | DragScript

@@ -1,0 +1,80 @@
+component
+  position: relative
+  flex: 0 0 auto
+  font-size: 0.75rem
+
+  > div.input
+    min-height: 2.25em
+    width: 100%
+    display: flex
+    align-items: center
+    column-gap: 0.25em
+    border-radius: 2em
+    background-color: rgba(black, 0.4)
+    box-shadow: 0 -1px 1px 0 rgba(white, 0.1) inset
+
+    > svg
+      margin-left: 0.625em
+      font-size: 1.25em
+      color: var(--color-shadow)
+
+    > input
+      flex: 1
+      min-width: 0
+      appearance: none
+      font-size: 1em
+      font-family: inherit
+      border: none
+      outline: none
+      color: var(--color-bright)
+      padding: 0.5em 0.75em 0.5em 0.25em
+      white-space: nowrap
+      background: none
+
+  > div.results
+    position: absolute
+    top: calc(100% + 0.25em)
+    left: 0
+    right: 0
+    display: flex
+    flex-direction: column
+    max-height: 22.5em
+    overflow: hidden auto
+    padding: 0.5em 0
+    border-radius: 0.5em
+    color: var(--color-bright)
+    box-shadow: 0 0 0 0.5px rgba(white, 0.1), 0 2em 1.5em 0 rgba(black, 0.3)
+    backdrop-filter: blur(2px)
+    background-color: color-mix(in srgb, var(--color-panel-background-dark), transparent 5%)
+    z-index: 100
+
+    > div.empty
+      padding: 0.5em 1em
+      white-space: nowrap
+      color: var(--color-shadow)
+
+    > div.entry
+      flex: 0 0 2.25em
+      display: flex
+      align-items: center
+      column-gap: 0.25em
+      margin: 0 0.5em
+      padding: 0 0.5em 0 0.25em
+      border-radius: 0.25em
+      white-space: nowrap
+      cursor: pointer
+
+      &.selected
+        color: white
+        background-color: var(--color-menu-active)
+
+      > svg
+        flex: 0 0 auto
+        width: 1em
+        height: 1em
+
+      > span.label
+        flex: 1
+        margin: 0 0.25em
+        overflow: hidden
+        text-overflow: ellipsis

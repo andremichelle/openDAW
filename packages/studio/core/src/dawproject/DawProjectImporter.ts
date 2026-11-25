@@ -3,6 +3,7 @@ import {
     asDefined,
     asInstanceOf,
     assert,
+    clamp,
     Color,
     ifDefined,
     int,
@@ -79,6 +80,7 @@ import {
     InstrumentFactories,
     InterpolationFieldAdapter,
     ProjectSkeleton,
+    TempoRange,
     TrackType
 } from "@opendaw/studio-adapters"
 import {DawProject} from "./DawProject"
@@ -116,7 +118,7 @@ export namespace DawProjectImport {
         const isoString = new Date().toISOString()
         console.debug(`New Project imported on ${isoString}`)
         const grooveShuffleBox = GrooveShuffleBox.create(boxGraph, UUID.generate(),
-            box => box.label.setValue("Groove Shuffle"))
+            box => box.label.setValue("Global Shuffle"))
         const timelineBox = TimelineBox.create(boxGraph, UUID.generate(),
             box => ifDefined(schema.transport, transport => readTransport(transport, box)))
         const rootBox = RootBox.create(boxGraph, UUID.generate(), box => {
@@ -124,6 +126,7 @@ export namespace DawProjectImport {
             box.created.setValue(isoString)
             box.timeline.refer(timelineBox.root)
         })
+        grooveShuffleBox.collection.refer(rootBox.grooves)
         const userInterfaceBox = UserInterfaceBox.create(boxGraph, UUID.generate(), box => box.root.refer(rootBox.users))
 
         // <---
@@ -480,8 +483,6 @@ export namespace DawProjectImport {
             const readTempoAutomation = (tempoAutomation: PointsSchema): void => {
                 const points = tempoAutomation.points
                 if (!isDefined(points) || points.length === 0) {return}
-                const minBpm = timelineBox.tempoTrack.minBpm.getValue()
-                const maxBpm = timelineBox.tempoTrack.maxBpm.getValue()
                 const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
                 timelineBox.tempoTrack.events.refer(collectionBox.owners)
                 timelineBox.tempoTrack.enabled.setValue(true)
@@ -491,7 +492,7 @@ export namespace DawProjectImport {
                         const eventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
                             box.position.setValue(point.time * PPQN.Quarter)
                             box.index.setValue(0)
-                            box.value.setValue(TempoAutomationConverter.bpmToNormalized(point.value, minBpm, maxBpm))
+                            box.value.setValue(clamp(point.value, TempoRange.min, TempoRange.max))
                             box.events.refer(collectionBox.events)
                         })
                         const interpolation = TempoAutomationConverter.fromDawProjectInterpolation(point.interpolation)

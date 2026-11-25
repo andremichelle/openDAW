@@ -7,6 +7,8 @@
 //! device PULLS its own events (notes + param updates) through `host_pull_events`, so this node pushes no event list.
 
 use alloc::boxed::Box;
+use alloc::rc::Rc;
+use core::cell::Cell;
 use alloc::string::String;
 use boxgraph::address::Uuid;
 use alloc::vec;
@@ -14,6 +16,7 @@ use alloc::vec::Vec;
 use abi::EventRecord;
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_generator::AudioGenerator;
+use engine_env::engine_context::NodeId;
 use engine_env::event_buffer::EventBuffer;
 use engine_env::event_receiver::EventReceiver;
 use engine_env::process_info::ProcessInfo;
@@ -38,6 +41,7 @@ pub(crate) struct PluginInstrument {
     // a source has nothing to pass through, so it renders silence and drops its voices.
     enabled: bool,
     pull_chain: Option<PullLink>, // the top of this unit's event pull chain (sequencer, or a midi-fx over it)
+    released: Vec<EventRecord>, // note-offs of effects that left the chain, handed to the device's next pull
     // This device's bound parameters, swapped into `PULL` for the device call so `host_update_parameters`
     // resolves + diffs them; `clock_armed` is true iff one is automated (so the clock injects update ticks).
     params: Vec<ParamHandle>,
@@ -56,6 +60,7 @@ pub(crate) struct PluginInstrument {
     uuid: Uuid,
     type_name: String,
     reported_non_finite: bool,
+    in_feedback: bool,
     // `device_events` (the event scratch the device pulls into), `device_state`, and `out_offsets` are
     // referenced only by raw address inside `descriptor`; they must stay alive (dropping them frees the
     // memory the device reads/writes), so keep the fields even though Rust sees no direct reads. The block
@@ -67,7 +72,8 @@ pub(crate) struct PluginInstrument {
     device_state: Box<[u32]>, // u32 so the block is 4-aligned for the device's SynthState
     #[allow(dead_code)]
     out_offsets: Box<[u32]>,
-    descriptor: Box<[u32]>
+    descriptor: Box<[u32]>,
+    latency: Rc<Cell<u32>>
 }
 
 impl PluginInstrument {
@@ -97,12 +103,15 @@ impl PluginInstrument {
             0, 0,
             sample_rate.to_bits()
         ].into_boxed_slice();
+        let latency = Rc::new(Cell::new(0));
+        unsafe { crate::LATENCIES.get() }.insert(device_state.as_ptr() as u32, latency.clone());
         Self {
             process_index: device.process_index,
             reset_index: device.reset_index,
             sample_rate,
             enabled: true,
             pull_chain: None,
+            released: Vec::new(),
             params: Vec::new(),
             clock_armed: false,
             events: EventBuffer::new(),
@@ -111,6 +120,7 @@ impl PluginInstrument {
             uuid,
             type_name,
             reported_non_finite: false,
+            in_feedback: false,
             note_bits: crate::current_unit_note_bits(),
             input_ports: Vec::new(),
             sidechain_buffers: Vec::new(),
@@ -118,12 +128,17 @@ impl PluginInstrument {
             device_events,
             device_state,
             out_offsets,
-            descriptor
+            descriptor,
+            latency
         }
     }
 
+    /// TS `setNoteEventSource` resets its receiver: a note a removed or bypassed MIDI effect started never gets its end.
     pub(crate) fn set_pull_chain(&mut self, chain: PullLink) {
+        let changed = self.pull_chain.as_ref().is_some_and(|previous| !previous.same(&chain));
+        if let Some(previous) = self.pull_chain.as_ref() {previous.release_leavers(&chain, &mut self.released)}
         self.pull_chain = Some(chain);
+        if changed { self.reset(); }
     }
 
     /// The peak/RMS broadcast slot of this instrument's output.
@@ -155,10 +170,10 @@ impl ParamSink for PluginInstrument {
 }
 
 impl SidechainSink for PluginInstrument {
-    fn set_sidechains(&mut self, sources: &[(u32, SharedAudioBuffer)]) {
+    fn set_sidechains(&mut self, sources: &[(u32, NodeId, SharedAudioBuffer)]) {
         self.input_ports.clear();
         self.sidechain_buffers.clear();
-        for (port_id, source) in sources {
+        for (port_id, _, source) in sources {
             let buffer = source.borrow();
             let (left, right) = (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32);
             drop(buffer);
@@ -180,7 +195,21 @@ impl AudioGenerator for PluginInstrument {
     }
 }
 
+impl Drop for PluginInstrument {
+    fn drop(&mut self) {
+        unsafe { crate::LATENCIES.get() }.remove(&(self.device_state.as_ptr() as u32));
+    }
+}
+
 impl Processor for PluginInstrument {
+    fn set_feedback(&mut self, in_loop: bool) {
+        self.in_feedback = in_loop;
+    }
+
+    fn latency(&self) -> u32 {
+        self.latency.get()
+    }
+
     fn reset(&mut self) {
         // Transport STOP: drop every active voice (the device clears its voice pool / envelopes), and clear the
         // buffered events.
@@ -215,8 +244,10 @@ impl Processor for PluginInstrument {
             pull.clock_armed = self.clock_armed;
             pull.note_bits = self.note_bits.clone(); // pulled notes mark THIS unit's note indicator
             core::mem::swap(&mut self.params, &mut pull.params); // move our params in (no alloc)
+            core::mem::swap(&mut self.released, &mut pull.released);
             core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
+        crate::calling_device(self.device_state.as_ptr() as u32);
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         {
             let pull = unsafe { PULL.get() };
@@ -226,20 +257,28 @@ impl Processor for PluginInstrument {
             pull.clock_armed = false;
             pull.note_bits = None;
             core::mem::swap(&mut self.params, &mut pull.params); // and take them back
+            core::mem::swap(&mut self.released, &mut pull.released);
             core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
+        }
+        if let Some((channel, frame)) = crate::first_non_finite(&self.device_output[0], &self.device_output[1]) {
+            if self.in_feedback {
+                self.device_output.iter_mut().for_each(|samples| samples.fill(0.0));
+                call_device_reset(self.reset_index, self.device_state.as_ptr() as u32);
+                if !self.reported_non_finite {
+                    self.reported_non_finite = true;
+                    crate::notice(format_args!("non-finite\t{}", boxgraph::address::uuid_to_string(&self.uuid)));
+                }
+            } else if !self.reported_non_finite {
+                self.reported_non_finite = true;
+                crate::report_error(format_args!("{} {} wrote a non-finite sample (channel {}, frame {})",
+                    self.type_name, boxgraph::address::uuid_to_string(&self.uuid), channel, frame));
+            }
         }
         {
             let mut output = self.output.borrow_mut();
             for index in 0..RENDER_QUANTUM {
                 output.left[index] = self.device_output[0][index];
                 output.right[index] = self.device_output[1][index];
-            }
-        }
-        if !self.reported_non_finite {
-            if let Some((channel, frame)) = crate::first_non_finite(&self.device_output[0], &self.device_output[1]) {
-                self.reported_non_finite = true;
-                crate::report_error(format_args!("{} {} wrote a non-finite sample (channel {}, frame {})",
-                    self.type_name, boxgraph::address::uuid_to_string(&self.uuid), channel, frame));
             }
         }
         self.meter.process(&self.device_output[0], &self.device_output[1]);

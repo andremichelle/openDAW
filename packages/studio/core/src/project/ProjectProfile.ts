@@ -1,6 +1,5 @@
 import {
     asInstanceOf,
-    EmptyExec,
     isNull,
     Notifier,
     Observer,
@@ -15,6 +14,7 @@ import {ProjectMetaBox} from "@opendaw/studio-boxes"
 import {ProjectMeta} from "./ProjectMeta"
 import {Project} from "./Project"
 import {Workers} from "../Workers"
+import {OpfsQuota} from "../OpfsQuota"
 import {ProjectPaths} from "./ProjectPaths"
 
 export class ProjectProfile {
@@ -237,13 +237,17 @@ export class ProjectProfile {
     }
 
     static async #writeFiles({uuid, project, meta, cover}: ProjectProfile): Promise<void> {
-        return Promise.all([
-            Workers.Opfs.write(ProjectPaths.projectFile(uuid), new Uint8Array(project.toArrayBuffer())),
-            Workers.Opfs.write(ProjectPaths.projectMeta(uuid), new TextEncoder().encode(JSON.stringify(meta))),
-            cover.match({
+        const projectBytes = new Uint8Array(project.toArrayBuffer())
+        const metaBytes = new TextEncoder().encode(JSON.stringify(meta))
+        let began = false
+        return OpfsQuota.retry(ProjectPaths.projectFile(uuid), async () => {
+            began = !await Workers.Opfs.exists(ProjectPaths.projectFolder(uuid))
+            await Workers.Opfs.write(ProjectPaths.projectFile(uuid), projectBytes)
+            await cover.match({
                 none: () => Promise.resolve(),
-                some: x => Workers.Opfs.write(ProjectPaths.projectCover(uuid), new Uint8Array(x))
+                some: bytes => Workers.Opfs.write(ProjectPaths.projectCover(uuid), new Uint8Array(bytes))
             })
-        ]).then(EmptyExec)
+            await Workers.Opfs.write(ProjectPaths.projectMeta(uuid), metaBytes)
+        }, async () => {if (began) {await Workers.Opfs.delete(ProjectPaths.projectFolder(uuid))}})
     }
 }

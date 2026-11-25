@@ -1,0 +1,34 @@
+@use "ContestPage"
+
+component
+  height: 100dvh
+
+  .hero
+    > .hero-content
+      padding: 2em 1em 2.5em
+
+    .hero-text > h1
+      font-size: 2.5em
+
+    .countdown > .cells > div > span
+      font-size: 1.75em
+
+  .columns
+    padding: 2em 1em 4em
+
+  .prizes > .prize
+    flex-wrap: wrap
+    row-gap: 0.25em
+
+  .terms > .scroller
+    height: auto
+    mask-image: none
+
+  .desktop-note
+    padding: 1.25em
+    border-radius: 8px
+    border: 1px solid rgba(white, 0.08)
+    background: rgba(white, 0.01)
+
+    > h2
+      color: var(--color-orange)

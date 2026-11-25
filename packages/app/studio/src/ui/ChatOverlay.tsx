@@ -12,6 +12,7 @@ import {StudioService} from "@/service/StudioService"
 import {ChatService} from "@/chat/ChatService"
 import {ChatMessage} from "@/chat/ChatMessage"
 import {installScrollbars} from "@/ui/components/Scrollbars"
+import {CallDock, CallStage} from "@/ui/call/CallStage"
 
 const className = Html.adoptStyleSheet(css, "ChatOverlay")
 
@@ -56,6 +57,27 @@ export const ChatOverlay = ({lifecycle, service}: Construct) => {
         hasUnread = false
         updateTabIcon()
     }
+    const chatWindow: HTMLElement = (
+        <div className="chat-window">
+            {messagesContainer}
+            <div className="input-area">
+                {textArea}
+                <Button lifecycle={lifecycle}
+                        appearance={{framed: true, landscape: true}}
+                        onClick={() => send()}>
+                    <Icon symbol={IconSymbol.Play}/>
+                </Button>
+            </div>
+            <div className="options">
+                <Checkbox lifecycle={lifecycle} model={sendOnEnter}>
+                    <Icon symbol={IconSymbol.Checkbox}/> Send on Enter
+                </Checkbox>
+                <Checkbox lifecycle={lifecycle} model={closeAfterSend}>
+                    <Icon symbol={IconSymbol.Checkbox}/> Close after send
+                </Checkbox>
+            </div>
+        </div>
+    )
     const element: HTMLElement = (
         <div className={className}>
             <div className="chat-tab" onInit={(tab: HTMLElement) => {
@@ -69,28 +91,12 @@ export const ChatOverlay = ({lifecycle, service}: Construct) => {
             }}>
                 <IconCartridge lifecycle={lifecycle} symbol={tabIcon}/>
             </div>
-            <div className="chat-window">
-                {messagesContainer}
-                <div className="input-area">
-                    {textArea}
-                    <Button lifecycle={lifecycle}
-                            appearance={{framed: true, landscape: true}}
-                            onClick={() => send()}>
-                        <Icon symbol={IconSymbol.Play}/>
-                    </Button>
-                </div>
-                <div className="options">
-                    <Checkbox lifecycle={lifecycle} model={sendOnEnter}>
-                        <Icon symbol={IconSymbol.Checkbox}/> Send on Enter
-                    </Checkbox>
-                    <Checkbox lifecycle={lifecycle} model={closeAfterSend}>
-                        <Icon symbol={IconSymbol.Checkbox}/> Close after send
-                    </Checkbox>
-                </div>
-            </div>
+            <CallDock lifecycle={lifecycle} service={service}/>
+            {chatWindow}
         </div>
     )
     element.prepend(<ChatOverlayBackground lifecycle={lifecycle} element={element}/>)
+    chatWindow.prepend(<CallStage lifecycle={lifecycle} service={service} overlay={element}/>)
     const send = () => {
         service.chatService.ifSome(chatService => {
             chatService.sendMessage(textArea.value)

@@ -3,6 +3,60 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.3](/compare/@opendaw/studio-adapters@0.4.2...@opendaw/studio-adapters@0.4.3) (2026-11-20)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.4.2](/compare/@opendaw/studio-adapters@0.4.1...@opendaw/studio-adapters@0.4.2) (2026-11-18)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.4.1](/compare/@opendaw/studio-adapters@0.4.0...@opendaw/studio-adapters@0.4.1) (2026-11-17)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+# [0.4.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.15...@opendaw/studio-adapters@0.4.0) (2026-11-10)
+
+### Features
+
+- add nested audio group model, routing and duplication ([b2599ee](https://github.com/andremichelle/openDAW/commit/b2599ee4b00ddf73688235fcb7abf775d289b852))
+
+## [0.3.15](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.14...@opendaw/studio-adapters@0.3.15) (2026-11-09)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.3.14](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.13...@opendaw/studio-adapters@0.3.14) (2026-11-06)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.3.13](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.12...@opendaw/studio-adapters@0.3.13) (2026-11-03)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.3.12](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.11...@opendaw/studio-adapters@0.3.12) (2026-10-30)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.3.11](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.10...@opendaw/studio-adapters@0.3.11) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.3.10](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.9...@opendaw/studio-adapters@0.3.10) (2026-10-29)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.3.9](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.8...@opendaw/studio-adapters@0.3.9) (2026-10-22)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.3.8](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.7...@opendaw/studio-adapters@0.3.8) (2026-10-20)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.3.7](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.6...@opendaw/studio-adapters@0.3.7) (2026-10-19)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
 ## [0.3.6](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.5...@opendaw/studio-adapters@0.3.6) (2026-10-09)
 
 **Note:** Version bump only for package @opendaw/studio-adapters

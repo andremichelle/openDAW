@@ -99,8 +99,7 @@ pub(crate) fn read_value(reader: &mut ByteReader, field_type: &FieldType) -> Res
         FieldType::Float32 => Ok(FieldValue::Float32(reader.read_float()?)),
         FieldType::Boolean => Ok(FieldValue::Boolean(reader.read_bool()?)),
         FieldType::String => {
-            let units = reader.read_utf16()?;
-            Ok(String::from_utf16(&units).map_or(FieldValue::Utf16(units), FieldValue::String))
+            Ok(reader.read_text()?.map_or_else(FieldValue::Utf16, FieldValue::String))
         }
         FieldType::Bytes => {
             let length = reader.read_int()? as usize;

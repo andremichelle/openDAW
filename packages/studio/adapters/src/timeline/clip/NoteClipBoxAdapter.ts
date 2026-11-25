@@ -82,6 +82,7 @@ export class NoteClipBoxAdapter implements ClipBoxAdapter<NoteEventCollectionBox
             box.hue.setValue(this.hue)
             box.duration.setValue(this.duration)
             box.mute.setValue(this.mute)
+            this.#box.groove.ifVertex(vertex => box.groove.refer(vertex))
             box.clips.refer(this.#box.clips.targetVertex.unwrap("clips.target"))
             box.events.refer(events)
         })

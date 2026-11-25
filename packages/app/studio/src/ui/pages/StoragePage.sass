@@ -1,0 +1,116 @@
+@use "@/colors"
+
+component
+  flex: 1
+  padding: 1.5em
+  display: flex
+  flex-direction: column
+  row-gap: 0.75em
+  overflow: hidden
+  color: var(--color-dark)
+  @include colors.panel-background
+
+  > h1
+    color: var(--color-blue)
+
+  > p.disclaimer
+    margin: 0
+    max-width: 48em
+    font-size: 0.75rem
+    line-height: 1.4em
+    color: var(--color-orange)
+
+  > div.summary
+    display: flex
+    align-items: center
+    column-gap: 1.5em
+    font-size: 0.75rem
+    color: var(--color-cream)
+
+    > span.estimate
+      color: var(--color-dark)
+
+    > span.failures
+      color: var(--color-red)
+
+  > div.tabs
+    font-size: 0.75rem
+
+    > div
+      column-gap: 0.25em
+
+      > label
+        padding: 0 0.5em
+        white-space: nowrap
+
+  > div.list-wrapper
+    flex: 1
+    margin-left: -1.5em
+    padding-left: 1.5em
+    overflow: hidden auto
+
+    > div.list
+      display: grid
+      column-gap: 1.5em
+      row-gap: 0.25em
+      align-content: start
+      justify-content: start
+      font-size: 0.75rem
+
+      &.items
+        grid-template-columns: minmax(10em, 28em) auto auto auto 1.25em
+
+      &.assets
+        grid-template-columns: minmax(10em, 28em) auto auto auto 1.25em
+
+        > div.name
+          position: relative
+          overflow: visible
+
+          > span:last-child
+            display: block
+            overflow: hidden
+            text-overflow: ellipsis
+
+      &.other
+        grid-template-columns: minmax(10em, 40em) auto
+
+      > h4
+        margin-bottom: 0.25em
+        color: var(--color-blue)
+
+      > div
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
+        user-select: text
+        -webkit-user-select: text
+
+      > div.name > span.open
+        margin-left: 0.75em
+
+      > div.size
+        text-align: right
+
+      > div.uses > span.not-stored
+        margin-left: 0.75em
+
+      > div.empty
+        grid-column: 1 / -1
+
+      > div.delete
+        display: flex
+        place-items: center
+        cursor: pointer
+
+      > div.name > span.preview
+        position: absolute
+        left: -1.375em
+        top: 0
+        bottom: 0
+        display: flex
+        place-items: center
+        cursor: pointer
+
+        &.playing
+          color: var(--color-blue)

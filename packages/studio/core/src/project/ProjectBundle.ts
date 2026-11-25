@@ -1,17 +1,20 @@
 import {asDefined, Exec, isDefined, Option, panic, Progress, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {AudioFileBox, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, SoundfontFileBox} from "@opendaw/studio-boxes"
 import {SampleLoader, SoundfontLoader} from "@opendaw/studio-adapters"
 import {Promises} from "@opendaw/lib-runtime"
 import {Project} from "./Project"
 import {ProjectEnv} from "./ProjectEnv"
 import {ProjectPaths} from "./ProjectPaths"
 import {ProjectProfile} from "./ProjectProfile"
+import {ProjectMeta} from "./ProjectMeta"
 import {Workers} from "../Workers"
 import {SampleStorage} from "../samples"
 import type JSZip from "jszip"
-import {SoundfontStorage} from "../soundfont"
+import {DefaultSoundfontLoader, SoundfontStorage} from "../soundfont"
+import {SamplePeaks} from "@opendaw/lib-fusion"
+import {WavFile} from "@opendaw/lib-dsp"
 import {ExternalLib} from "../ExternalLib"
-import {WclapStorage} from "../wclap/WclapStorage"
+import {WclapBoxes, WclapStorage} from "../wclap"
 
 export namespace ProjectBundle {
     export const encode = async ({uuid, project, meta, cover}: ProjectProfile,
@@ -35,7 +38,7 @@ export namespace ProjectBundle {
         const wclaps = asDefined(zip.folder(WclapStorage.Folder), "Could not create folder wclap")
         // locally imported WebCLAP bundles (`opfs:` urls) travel with the project, public urls are re-fetched
         const wclapIds = Array.from(new Set(project.boxGraph.boxes()
-            .filter(box => box instanceof WclapDeviceBox || box instanceof WclapInstrumentBox)
+            .filter(WclapBoxes.is)
             .map(box => box.url.getValue())
             .filter(WclapStorage.isLocal)
             .map(WclapStorage.idOf)))
@@ -132,7 +135,7 @@ export namespace ProjectBundle {
         await Promise.all(promises)
         const projectData = await asDefined(zip.file(ProjectPaths.ProjectFile)).async("arraybuffer")
         const project = await Project.loadAnyVersion(env, projectData)
-        const meta = JSON.parse(await asDefined(zip.file(ProjectPaths.ProjectMetaFile)).async("text"))
+        const meta = ProjectMeta.fromJSON(JSON.parse(await asDefined(zip.file(ProjectPaths.ProjectMetaFile)).async("text")))
         const coverFile = zip.file(ProjectPaths.ProjectCoverFile)
         const cover: Option<ArrayBuffer> = Option.wrap(await coverFile?.async("arraybuffer"))
         return new ProjectProfile(bundleUUID, project, meta, cover)
@@ -141,9 +144,19 @@ export namespace ProjectBundle {
     const pipeSampleLoaderInto = async (loader: SampleLoader, zip: JSZip): Promise<void> => {
         const exec: Exec = async () => {
             const path = `${SampleStorage.Folder}/${UUID.toString(loader.uuid)}`
-            zip.file("audio.wav", await Workers.Opfs.read(`${path}/audio.wav`), {binary: true})
-            zip.file("peaks.bin", await Workers.Opfs.read(`${path}/peaks.bin`), {binary: true})
-            zip.file("meta.json", await Workers.Opfs.read(`${path}/meta.json`))
+            const meta = await Promises.tryCatch(Workers.Opfs.read(`${path}/meta.json`))
+            if (meta.status === "resolved") {
+                zip.file("audio.wav", await Workers.Opfs.read(`${path}/audio.wav`), {binary: true})
+                zip.file("peaks.bin", await Workers.Opfs.read(`${path}/peaks.bin`), {binary: true})
+                zip.file("meta.json", meta.value)
+                return
+            }
+            const audio = loader.data.unwrap(`Sample ${UUID.toString(loader.uuid)} is neither stored nor loaded`)
+            const peaks = await Workers.Peak.generateAsync(Progress.Empty, SamplePeaks.findBestFit(audio.numberOfFrames),
+                audio.frames, audio.numberOfFrames, audio.numberOfChannels) as ArrayBuffer
+            zip.file("audio.wav", WavFile.encodeFloats(audio), {binary: true})
+            zip.file("peaks.bin", peaks, {binary: true})
+            zip.file("meta.json", JSON.stringify(loader.meta.unwrap("Sample has no meta")))
         }
         if (loader.state.type === "loaded") {
             return exec()
@@ -165,8 +178,16 @@ export namespace ProjectBundle {
     const pipeSoundfontLoaderInto = async (loader: SoundfontLoader, zip: JSZip): Promise<void> => {
         const exec: Exec = async () => {
             const path = `${SoundfontStorage.Folder}/${UUID.toString(loader.uuid)}`
-            zip.file("soundfont.sf2", await Workers.Opfs.read(`${path}/soundfont.sf2`), {binary: true})
-            zip.file("meta.json", await Workers.Opfs.read(`${path}/meta.json`))
+            const meta = await Promises.tryCatch(Workers.Opfs.read(`${path}/meta.json`))
+            if (meta.status === "resolved") {
+                zip.file("soundfont.sf2", await Workers.Opfs.read(`${path}/soundfont.sf2`), {binary: true})
+                zip.file("meta.json", meta.value)
+                return
+            }
+            if (!(loader instanceof DefaultSoundfontLoader)) {throw meta.error}
+            zip.file("soundfont.sf2", loader.file.unwrap(`Soundfont ${UUID.toString(loader.uuid)} is neither stored nor loaded`),
+                {binary: true})
+            zip.file("meta.json", JSON.stringify(loader.meta.unwrap("Soundfont has no meta")))
         }
         if (loader.state.type === "loaded") {
             return exec()

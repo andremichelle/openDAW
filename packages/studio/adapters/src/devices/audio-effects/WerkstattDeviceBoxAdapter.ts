@@ -1,5 +1,5 @@
 import {Observable, Option, Terminator, UUID} from "@opendaw/lib-std"
-import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
+import {Address, BooleanField, Field, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
@@ -39,6 +39,7 @@ export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
+    get sideChains(): Field<Pointers.ScriptSideChain> {return this.#box.sideChains}
     get parameters(): ParameterAdapterSet {return this.#parametric}
     get codeChanged(): Observable<void> {return this.#codeChanged}
 
