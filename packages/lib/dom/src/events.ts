@@ -1,4 +1,5 @@
 import {isAbsent, isDefined, Nullable, Procedure, Subscription} from "@opendaw/lib-std"
+import {Browser} from "./browser"
 
 type KnownEventMap = WindowEventMap & MIDIInputEventMap & MIDIPortEventMap
 
@@ -57,6 +58,13 @@ export class Events {
     }
 
     static readonly PreventDefault: Procedure<Event> = event => event.preventDefault()
+
+    // ctrl + click opens the context menu on macOS, it is no primary press
+    static readonly isPrimaryButton = (event: MouseEvent): boolean =>
+        event.button === 0 && !(Browser.isMacOS() && event.ctrlKey)
+
+    static readonly isContextButton = (event: MouseEvent): boolean =>
+        event.button === 2 || (event.button === 0 && Browser.isMacOS() && event.ctrlKey)
 
     static readonly isTextInput = (target: Nullable<EventTarget>): boolean => {
         return target instanceof HTMLInputElement

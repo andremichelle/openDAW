@@ -156,7 +156,7 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
     const drag = lifecycle.own(new Terminator())
     const startTuning = (event: PointerEvent) => {
         const {string, strip} = locate(event.clientX, event.clientY)
-        if (!strip || event.button !== 0 || event.ctrlKey) {return false}
+        if (!strip || !Events.isPrimaryButton(event) || event.ctrlKey) {return false}
         const start = adapter.openStrings()[string]
         if (start === Guitar.Off) {return true}
         const finger = Math.max(0, shown.tab[string])
@@ -180,7 +180,7 @@ export const FretDisplay = ({lifecycle, project, adapter, selector}: Construct) 
     }
     const toggleFret = (event: PointerEvent) => {
         if (startTuning(event)) {return}
-        if (!editingShape() || event.button !== 0 || event.ctrlKey) {return}
+        if (!editingShape() || !Events.isPrimaryButton(event) || event.ctrlKey) {return}
         const {string, y, bottom} = locate(event.clientX, event.clientY)
         if (shown.open[string] === Guitar.Off) {return}
         const top = Margin.top

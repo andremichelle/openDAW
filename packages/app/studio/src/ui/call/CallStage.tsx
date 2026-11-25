@@ -197,7 +197,7 @@ const renderCall = (lifecycle: Terminator, call: CallService, element: HTMLEleme
     if (!call.supportsScreenShare) {screenButton.classList.add("unsupported")}
     const press: { timer: Option<ReturnType<typeof setTimeout>>, holding: boolean } = {timer: Option.None, holding: false}
     lifecycle.own(Events.subscribe(micButton, "pointerdown", (event: PointerEvent) => {
-        if (event.button !== 0) {return}
+        if (!Events.isPrimaryButton(event)) {return}
         micButton.setPointerCapture(event.pointerId)
         press.holding = false
         press.timer = Option.wrap(setTimeout(() => {

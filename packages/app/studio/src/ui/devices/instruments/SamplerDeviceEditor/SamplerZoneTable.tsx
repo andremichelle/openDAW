@@ -279,7 +279,7 @@ export namespace SamplerZoneTable {
                 fade()
             }),
             Events.subscribe(body, "pointerdown", (event: PointerEvent) => {
-                if (event.button !== 0 || !(event.target instanceof Element)) {return}
+                if (!Events.isPrimaryButton(event) || !(event.target instanceof Element)) {return}
                 const previous = lastPressed
                 lastPressed = undefined
                 const removed = removes.get(event.target)

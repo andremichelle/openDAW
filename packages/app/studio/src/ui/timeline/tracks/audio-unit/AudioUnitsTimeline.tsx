@@ -240,7 +240,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
             element.style.setProperty("--rest-height", `${element.clientHeight - contentSize}px`)
         }),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-            if (event.button !== 0 || event.clientY < extra.getBoundingClientRect().top) {return}
+            if (!Events.isPrimaryButton(event) || event.clientY < extra.getBoundingClientRect().top) {return}
             if (!(event.target instanceof Node) || createButtons.contains(event.target) || scroller.contains(event.target)) {return}
             if (event.target instanceof Element && isNotNull(event.target.closest("button"))) {return}
             service.project.audioUnitSelection.deselectAll()

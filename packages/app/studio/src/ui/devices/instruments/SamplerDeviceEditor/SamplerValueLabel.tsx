@@ -134,7 +134,7 @@ export namespace SamplerValueLabel {
         lifecycle.ownAll(
             observe(update),
             Events.subscribe(label, "pointerdown", (event: PointerEvent) => {
-                if (field.available?.() === false || event.button !== 0) {return}
+                if (field.available?.() === false || !Events.isPrimaryButton(event)) {return}
                 label.setPointerCapture(event.pointerId)
                 drag.begin(subject, event)
             }),

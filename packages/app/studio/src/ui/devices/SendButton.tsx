@@ -23,7 +23,7 @@ export const SendButton = ({lifecycle, editing, parameter}: Construct) => {
     const install = (element: HTMLElement): void => {
         lifecycle.ownAll(
             Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-                if (event.button !== 0) {return}
+                if (!Events.isPrimaryButton(event)) {return}
                 hold.terminate()
                 held = false
                 suppressClick = false
