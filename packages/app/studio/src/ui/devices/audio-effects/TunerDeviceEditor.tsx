@@ -89,7 +89,7 @@ export const TunerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const displayHeading: HTMLElement = <h1/>
     const meterDisplay: HTMLElement = (
-        <RadioGroup lifecycle={lifecycle} appearance={{framed: true}}
+        <RadioGroup lifecycle={lifecycle}
                     model={EditWrapper.forValue(editing, box.strobe)}
                     elements={[
                         {value: false, element: <span>Needle</span>, tooltip: "A marker points at the deviation"},
@@ -97,7 +97,7 @@ export const TunerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                     ]}/>
     )
     const historyDisplay: HTMLElement = (
-        <RadioGroup lifecycle={lifecycle} appearance={{framed: true}} model={follow}
+        <RadioGroup lifecycle={lifecycle} model={follow}
                     elements={[
                         {value: true, element: <span>Follow</span>, tooltip: "The note range follows the played note"},
                         {value: false, element: <span>Fixed</span>, tooltip: "Drag to pan and zoom, double-click to follow again"}
@@ -115,7 +115,7 @@ export const TunerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             <div className="controls">
                 <div>
                     <h1>View</h1>
-                    <RadioGroup lifecycle={lifecycle} appearance={{framed: true}}
+                    <RadioGroup lifecycle={lifecycle}
                                 model={EditWrapper.forValue(editing, box.view)}
                                 elements={[
                                     {value: 0, element: <span>Meter</span>, tooltip: "Deviation from the nearest note"},
@@ -128,7 +128,7 @@ export const TunerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 </div>
                 <div>
                     <h1>Readout</h1>
-                    <RadioGroup lifecycle={lifecycle} appearance={{framed: true}}
+                    <RadioGroup lifecycle={lifecycle}
                                 model={EditWrapper.forValue(editing, box.showFrequency)}
                                 elements={[
                                     {value: false, element: <span>Cents</span>, tooltip: "Deviation in cents"},
