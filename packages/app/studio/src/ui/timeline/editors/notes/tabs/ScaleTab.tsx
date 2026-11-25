@@ -22,32 +22,37 @@ type Construct = {
     followKey: MutableObservableValue<boolean>
 }
 
-export const ScaleTab = ({lifecycle, selection, scale, followKey}: Construct) => (
-    <div className={className}>
-        <ScaleSelector lifecycle={lifecycle} scale={scale}/>
-        <ScaleConfigurator lifecycle={lifecycle} scale={scale}/>
-        <MenuButton root={MenuItem.root()
-            .setRuntimeChildrenProcedure(parent => parent
-                .addMenuItem(MenuItem.default({label: "No Scale", checked: scale.isEmpty()})
-                    .setTriggerProcedure(() => scale.reset()))
-                .addMenuItem(MenuItem.default({label: "From Selection", selectable: !selection.isEmpty()})
-                    .setTriggerProcedure(() =>
-                        scale.setBits(selection.selected().reduce((bits, event) => bits | 1 << (event.pitch % 12), 0))))
-                .addMenuItem(...MidiKeys.StockScales.map((predefinedScale: MidiKeys.PredefinedScale, index: int) =>
-                    MenuItem.default({
-                        label: predefinedScale.name,
-                        checked: predefinedScale.equals(scale),
-                        separatorBefore: index === 0
-                    }).setTriggerProcedure(() => scale.setScale(predefinedScale)))))}
-                    className="scale-menu"
-                    appearance={{color: Colors.dark}}
-                    horizontal="right">
-            <Icon symbol={IconSymbol.FileList}/>
-        </MenuButton>
-        <Checkbox lifecycle={lifecycle}
-                  model={followKey}
-                  appearance={{color: Colors.dark, activeColor: Colors.green, tooltip: "Follow project key"}}>
-            <Icon symbol={IconSymbol.Magnet}/>
-        </Checkbox>
-    </div>
-)
+export const ScaleTab = ({lifecycle, selection, scale, followKey}: Construct) => {
+    const element: HTMLElement = (
+        <div className={className}>
+            <ScaleSelector lifecycle={lifecycle} scale={scale}/>
+            <ScaleConfigurator lifecycle={lifecycle} scale={scale}/>
+            <MenuButton root={MenuItem.root()
+                .setRuntimeChildrenProcedure(parent => parent
+                    .addMenuItem(MenuItem.default({label: "No Scale", checked: scale.isEmpty()})
+                        .setTriggerProcedure(() => scale.reset()))
+                    .addMenuItem(MenuItem.default({label: "From Selection", selectable: !selection.isEmpty()})
+                        .setTriggerProcedure(() =>
+                            scale.setBits(selection.selected().reduce((bits, event) => bits | 1 << (event.pitch % 12), 0))))
+                    .addMenuItem(...MidiKeys.StockScales.map((predefinedScale: MidiKeys.PredefinedScale, index: int) =>
+                        MenuItem.default({
+                            label: predefinedScale.name,
+                            checked: predefinedScale.equals(scale),
+                            separatorBefore: index === 0
+                        }).setTriggerProcedure(() => scale.setScale(predefinedScale)))))}
+                        className="scale-menu"
+                        appearance={{color: Colors.dark}}
+                        horizontal="right">
+                <Icon symbol={IconSymbol.FileList}/>
+            </MenuButton>
+            <Checkbox lifecycle={lifecycle}
+                      model={followKey}
+                      className="follow-key"
+                      appearance={{color: Colors.dark, activeColor: Colors.green, tooltip: "Follow project key"}}>
+                <span>Follow Key</span>
+            </Checkbox>
+        </div>
+    )
+    lifecycle.own(followKey.catchupAndSubscribe(owner => element.classList.toggle("following", owner.getValue())))
+    return element
+}

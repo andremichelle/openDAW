@@ -6,10 +6,16 @@ import {Files} from "@opendaw/lib-dom"
 import {NoteEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 
 export namespace NoteMidiExport {
-    export const fromCollection = <E extends NoteEvent>(collection: EventCollection<E>): MidiTrack => {
+    export const fromCollection = <E extends NoteEvent>(collection: EventCollection<E>): MidiTrack =>
+        fromEvents(collection.asArray())
+
+    export const fromAdapter = (collection: NoteEventCollectionBoxAdapter): MidiTrack =>
+        fromEvents(collection.events.asArray().flatMap(adapter => adapter.parts()))
+
+    export const fromEvents = (notes: ReadonlyArray<NoteEvent>): MidiTrack => {
         const events: Array<ControlEvent> = []
         const toTicks = (position: ppqn, timeDivision: int = 96): int => Math.floor(position / PPQN.Quarter * timeDivision)
-        for (const event of collection.asArray()) {
+        for (const event of notes) {
             const velocity = clamp(Math.round(event.velocity * 127), 1, 127) // a note-on with 0 is a note-off
             events.push(new ControlEvent(toTicks(event.position), ControlType.NOTE_ON, event.pitch, velocity))
             events.push(new ControlEvent(toTicks(EventSpan.complete(event)), ControlType.NOTE_OFF, event.pitch, 0))
@@ -19,7 +25,7 @@ export namespace NoteMidiExport {
 
     export const toFile = async (collection: NoteEventCollectionBoxAdapter, suggestedName: string = "notes.mid") => {
         const encoder = MidiFile.encoder()
-        encoder.addTrack(fromCollection(collection.events))
+        encoder.addTrack(fromAdapter(collection))
         return Promises.tryCatch(Files.save(encoder.encode().toArrayBuffer() as ArrayBuffer, {
             types: [{
                 description: "Midi File",

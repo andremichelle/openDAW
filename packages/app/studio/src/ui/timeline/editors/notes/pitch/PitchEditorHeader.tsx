@@ -18,7 +18,7 @@ const className = Html.adoptStyleSheet(css, "PitchEditorHeader")
 export type NoteEditorTab = "basic" | "random" | "scale" | "split"
 
 const TabLabels: ReadonlyArray<[NoteEditorTab, string]> =
-    [["basic", "Basic"], ["random", "Random"], ["scale", "Scale"], ["split", "Split"]]
+    [["basic", "Basic"], ["random", "Chance"], ["split", "Split"], ["scale", "Scale"]]
 
 type Construct = {
     lifecycle: Lifecycle
@@ -36,8 +36,8 @@ export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection,
         ["basic", <BasicTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}/>],
         ["random", <RandomTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}
                               seed={seed}/>],
-        ["scale", <ScaleTab lifecycle={lifecycle} selection={selection} scale={scale} followKey={followKey}/>],
-        ["split", <SplitTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}/>]
+        ["split", <SplitTab lifecycle={lifecycle} editing={editing} modifyContext={modifyContext} selection={selection}/>],
+        ["scale", <ScaleTab lifecycle={lifecycle} selection={selection} scale={scale} followKey={followKey}/>]
     ]
     lifecycle.own(tab.catchupAndSubscribe(owner => panels
         .forEach(([value, panel]) => panel.classList.toggle("active", value === owner.getValue()))))
@@ -46,7 +46,7 @@ export const PitchEditorHeader = ({lifecycle, editing, modifyContext, selection,
             <RadioGroup lifecycle={lifecycle}
                         model={tab}
                         className="tabs"
-                        elements={TabLabels.map(([value, label]) => ({value, element: <span>{label}</span>}))}
+                        elements={TabLabels.map(([value, label]) => ({value, element: <span>{label}</span>, className: value}))}
                         appearance={{color: Colors.shadow, activeColor: Colors.green}}/>
             <div className="panels">{panels.map(([, panel]) => panel)}</div>
         </div>

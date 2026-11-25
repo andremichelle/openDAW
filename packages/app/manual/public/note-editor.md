@@ -1,7 +1,7 @@
 # Note Editor
 
 Double-click a note region to open it in the note editor. The panel left of the piano roll shows the selected notes
-in four tabs: **Basic**, **Random**, **Scale** and **Split**. With several notes selected, a value they do not share
+in four tabs: **Basic**, **Chance**, **Split** and **Scale**. With several notes selected, a value they do not share
 shows a dash, and a new value goes to all of them.
 
 ---
@@ -12,7 +12,7 @@ Position, duration, pitch, velocity and fine tune (cents) of the selected notes.
 
 ---
 
-## 2. Random
+## 2. Chance
 
 **Chance** is the probability that a note plays, from 1 to 100 percent.
 
@@ -46,15 +46,7 @@ Copies of a grouped chord form a new group of their own.
 
 ---
 
-## 4. Scale
-
-The root key and the scale highlighted in the piano roll. The list button offers the stock scales, **No Scale** and
-**From Selection** (the keys of the selected notes). The magnet makes the highlight follow the key at the play position,
-see [Key & Chords](/manuals/key-and-chords).
-
----
-
-## 5. Split
+## 4. Split
 
 Splits a note into repeated parts.
 
@@ -67,3 +59,11 @@ The piano roll draws the parts with their length and fade. **Consolidate** in th
 separate notes. They stay in the chance group of the original note.
 
 Every change is one undo step.
+
+---
+
+## 5. Scale
+
+The root key and the scale highlighted in the piano roll. The list button offers the stock scales, **No Scale** and
+**From Selection** (the keys of the selected notes). **Follow Key** makes the highlight follow the key at the play position,
+see [Key & Chords](/manuals/key-and-chords).

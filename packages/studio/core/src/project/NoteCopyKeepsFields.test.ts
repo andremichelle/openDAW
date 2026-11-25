@@ -11,6 +11,8 @@ import {
 } from "@opendaw/studio-adapters"
 import {NoteClipBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "./ProjectEnv"
+import {ControlType} from "@opendaw/lib-midi"
+import {NoteMidiExport} from "./NoteMidiExport"
 
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
     Reflect.set(globalThis, "AudioWorkletNode", class {})
@@ -256,6 +258,36 @@ describe("copying a note keeps all of its settings", () => {
         expect(hits.map(({duration}) => duration)).toEqual([120, 120, 120, 120])
         ;[0, Source.velocity / 3, Source.velocity * 2 / 3, Source.velocity]
             .forEach((velocity, index) => expect(hits[index].velocity).toBeCloseTo(velocity, 6))
+        project.terminate()
+    })
+})
+
+describe("MIDI export", () => {
+    // Every MIDI note-on and note-off of the exported track, in ticks (96 per quarter).
+    const exported = (note: NoteEventBoxAdapter) => NoteMidiExport
+        .fromAdapter(note.collection.unwrap("collection")).controlEvents.get(0)
+        .map(({ticks, type, param0, param1}) => ({ticks, type, pitch: param0, velocity: param1}))
+
+    it("writes every part of a repeated note, as Consolidate creates them", async () => {
+        const {project, note} = await buildProject()
+        project.editing.modify(() => {
+            NoteEventFeatures.writeRepeatLength(note.box, 0.5)
+            NoteEventFeatures.writeVelocityFade(note.box, -0.5)
+        })
+        const before = exported(note)
+        expect(before.filter(({type}) => type === ControlType.NOTE_ON).length).toBe(Source.playCount)
+        const [first] = project.editing.modify(() => note.consolidate()).unwrap("modify")
+        expect(exported(first)).toEqual(before)
+        project.terminate()
+    })
+
+    it("writes a note without repeats once", async () => {
+        const {project, note} = await buildProject()
+        project.editing.modify(() => NoteEventFeatures.writePlayCount(note.box, 1))
+        expect(exported(note)).toEqual([
+            {ticks: 288, type: ControlType.NOTE_ON, pitch: Source.pitch, velocity: 64},
+            {ticks: 384, type: ControlType.NOTE_OFF, pitch: Source.pitch, velocity: 0}
+        ])
         project.terminate()
     })
 })

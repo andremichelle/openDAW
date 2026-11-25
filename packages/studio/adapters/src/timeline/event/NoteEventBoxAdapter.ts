@@ -147,9 +147,22 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     }
 
     computeCurveValue(ratio: unitValue): unitValue {return NoteEvent.curveFunc(ratio, this.playCurve)}
+    parts(): ReadonlyArray<NoteEvent> {
+        const {position, duration, pitch, cent, velocity, playCount, repeatLength, velocityFade} = this
+        if (playCount <= 1) {return [this.copyAsNoteEvent()]}
+        return Arrays.create((index) => {
+            const a = Math.floor(this.computeCurveValue(index / playCount) * duration)
+            const b = Math.floor(this.computeCurveValue((index + 1) / playCount) * duration)
+            return {
+                type: "note-event", position: Math.floor(position + a),
+                duration: Math.max(1, Math.floor((b - a) * repeatLength)), pitch, cent,
+                velocity: velocity * NoteEventFeatures.velocityGain(velocityFade, index, playCount)
+            }
+        }, playCount)
+    }
     canConsolidate(): boolean {return this.playCount > 1}
     consolidate(): ReadonlyArray<NoteEventBoxAdapter> {
-        const {playCount, repeatLength, velocityFade, chance, group: sourceGroup} = this
+        const {chance, group: sourceGroup} = this
         const playOne = sourceGroup.mapOr(group => group.mode.getValue() === NoteEventFeatures.GroupMode.PlayOne, false)
         const groups = NoteEventFeatures.createGroupMapping()
         sourceGroup.ifSome(group => {
@@ -158,18 +171,8 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
             }
         })
         const events = this.collection.unwrap("collection").box.events
-        const adapters = Arrays.create((index) => {
-            const a = Math.floor(this.computeCurveValue(index / playCount) * this.duration)
-            const b = Math.floor(this.computeCurveValue((index + 1) / playCount) * this.duration)
-            return this.copyTo({
-                position: Math.floor(this.position + a),
-                duration: Math.max(1, Math.floor((b - a) * repeatLength)),
-                velocity: this.velocity * NoteEventFeatures.velocityGain(velocityFade, index, playCount),
-                split: false,
-                groups,
-                events
-            })
-        }, playCount)
+        const adapters = this.parts().map(({position, duration, velocity}) =>
+            this.copyTo({position, duration, velocity, split: false, groups, events}))
         this.#box.delete()
         if (playOne) {
             adapters[0].group.ifSome(group => group.mode.setValue(NoteEventFeatures.GroupMode.PlayAll))
