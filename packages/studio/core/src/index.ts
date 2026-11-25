@@ -1,4 +1,5 @@
 export * from "./capture"
+export * from "./AssetService"
 export * from "./cloud"
 export * from "./dawproject"
 export * from "./io"

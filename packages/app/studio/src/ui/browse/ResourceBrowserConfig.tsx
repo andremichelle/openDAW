@@ -8,6 +8,7 @@ import {StudioSignal} from "@/service/StudioSignal"
 import {ResourceHeader} from "@/ui/browse/ResourceHeader"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 import {LocalTree} from "@/ui/browse/LocalTree"
+import {AssetService} from "@opendaw/studio-core"
 
 export type ResourceBrowserConfig<T> = {
     name: string
@@ -30,6 +31,7 @@ export type ResourceBrowserConfig<T> = {
     createSelection: (service: StudioService, htmlSelection: HTMLSelection) => ResourceSelection<T>
     importSignal: StudioSignal["type"]
     importGroups: (groups: ReadonlyArray<ReadonlyArray<File>>) => Promise<ReadonlyArray<ReadonlyArray<T>>>
+    estimateImport: (files: ReadonlyArray<File>) => Promise<AssetService.ImportEstimate>
     headers: ReadonlyArray<ResourceHeader>
     footer?: (props: { lifecycle: Lifecycle, service: StudioService }) => HTMLElement | null
     onReload?: Exec

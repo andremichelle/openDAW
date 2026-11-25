@@ -175,11 +175,11 @@ export const ResourceBrowser = <T, >({
                                     // identical audio is one item, it stays in the first folder it is found in
                                     const placed = new Set<UUID.String>()
                                     for (const [index, [folder]] of folders.entries()) {
-                                        const uuids = (result.value[index] ?? Arrays.empty())
+                                        const uuids = result.value[index]
                                             .map(config.resolveEntryUuid)
                                             .filter(uuid => !placed.has(uuid))
                                         uuids.forEach(uuid => placed.add(uuid))
-                                        await local.move(uuids, folder.length === 0 ? path : LocalTree.path(path, folder))
+                                        await local.move(uuids, folder.length === 0 ? path : LocalTree.importPath(path, folder))
                                     }
                                     importing.setValue(false)
                                     if (placed.size === 0) {
@@ -197,10 +197,17 @@ export const ResourceBrowser = <T, >({
                                         Surface.get(entries).toast("The dropped folder could not be read", IconSymbol.Warning)
                                         return
                                     }
+                                    if (!await approveFolder(read.value)) {return}
                                     return importInto(local, read.value, path)
                                 }
+                                const approveFolder = async (sources: ReadonlyArray<FolderImport.Entry>): Promise<boolean> => {
+                                    const estimate = await config.estimateImport(sources.map(({file}) => file))
+                                    return estimate.count === 0 || FolderImport.approve(estimate, config.name)
+                                }
                                 const importPicked = async (local: LocalTree<T>, path: string): Promise<void> => {
-                                    await importInto(local, await FolderImport.pick(), path)
+                                    const sources = await FolderImport.pick()
+                                    if (sources.length > 0 && !await approveFolder(sources)) {return}
+                                    await importInto(local, sources, path)
                                     refresh()
                                 }
                                 const installDropTarget = (target: HTMLElement, {accepts, apply, importTo, within = () => true}: {
@@ -212,9 +219,9 @@ export const ResourceBrowser = <T, >({
                                     const clear = () => target.classList.remove("drag-over")
                                     return Terminable.many(
                                         DragAndDrop.installTarget(target, {
-                                            drag: (event, data) => within(event) && (data.type === "file"
+                                            drag: (event, data) => data.type === "file"
                                                 ? importTo.nonEmpty()
-                                                : data.type === config.dragType && accepts(draggedUuids(data))),
+                                                : within(event) && data.type === config.dragType && accepts(draggedUuids(data)),
                                             drop: (event, data) => {
                                                 event.stopPropagation()
                                                 clear()

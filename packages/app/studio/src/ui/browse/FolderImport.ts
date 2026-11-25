@@ -1,4 +1,7 @@
-import {Arrays, isDefined} from "@opendaw/lib-std"
+import {Arrays, isDefined, Option, RuntimeNotifier} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
+import {AssetService} from "@opendaw/studio-core"
+import {StorageUsage} from "@/storage/StorageUsage"
 
 export namespace FolderImport {
     export type Entry = { readonly file: File, readonly folder: string }
@@ -52,6 +55,22 @@ export namespace FolderImport {
             if (isDefined(group)) {group.push(file)} else {groups.set(folder, [file])}
         })
         return Array.from(groups)
+    }
+
+    export const approve = async ({count, bytes, exact}: AssetService.ImportEstimate, name: string): Promise<boolean> => {
+        const storage = await Promises.tryCatch(navigator.storage.estimate())
+        const free = storage.status === "resolved" && isDefined(storage.value.quota) && isDefined(storage.value.usage)
+            ? Option.wrap(storage.value.quota - storage.value.usage)
+            : Option.None
+        const lines: ReadonlyArray<string> = [
+            `Files: ${count} ${name.toLowerCase()}`,
+            `Browser storage needed:${exact ? "" : "about "}${StorageUsage.format(bytes)}`,
+            ...free.mapOr(available => [
+                `Free browser storage: ${StorageUsage.format(available)}`,
+                ...(bytes > available ? ["This is more than the free browser storage."] : [])
+            ], Arrays.empty<string>())
+        ]
+        return RuntimeNotifier.approve({headline: "Import Folder", message: lines.join("\n"), approveText: "Import"})
     }
 
     export const pick = (): Promise<ReadonlyArray<Entry>> => new Promise(resolve => {

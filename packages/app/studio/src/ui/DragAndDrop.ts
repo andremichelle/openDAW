@@ -172,9 +172,29 @@ export namespace DragAndDrop {
                     count = 0
                 }
             }),
-            Events.subscribe(element, "dragend", (_event: DragEvent) => count = 0, {capture: true})
+            Events.subscribe(element, "dragend", (_event: DragEvent) => count = 0, {capture: true}),
+            // a nested target may stop the drop from reaching this element, reset once the drop is dispatched
+            Events.subscribe(element.ownerDocument, "drop", () => setTimeout(() => {
+                if (count > 0) {
+                    count = 0
+                    process.leave()
+                }
+            }), {capture: true})
         )
     }
+
+    // files dropped where no target accepts them must not open in the browser
+    export const installFileGuard = (owner: Window): Terminable => Terminable.many(
+        Events.subscribe(owner, "dragover", (event: DragEvent) => {
+            const dataTransfer = event.dataTransfer
+            if (!isDefined(dataTransfer) || event.defaultPrevented || !hasFiles(event)) {return}
+            event.preventDefault()
+            dataTransfer.dropEffect = "none"
+        }),
+        Events.subscribe(owner, "drop", (event: DragEvent) => {
+            if (hasFiles(event)) {event.preventDefault()}
+        })
+    )
 
     export const findInsertLocation = ({clientX}: Client, parent: Element, limit?: [int, int]): [int, Nullable<Element>] => {
         const elements = Array.from(parent.querySelectorAll("[data-drag]"))

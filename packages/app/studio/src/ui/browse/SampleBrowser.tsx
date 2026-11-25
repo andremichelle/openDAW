@@ -85,6 +85,7 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
         createSelection: (svc: StudioService, htmlSelection: HTMLSelection) => new SampleSelection(svc, htmlSelection),
         importSignal: "import-sample",
         importGroups: groups => service.sampleService.importGroups(groups),
+        estimateImport: files => service.sampleService.estimateImport(files),
         footer: ({lifecycle: footerLifecycle}) => (
             <div className="footer">
                 <span className="license" title={LicenseNote}

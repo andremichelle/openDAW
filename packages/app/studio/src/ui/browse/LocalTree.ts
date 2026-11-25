@@ -11,6 +11,12 @@ export class LocalTree<T> {
 
     static path(parent: string, name: string): string {return parent.length === 0 ? name : `${parent}/${name}`}
 
+    static importPath(parent: string, folder: string): string {
+        const [first, ...rest] = LocalTree.path(parent, folder).split("/")
+        const reserved = first.toLowerCase() === LocalTree.TrashName.toLowerCase()
+        return [reserved ? `${first} 2` : first, ...rest].join("/")
+    }
+
     static parentOf(path: string): string {
         const index = path.lastIndexOf("/")
         return index < 0 ? "" : path.slice(0, index)
