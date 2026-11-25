@@ -28,6 +28,7 @@ import {IconSymbol, initializeColors} from "@opendaw/studio-enums"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {StudioPreferences} from "@opendaw/studio-core"
 import {Toast} from "./Toast"
+import {DragAndDrop} from "@/ui/DragAndDrop"
 
 const className = Html.adoptStyleSheet(css, "Surface")
 
@@ -249,6 +250,7 @@ export class Surface implements TerminableOwner {
         let pointerDown: Option<EventTarget> = Option.None
         const document = this.#owner.document
         this.#terminator.ownAll(
+            DragAndDrop.installFileGuard(this.#owner),
             Events.subscribe(this.#owner, "pointerdown", (event: PointerEvent) => {
                 if (pointerDown.nonEmpty()) {
                     console.debug("simulate pointerup onpointerdown", Date.now())

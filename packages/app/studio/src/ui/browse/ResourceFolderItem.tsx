@@ -1,6 +1,6 @@
 import css from "./ResourceFolderItem.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
-import {Procedure} from "@opendaw/lib-std"
+import {EmptyProcedure, Procedure} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
@@ -15,11 +15,13 @@ type Construct = {
     expandedKeys: Set<string>
     entries: ReadonlyArray<HTMLElement>
     install: Procedure<HTMLElement>
+    installEntries?: Procedure<HTMLElement>
     symbols?: [collapsed: IconSymbol, expanded: IconSymbol]
 }
 
 export const ResourceFolderItem = ({
                                        label, count, depth, expandKey, expandedKeys, entries, install,
+                                       installEntries = EmptyProcedure,
                                        symbols = [IconSymbol.Folder, IconSymbol.FolderOpen]
                                    }: Construct): HTMLElement => {
     const [collapsed, expanded] = symbols
@@ -55,5 +57,6 @@ export const ResourceFolderItem = ({
     }
     item.append(header, list)
     install(header)
+    installEntries(list)
     return item
 }

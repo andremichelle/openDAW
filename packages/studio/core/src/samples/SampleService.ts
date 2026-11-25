@@ -10,6 +10,7 @@ import {FilePickerAcceptTypes} from "../FilePickerAcceptTypes"
 import {WavFile} from "@opendaw/lib-dsp"
 import {Workers} from "../Workers"
 import {SampleStorage} from "./SampleStorage"
+import {SampleSizeEstimate} from "./SampleSizeEstimate"
 import {FactoryCatalog} from "../FactoryCatalog"
 
 export class SampleService extends AssetService<Sample, AudioData> {
@@ -25,6 +26,10 @@ export class SampleService extends AssetService<Sample, AudioData> {
 
     acceptsFile(file: File): boolean {
         return file.type.startsWith("audio/") || SampleService.AudioExtensions.has(AssetService.extensionOf(file))
+    }
+
+    protected async estimateFile(file: File): Promise<AssetService.SizeEstimate> {
+        return SampleSizeEstimate.of(file, this.audioContext.sampleRate, SampleStorage.get().format === "smallest")
     }
 
     async importRecording(uuid: UUID.Bytes, audioData: AudioData, bpm: number, name: string = "Recording"): Promise<Sample> {

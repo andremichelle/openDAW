@@ -1,7 +1,9 @@
 import {
+    Arrays,
     Class,
     DefaultObservableValue,
     Errors,
+    int,
     isInstanceOf,
     isNotUndefined,
     Notifier,
@@ -26,6 +28,8 @@ export namespace AssetService {
         progressHandler?: Progress.Handler,
         origin?: "import" | "recording"
     }
+    export type SizeEstimate = { readonly bytes: number, readonly exact: boolean }
+    export type ImportEstimate = { readonly count: int, readonly bytes: number, readonly exact: boolean }
 }
 
 export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
@@ -122,16 +126,39 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
     }
 
     async importFiles(dropped: ReadonlyArray<File>): Promise<ReadonlyArray<T>> {
-        const files = dropped.filter(file => this.acceptsFile(file))
-        if (files.length === 0) {return []}
+        return (await this.importGroups([dropped])).flat()
+    }
+
+    async estimateImport(files: ReadonlyArray<File>): Promise<AssetService.ImportEstimate> {
+        const accepted = files.filter(file => this.acceptsFile(file))
+        const total = {bytes: 0, exact: true}
+        for (const file of accepted) {
+            const {status, value, error} = await Promises.tryCatch(this.estimateFile(file))
+            if (status === "rejected") {console.warn(`Could not estimate '${file.name}', using its file size`, error)}
+            const {bytes, exact} = status === "resolved" ? value : {bytes: file.size, exact: false}
+            total.bytes += bytes
+            total.exact &&= exact
+        }
+        return {count: accepted.length, ...total}
+    }
+
+    protected async estimateFile(file: File): Promise<AssetService.SizeEstimate> {
+        return {bytes: file.size, exact: true}
+    }
+
+    async importGroups(groups: ReadonlyArray<ReadonlyArray<File>>): Promise<ReadonlyArray<ReadonlyArray<T>>> {
+        const files = groups.flatMap((group, groupIndex) => group
+            .filter(file => this.acceptsFile(file))
+            .map(file => ({file, groupIndex})))
+        if (files.length === 0) {return groups.map(() => Arrays.empty())}
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: `Importing ${files.length === 1 ? this.nameSingular : this.namePlural}...`, progress
         })
         const progressHandler = Progress.split(value => progress.setValue(value), files.length)
         const rejected: Array<string> = []
-        const imported: Array<T> = []
-        for (const [index, file] of files.entries()) {
+        const imported: ReadonlyArray<Array<T>> = groups.map(() => [])
+        for (const [index, {file, groupIndex}] of files.entries()) {
             const readResult = await Promises.tryCatch(file.arrayBuffer())
             if (readResult.status === "rejected") {
                 rejected.push(`'${file.name}' could not be read`)
@@ -143,7 +170,7 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
                 progressHandler: progressHandler[index]
             }))
             if (status === "resolved") {
-                imported.push(value)
+                imported[groupIndex].push(value)
             } else if (!Errors.isAbort(error)) {
                 rejected.push(String(error))
             }

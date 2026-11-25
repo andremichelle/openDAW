@@ -33,6 +33,21 @@ export namespace DragAndDrop {
         return Arrays.empty()
     }
 
+    // webkitGetAsEntry only answers during the drop event, the entries it returns stay readable afterwards
+    const extractEntries = (event: DragEvent): ReadonlyArray<FileSystemEntry> => {
+        const dataTransfer = event.dataTransfer
+        if (!isDefined(dataTransfer) || !hasFiles(event)) {return Arrays.empty()}
+        return Array.from(dataTransfer.items)
+            .map(item => item.webkitGetAsEntry())
+            .filter(isDefined)
+    }
+
+    const pendingFile = (): DragFile => ({
+        type: "file",
+        files: InaccessibleProperty("Cannot access files while dragging"),
+        entries: InaccessibleProperty("Cannot access entries while dragging")
+    })
+
     // A provider returning null VETOES the drag: no native drag starts (no ghost), no state is touched.
     export const installSource = (element: HTMLElement,
                                   provider: Provider<Nullable<AnyDragData>>,
@@ -102,14 +117,12 @@ export namespace DragAndDrop {
 
     export const installTarget = (element: HTMLElement, process: Process): Terminable => {
         let count: int = 0 | 0
+        const installed = {alive: true}
         return Terminable.many(
             Events.subscribe(element, "dragenter", (event: DragEvent) => {
                 if (count++ === 0) {
                     process.enter(dragging.match({
-                        none: () => hasFiles(event) && process.drag(event, {
-                            type: "file",
-                            files: InaccessibleProperty("Cannot access files while dragging")
-                        }),
+                        none: () => hasFiles(event) && process.drag(event, pendingFile()),
                         some: data => process.drag(event, data)
                     }))
                 }
@@ -119,10 +132,7 @@ export namespace DragAndDrop {
                 if (!isDefined(dataTransfer)) {return}
                 dragging.match({
                     none: () => {
-                        if (hasFiles(event) && process.drag(event, {
-                            type: "file",
-                            files: InaccessibleProperty("Cannot access files while dragging")
-                        })) {
+                        if (hasFiles(event) && process.drag(event, pendingFile())) {
                             event.preventDefault()
                             dataTransfer.dropEffect = "copy"
                         }
@@ -143,7 +153,7 @@ export namespace DragAndDrop {
                     none: () => {
                         const files = extractFiles(event)
                         if (files.length === 0) {return}
-                        const data: DragFile = {type: "file", files}
+                        const data: DragFile = {type: "file", files, entries: extractEntries(event)}
                         if (process.drag(event, data)) {
                             event.preventDefault()
                             process.drop(event, data)
@@ -163,9 +173,30 @@ export namespace DragAndDrop {
                     count = 0
                 }
             }),
-            Events.subscribe(element, "dragend", (_event: DragEvent) => count = 0, {capture: true})
+            Events.subscribe(element, "dragend", (_event: DragEvent) => count = 0, {capture: true}),
+            // a nested target may stop the drop from reaching this element, reset once the drop is dispatched
+            Events.subscribe(element.ownerDocument, "drop", () => setTimeout(() => {
+                if (installed.alive && count > 0) {
+                    count = 0
+                    process.leave()
+                }
+            }), {capture: true}),
+            Terminable.create(() => installed.alive = false)
         )
     }
+
+    // files dropped where no target accepts them must not open in the browser
+    export const installFileGuard = (owner: Window): Terminable => Terminable.many(
+        Events.subscribe(owner, "dragover", (event: DragEvent) => {
+            const dataTransfer = event.dataTransfer
+            if (!isDefined(dataTransfer) || event.defaultPrevented || !hasFiles(event)) {return}
+            event.preventDefault()
+            dataTransfer.dropEffect = "none"
+        }),
+        Events.subscribe(owner, "drop", (event: DragEvent) => {
+            if (hasFiles(event)) {event.preventDefault()}
+        })
+    )
 
     export const findInsertLocation = ({clientX}: Client, parent: Element, limit?: [int, int]): [int, Nullable<Element>] => {
         const elements = Array.from(parent.querySelectorAll("[data-drag]"))

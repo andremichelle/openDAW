@@ -11,6 +11,12 @@ export class LocalTree<T> {
 
     static path(parent: string, name: string): string {return parent.length === 0 ? name : `${parent}/${name}`}
 
+    static importPath(parent: string, folder: string): string {
+        const [first, ...rest] = LocalTree.path(parent, folder).split("/")
+        const reserved = first.toLowerCase() === LocalTree.TrashName.toLowerCase()
+        return [reserved ? `${first} 2` : first, ...rest].join("/")
+    }
+
     static parentOf(path: string): string {
         const index = path.lastIndexOf("/")
         return index < 0 ? "" : path.slice(0, index)
@@ -119,7 +125,6 @@ export class LocalTree<T> {
             trash: this.#structure.trash.filter(entry => !uuids.includes(entry.uuid))
         }
         for (const {uuid, path} of restoring) {
-            this.#ensureFolder(path)
             await this.move([uuid], path)
         }
     }
@@ -186,6 +191,7 @@ export class LocalTree<T> {
     // The root is the empty path and has no entry of its own: not being named anywhere IS being at the root.
     async move(uuids: ReadonlyArray<UUID.String>, path: string): Promise<void> {
         if (uuids.length === 0) {return}
+        this.#ensureFolder(path)
         const moving = new Set(uuids)
         const strip = (folder: ResourceStructureFolder): ResourceStructureFolder => ({
             ...folder,

@@ -102,17 +102,21 @@ export namespace ResourceMenus {
         refresh()
     }
 
-    export const root = <T>(tree: LocalTree<T>, refresh: Exec): ReadonlyArray<MenuItem> => [
+    export const root = <T>(tree: LocalTree<T>, refresh: Exec, importFolder: Exec): ReadonlyArray<MenuItem> => [
         MenuItem.default({label: "New Folder…", icon: IconSymbol.FolderAdd})
-            .setTriggerProcedure(() => createFolder(tree, "", refresh))
+            .setTriggerProcedure(() => createFolder(tree, "", refresh)),
+        MenuItem.default({label: "Import Folder…", icon: IconSymbol.FolderOpen})
+            .setTriggerProcedure(importFolder)
     ]
 
-    export const folder = <T>(tree: LocalTree<T>, path: string, refresh: Exec): ReadonlyArray<MenuItem> => {
+    export const folder = <T>(tree: LocalTree<T>, path: string, refresh: Exec, importFolder: Exec): ReadonlyArray<MenuItem> => {
         const name = LocalTree.nameOf(path)
         return [
             MenuItem.header({label: name, icon: IconSymbol.Folder, color: Colors.orange}),
             MenuItem.default({label: "New Folder…", icon: IconSymbol.FolderAdd})
                 .setTriggerProcedure(() => createFolder(tree, path, refresh)),
+            MenuItem.default({label: "Import Folder…", icon: IconSymbol.FolderOpen})
+                .setTriggerProcedure(importFolder),
             MenuItem.default({label: "Rename…", icon: IconSymbol.Pencil})
                 .setTriggerProcedure(async () => {
                     const {status, value: renamed} = await Promises.tryCatch(

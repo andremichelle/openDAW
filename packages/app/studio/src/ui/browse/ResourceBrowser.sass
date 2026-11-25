@@ -75,8 +75,8 @@
     row-gap: 3px
     align-content: start
 
-    &.drag-over
-      box-shadow: inset 0 0 0 1px var(--color-shadow)
+    &.drag-over:not(:has(.drag-over))
+      background-color: var(--color-panel-background-bright)
 
   div.error
     padding-top: 4px

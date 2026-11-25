@@ -6,7 +6,11 @@ import {CommunityScript} from "@/opendaw-api/CommunityIndex"
 export type DragCopyHint = { copy?: boolean }
 export type DragSample = { type: "sample", sample: Sample } & DragCopyHint
 export type DragSoundfont = { type: "soundfont", soundfont: Soundfont } & DragCopyHint
-export type DragFile = { type: "file", files: ReadonlyArray<File> /* Not accessible while dragging! */ } & DragCopyHint
+export type DragFile = {
+    type: "file"
+    files: ReadonlyArray<File> /* Not accessible while dragging! */
+    entries: ReadonlyArray<FileSystemEntry> /* Not accessible while dragging! */
+} & DragCopyHint
 export type DragDevice = (
     {
         type: "midi-effect" | "audio-effect"
