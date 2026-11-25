@@ -8,17 +8,16 @@ describe("tuner history key axis", () => {
         expect(keys.find(key => key.note === 63)?.y).toBe(40)
         expect(keys.find(key => key.note === 61)?.y).toBe(140)
     })
-    it("covers the plot without gaps or out-of-bounds bands during pan and zoom", () => {
-        for (const span of [2, 3, 6, 24]) {
-            const keys = TunerHistoryAxis.keys(62.3, span).sort((a, b) => a.top - b.top)
-            expect(keys[0].top).toBe(15)
-            let bottom = 15
-            for (const key of keys) {
-                expect(key.top).toBeCloseTo(bottom)
-                expect(key.height).toBeGreaterThan(0)
-                bottom = key.top + key.height
+    it("draws only whole key bands while the range pans and zooms", () => {
+        for (const center of [62, 62.3, 62.5, 62.8]) {
+            for (const span of [2, 3, 6, 24]) {
+                const step = 150 / span
+                for (const key of TunerHistoryAxis.keys(center, span)) {
+                    expect(key.height).toBeCloseTo(step)
+                    expect(key.top).toBeGreaterThanOrEqual(15 - 1e-6)
+                    expect(key.top + key.height).toBeLessThanOrEqual(165 + 1e-6)
+                }
             }
-            expect(bottom).toBeCloseTo(165)
         }
     })
 })
