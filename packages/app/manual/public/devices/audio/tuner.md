@@ -1,23 +1,48 @@
 # Tuner
 
-Tuner measures the pitch of one note at a time without changing the audio. Insert it in an audio-effect chain on an instrument or monitored audio track. For a microphone or guitar input, enable the track's input monitoring.
+Measures the pitch of a single note and shows how far it is from the nearest note, as a needle, a strobe or a pitch history. The audio passes through unchanged.
 
-## Controls
+---
 
-The row above the display holds four controls, each with its label above it.
+![screenshot](tuner.webp)
 
-- **View**: **Meter** shows how far the note is from the nearest note. **History** shows the pitch of the last eight seconds.
-- **Display** (in Meter): **Needle** points a triangle at the deviation, flat to the left and sharp to the right, from −50 to +50 cents. **Strobe** moves stripes to the right when sharp and to the left when flat, and they stand still when the note is in tune.
-- **Range** (in History): **Follow** keeps the played note in the middle. **Fixed** keeps the current note range. Drag the display vertically to pan and horizontally to zoom in, which also switches to Fixed in one undo step. Escape cancels a drag. Double-click the display to follow again.
-- **Readout**: shows the deviation in **Cents** or the frequency in **Hz** below the display.
-- **Reference**: the tuning frequency of A3 (MIDI 69), from 410 to 480 Hz, 440 Hz by default. Drag the value or double-click it to type. openDAW names this note A3, matching its piano roll, scientific pitch notation calls it A4.
+---
 
-## Display
+## 0. Overview
 
-Green means the note is within 5 cents of the target, orange means it is out of tune. After the signal stops, the last reading holds for 120 ms, then fades over one second and stays dimmed below the display until the next note. In History, the key of the detected note lights up on the right, silence leaves gaps in the trace, and the note names thin out to white keys or only C when the range is zoomed out. Bypass clears the display.
+_Tuner_ listens to a monophonic signal, a single string, voice or synth line, detects its pitch and shows the nearest note with the deviation in cents. It does not change the sound, so it can stay in the chain while you play.
 
-## Detection
+Insert it on an instrument or on an audio track. For a microphone or a guitar input, enable input monitoring on the track so the signal reaches the device.
 
-The detector covers about 30 to 2000 Hz and updates 30 times per second. It analyses the louder stereo channel and ignores audio below −55 dBFS. Low notes need several periods of audio before a reading appears. Play clean, sustained, single notes, chords and noise give ambiguous readings. Tuner measures, it does not correct pitch.
+## 1. View
 
-Settings are saved with the project. The history is not saved.
+**Meter** shows the deviation from the nearest note on a scale from −50 to +50 cents, flat to the left and sharp to the right.
+
+**History** shows the pitch of the last eight seconds as a trace over the note rows, with the note names on the right. The row of the detected note lights up.
+
+## 2. Display
+
+In Meter, **Needle** points a triangle at the deviation. **Strobe** moves stripes to the right when the note is sharp and to the left when it is flat. The stripes slow down as the note gets closer and stand still when it is in tune.
+
+## 3. Range
+
+In History, **Follow** keeps the played note in the middle of the rows. **Fixed** keeps the current rows in place.
+
+Drag the display vertically to move the rows and horizontally to zoom in. A drag switches to Fixed and is one undo step. Escape cancels a drag. Double-click the display to follow the played note again.
+
+## 4. Readout
+
+The line below the display shows the note name and either the deviation in **Cents** or the detected frequency in **Hz**. Green means the note is within 5 cents, orange means it is further off.
+
+When the note ends, the reading holds briefly, fades and stays dimmed until the next note. Bypass clears it.
+
+## 5. Reference
+
+The tuning frequency of A3, from 410 to 480 Hz, 440 Hz by default. Drag the value or double-click it to type a new one. openDAW names this note A3, as in its piano roll. Scientific pitch notation calls the same note A4.
+
+## 6. Tips
+
+- Play clean, sustained single notes. Chords, noise and strong overtones give unsteady readings.
+- The detector covers about 30 to 2000 Hz and ignores signals below −55 dBFS. Low notes need a moment before a reading appears.
+- Place Tuner before distortion and effects with modulation, so it hears the plain note.
+- Settings are saved with the project. The history is not.

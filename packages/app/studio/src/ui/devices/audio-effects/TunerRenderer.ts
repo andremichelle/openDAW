@@ -163,10 +163,10 @@ export class TunerRenderer {
 
     #readoutTexts(midi: number, frequency: boolean, reference: number): [string, string] {
         if (!Number.isFinite(midi)) {return ["–", frequency ? "– Hz" : "– ct"]}
-        const cents = (midi - Math.round(midi)) * 100
+        const cents = Math.round((midi - Math.round(midi)) * 1000) / 10
         const hz = reference * Math.pow(2, (midi - 69) / 12)
         return [MidiKeys.toFullString(Math.round(midi)),
-            frequency ? `${hz.toFixed(1)} Hz` : `${cents >= 0 ? "+" : ""}${cents.toFixed(1)} ct`]
+            frequency ? `${hz.toFixed(1)} Hz` : `${cents > 0 ? "+" : ""}${(cents === 0 ? 0 : cents).toFixed(1)} ct`]
     }
 
     #color(): string {return (Math.abs(this.#state.cents) <= 5 ? Colors.green : Colors.orange).toString()}

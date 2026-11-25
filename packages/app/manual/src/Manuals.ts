@@ -100,6 +100,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Stereo Split", path: "/manuals/devices/audio/stereo-composite", icon: IconSymbol.StereoSplit},
                     {type: "page", label: "Stereo Tool", path: "/manuals/devices/audio/stereotool", icon: IconSymbol.Stereo},
                     {type: "page", label: "Tidal", path: "/manuals/devices/audio/tidal", icon: IconSymbol.Tidal},
+                    {type: "page", label: "Tuner", path: "/manuals/devices/audio/tuner", icon: IconSymbol.Note},
                     {type: "page", label: "Tone3000", path: "/manuals/devices/audio/neural-amp", icon: IconSymbol.Tone3000},
                     {type: "page", label: "Vocoder", path: "/manuals/devices/audio/vocoder", icon: IconSymbol.Vocoder},
                     {type: "page", label: "Waveshaper", path: "/manuals/devices/audio/waveshaper", icon: IconSymbol.Curve},
