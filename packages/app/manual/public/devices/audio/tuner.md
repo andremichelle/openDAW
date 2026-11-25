@@ -46,3 +46,7 @@ The tuning frequency of A3, from 410 to 480 Hz, 440 Hz by default. Drag the valu
 - The detector covers about 30 to 2000 Hz and ignores signals below −55 dBFS. Low notes need a moment before a reading appears.
 - Place Tuner before distortion and effects with modulation, so it hears the plain note.
 - Settings are saved with the project. The history is not.
+
+## Credits
+
+Tuner was contributed by [polinom](https://github.com/polinom).
