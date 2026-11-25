@@ -32,6 +32,11 @@ export class TunerRenderer {
         const context = this.#context
         if (isAbsent(context)) {return}
         const {center, span, display, visible} = this.#state
+        context.save()
+        context.beginPath()
+        context.rect(this.#frame.left, TunerLayout.historyTop,
+            this.#frame.right - this.#frame.left, TunerLayout.historyHeight)
+        context.clip()
         for (const key of TunerHistoryAxis.keys(center, span)) {
             const {note, y, top, height} = key
             context.fillStyle = Colors.dark.opacity(MidiKeys.isBlackKey(note) ? 0.025 : 0.06).toString()
@@ -44,13 +49,12 @@ export class TunerRenderer {
                 context.fillRect(this.#frame.keyLeft, top, TunerLayout.keyWidth, height)
                 context.restore()
             }
-            if (y >= TunerLayout.historyTop && y <= TunerLayout.historyBottom) {
-                this.#line(this.#frame.left, y, this.#frame.historyRight, y, DisplayPaint.gridStyle())
-                this.#text(MidiKeys.toFullString(note), this.#frame.keyCenter, y + TunerLayout.keyLabelOffset,
-                    Math.min(TunerLayout.maxKeyFont, TunerLayout.historyHeight / span * TunerLayout.keyFontRatio),
-                    selected ? Colors.panelBackground.toString() : Colors.shadow.toString())
-            }
+            this.#line(this.#frame.left, y, this.#frame.historyRight, y, DisplayPaint.gridStyle())
+            this.#text(MidiKeys.toFullString(note), this.#frame.keyCenter, y + TunerLayout.keyLabelOffset,
+                Math.min(TunerLayout.maxKeyFont, TunerLayout.historyHeight / span * TunerLayout.keyFontRatio),
+                selected ? Colors.panelBackground.toString() : Colors.shadow.toString())
         }
+        context.restore()
         context.save()
         context.beginPath()
         context.rect(this.#frame.left, TunerLayout.historyTop,

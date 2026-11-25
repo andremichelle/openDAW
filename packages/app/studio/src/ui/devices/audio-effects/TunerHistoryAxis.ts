@@ -9,7 +9,7 @@ export namespace TunerHistoryAxis {
         for (let note = Math.ceil(center - span / 2 - 0.5); note <= Math.floor(center + span / 2 + 0.5); note++) {
             const y = TunerLayout.historyCenter - (note - center) * step
             const top = y - step / 2
-            if (top >= TunerLayout.historyTop - 1e-6 && top + step <= TunerLayout.historyBottom + 1e-6) {
+            if (top < TunerLayout.historyBottom && top + step > TunerLayout.historyTop) {
                 result.push({note, y, top, height: step})
             }
         }
