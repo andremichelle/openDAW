@@ -42,7 +42,7 @@ export class TunerRenderer {
         context.clip()
         for (const key of TunerHistoryAxis.keys(center, span)) {
             const {note, y, top, height} = key
-            context.fillStyle = MidiKeys.isBlackKey(note) ? "rgba(0, 0, 0, 0.04)" : "rgba(255, 255, 255, 0.04)"
+            context.fillStyle = MidiKeys.isBlackKey(note) ? "rgba(0, 0, 0, 0.06)" : "rgba(255, 255, 255, 0.04)"
             context.fillRect(this.#frame.keyLeft, top, TunerLayout.keyWidth, height)
             const selected = visible && note === Math.round(display.midi)
             if (selected) {
