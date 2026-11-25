@@ -32,7 +32,7 @@ export class TunerRenderer {
         const context = this.#context
         if (isAbsent(context)) {return}
         const {center, display, visible} = this.#state
-        const span = Math.min(this.#state.span, this.#frame.maxSpan)
+        const span = TunerCanvasLayout.visibleSpan(this.#frame, this.#state.span)
         const font = this.#frame.keyFont
         const rows = TunerLayout.historyHeight / span / font
         context.save()
