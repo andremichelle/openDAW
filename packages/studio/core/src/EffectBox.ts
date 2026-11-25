@@ -26,6 +26,7 @@ import {
     ReverbDeviceBox,
     StereoToolDeviceBox,
     TidalDeviceBox,
+    TunerDeviceBox,
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     VelocityDeviceBox,
@@ -41,6 +42,6 @@ export type EffectBox =
     | SpielwerkDeviceBox | WclapMidiEffectBox | NoteFilterDeviceBox | ScaleMatrixDeviceBox | ChordKeysDeviceBox | EuclidDeviceBox
     | MaximizerDeviceBox | DelayDeviceBox | ReverbDeviceBox | RevampDeviceBox | StereoToolDeviceBox | TidalDeviceBox
     | ModularDeviceBox | UnknownAudioEffectDeviceBox | CompressorDeviceBox | GateDeviceBox
-    | AutotuneDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | WclapDeviceBox | VocoderDeviceBox
+    | TunerDeviceBox | AutotuneDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | WclapDeviceBox | VocoderDeviceBox
     | AudioSinkDeviceBox
     | WaveshaperDeviceBox | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox | MidSideCompositeBox

@@ -37,6 +37,7 @@ import {
     AudioSinkDeviceBox,
     TidalDeviceBox,
     SpielwerkDeviceBox,
+    TunerDeviceBox,
     VelocityDeviceBox,
     VocoderDeviceBox,
     WaveshaperDeviceBox,
@@ -383,6 +384,24 @@ export namespace EffectFactories {
             ReverbDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Reverb")
                 box.preDelay.setInitValue(0.001)
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const Tuner: EffectFactory = {
+        defaultName: "Tuner",
+        defaultIcon: IconSymbol.Note,
+        briefDescription: "Pitch Measurement",
+        description: "Tune monophonic instruments with target, strobe and pitch-history views",
+        manualPage: DeviceManualUrls.Tuner,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        boxName: "TunerDeviceBox",
+        create: ({boxGraph}, hostField, index): TunerDeviceBox =>
+            TunerDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Tuner")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -785,6 +804,7 @@ export namespace EffectFactories {
         Revamp,
         StereoTool,      // Stereo Tool
         Tidal,
+        Tuner,
         NeuralAmp,       // Tone3000
         Vocoder,
         Waveshaper,

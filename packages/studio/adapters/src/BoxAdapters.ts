@@ -25,6 +25,7 @@ import {
     AudioTimeStretchBox,
     AudioUnitBox,
     AutotuneDeviceBox,
+    TunerDeviceBox,
     AuxSendBox,
     BoxVisitor,
     CompressorDeviceBox,
@@ -233,6 +234,7 @@ import {FoldDeviceBoxAdapter} from "./devices/audio-effects/FoldDeviceBoxAdapter
 import {MIDIOutputDeviceBoxAdapter} from "./devices/instruments/MIDIOutputDeviceBoxAdapter"
 import {VelocityDeviceBoxAdapter} from "./devices/midi-effects/VelocityDeviceBoxAdapter"
 import {TidalDeviceBoxAdapter} from "./devices/audio-effects/TidalDeviceBoxAdapter"
+import {TunerDeviceBoxAdapter} from "./devices/audio-effects/TunerDeviceBoxAdapter"
 import {VocoderDeviceBoxAdapter} from "./devices/audio-effects/VocoderDeviceBoxAdapter"
 import {ConvolverDeviceBoxAdapter} from "./devices/audio-effects/ConvolverDeviceBoxAdapter"
 import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroReverbDeviceBoxAdapter"
@@ -324,6 +326,7 @@ export class BoxAdapters implements Terminable {
             visitCompressorDeviceBox: (box: CompressorDeviceBox) => new CompressorDeviceBoxAdapter(this.#context, box),
             visitGateDeviceBox: (box: GateDeviceBox) => new GateDeviceBoxAdapter(this.#context, box),
             visitAutotuneDeviceBox: (box: AutotuneDeviceBox) => new AutotuneDeviceBoxAdapter(this.#context, box),
+            visitTunerDeviceBox: (box: TunerDeviceBox) => new TunerDeviceBoxAdapter(this.#context, box),
             visitCrusherDeviceBox: (box: CrusherDeviceBox) => new CrusherDeviceBoxAdapter(this.#context, box),
             visitConvolverDeviceBox: (box: ConvolverDeviceBox) => new ConvolverDeviceBoxAdapter(this.#context, box),
             visitDattorroReverbDeviceBox: (box: DattorroReverbDeviceBox) => new DattorroReverbDeviceBoxAdapter(this.#context, box),

@@ -24,6 +24,7 @@ pub mod meter;
 pub mod noise;
 pub mod osc;
 pub mod panning;
+pub mod pitch_detector;
 pub mod ppqn;
 pub mod psola;
 pub mod ramp;
@@ -36,6 +37,7 @@ pub mod svf;
 pub mod tidal;
 pub mod vocoder;
 pub mod waveshaper;
+pub mod yin;
 
 pub use math::{clamp, fabs, fast_sin, PI};
 
