@@ -59,7 +59,8 @@ export namespace PreferencesPageLabels {
             fields: {
                 "dragging-use-pointer-lock": "Use Pointer Lock at window edges [Chrome only]",
                 "modifying-controls-wheel": "Modify controls with mouse wheel",
-                "wheel-zoom-speed": "Wheel zoom speed (%)"
+                "wheel-zoom-speed": "Wheel zoom speed (%)",
+                "fl-studio-keybinds": "Use FL Studio keybinds"
             }
         },
         "editing": {

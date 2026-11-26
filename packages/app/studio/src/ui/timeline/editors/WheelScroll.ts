@@ -7,7 +7,7 @@ export const moveByWheelPixels = (range: TimelineRange, event: WheelEvent): void
 
 export const attachWheelScroll = (element: Element, range: TimelineRange) =>
     Events.subscribe(element, "wheel", (event: WheelEvent) => {
-        if (event.shiftKey) {
+        if (WheelScaling.isZoomGesture(event)) {
             event.preventDefault()
             event.stopPropagation()
             WheelScaling.apply(element, range, event)
