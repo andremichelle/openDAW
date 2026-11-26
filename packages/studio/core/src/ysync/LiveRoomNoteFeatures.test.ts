@@ -29,6 +29,8 @@ const createScene = async (): Promise<Scene> => {
             box.events.refer(events.events)
             box.position.setValue(index * 480)
             box.duration.setValue(480)
+            // float32 exact, so the creator and the receiver hold the same velocity
+            box.velocity.setValue(0.5)
             box.pitch.setValue(60 + index)
         }).address.uuid)
         return {collection: events.address.uuid, notes}
@@ -79,9 +81,7 @@ describe("live room: note chance, repeat and groups", () => {
             NoteEventFeatures.writeVelocityFade(note, -0.5)
         })
         await expectSettled(room)
-        // a float field holds a local write at full precision, a received one as float32, both store the same float32
-        const [a, b] = room.peers.map(peer => adapterOf(peer, noteOf(peer, first)).parts()
-            .map(part => ({...part, velocity: Math.fround(part.velocity)})))
+        const [a, b] = room.peers.map(peer => adapterOf(peer, noteOf(peer, first)).parts())
         expect(a).toEqual(b)
         expect(a.length).toBeGreaterThan(1)
     })
