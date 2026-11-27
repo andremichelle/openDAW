@@ -43,6 +43,7 @@ import {
     TapeDeviceBox,
     TidalDeviceBox,
     TunerDeviceBox,
+    LinearMatrixDuckerDeviceBox,
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     NeonDeviceBox,
@@ -116,6 +117,7 @@ import {
     TapeDeviceBoxAdapter,
     TidalDeviceBoxAdapter,
     TunerDeviceBoxAdapter,
+    LinearMatrixDuckerDeviceBoxAdapter,
     UnknownAudioEffectDeviceBoxAdapter,
     UnknownMidiEffectDeviceBoxAdapter,
     NeonDeviceBoxAdapter,
@@ -194,6 +196,7 @@ import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceE
 import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEditor"
 import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
 import {TunerDeviceEditor} from "@/ui/devices/audio-effects/TunerDeviceEditor"
+import {LinearMatrixDuckerDeviceEditor} from "@/ui/devices/audio-effects/LinearMatrixDuckerDeviceEditor"
 import {ConvolverDeviceEditor} from "@/ui/devices/audio-effects/ConvolverDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
 import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
@@ -535,6 +538,11 @@ export namespace DeviceEditorFactory {
                 <TunerDeviceEditor lifecycle={lifecycle} service={service}
                                    adapter={service.project.boxAdapters.adapterFor(box, TunerDeviceBoxAdapter)}
                                    deviceHost={deviceHost}/>
+            ),
+            visitLinearMatrixDuckerDeviceBox: (box: LinearMatrixDuckerDeviceBox) => (
+                <LinearMatrixDuckerDeviceEditor lifecycle={lifecycle} service={service}
+                                                adapter={service.project.boxAdapters.adapterFor(box, LinearMatrixDuckerDeviceBoxAdapter)}
+                                                deviceHost={deviceHost}/>
             ),
             visitAutotuneDeviceBox: (box: AutotuneDeviceBox) => (
                 <AutotuneDeviceEditor lifecycle={lifecycle}

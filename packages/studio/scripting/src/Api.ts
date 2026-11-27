@@ -736,6 +736,31 @@ export interface GateEffect extends AudioEffect, SideChainable {
 }
 
 /**
+ * Sidechain ducker: the sidechain level ducks the signal, a soft clipper without a sidechain
+ * @group Audio Effects
+ */
+export interface LinearMatrixDuckerEffect extends AudioEffect, SideChainable {
+    /** Always "LinearMatrixDucker" */
+    readonly key: "LinearMatrixDucker"
+    /** Threshold in dB (-60 to 6, default 0) */
+    threshold: float
+    /** Attack (lookahead) in ms (0 to 10, default 5) */
+    attack: float
+    /** Hold in ms (0 to 10, default 0) */
+    hold: float
+    /** Release in ms (0 to 1000, default 5) */
+    release: float
+    /** Detection (0-2): Peak, ISP (inter-sample peak), RMS */
+    mode: int
+    /** Sidechain range (0 to 2, default 1) */
+    range: float
+    /** Stereo, 0 links both channels, 1 processes them independently (default 0) */
+    stereo: unitValue
+    /** Dry/wet (0 to 1, default 1) */
+    mix: unitValue
+}
+
+/**
  * Brickwall limiter with automatic makeup gain
  * @group Audio Effects
  */
@@ -1086,6 +1111,8 @@ export interface AudioEffects {
     "Fold": FoldEffect
     /** {@link GateEffect} */
     "Gate": GateEffect
+    /** {@link LinearMatrixDuckerEffect} */
+    "LinearMatrixDucker": LinearMatrixDuckerEffect
     /** {@link MaximizerEffect} */
     "Maximizer": MaximizerEffect
     /** {@link NeuralAmpEffect} */

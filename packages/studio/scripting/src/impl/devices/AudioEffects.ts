@@ -16,6 +16,7 @@ import {
     FrequencySplitBox,
     MidSideCompositeBox,
     GateDeviceBox,
+    LinearMatrixDuckerDeviceBox,
     MaximizerDeviceBox,
     NeuralAmpDeviceBox,
     RevampDeviceBox,
@@ -52,6 +53,7 @@ import {
     FoldEffect,
     FrequencySplitEffect,
     GateEffect,
+    LinearMatrixDuckerEffect,
     GroupAudioUnit,
     MaximizerEffect,
     NeuralAmpEffect,
@@ -117,7 +119,7 @@ export abstract class SideChainableEffect<B extends SideChainBox> extends AudioE
 
 export type AnyAudioEffectImpl =
     | AutotuneEffectImpl | CompressorEffectImpl | ConvolverEffectImpl | CorrodeEffectImpl | CrusherEffectImpl | DattorroReverbEffectImpl
-    | DelayEffectImpl | FoldEffectImpl | GateEffectImpl | MaximizerEffectImpl | NeuralAmpEffectImpl | RevampEffectImpl
+    | DelayEffectImpl | FoldEffectImpl | GateEffectImpl | LinearMatrixDuckerEffectImpl | MaximizerEffectImpl | NeuralAmpEffectImpl | RevampEffectImpl
     | ReverbEffectImpl | StereoToolEffectImpl | SinkEffectImpl | TidalEffectImpl | VocoderEffectImpl | WaveshaperEffectImpl
     | WerkstattEffectImpl | AudioEffectCompositeImpl | StereoSplitEffectImpl | MidSideSplitEffectImpl | FrequencySplitEffectImpl
     | UnsupportedAudioEffectImpl
@@ -305,6 +307,27 @@ export class GateEffectImpl extends SideChainableEffect<GateDeviceBox> implement
         this.bind({
             threshold: box.threshold, return: box.return, attack: box.attack, hold: box.hold,
             release: box.release, floor: box.floor, inverse: box.inverse
+        })
+    }
+}
+
+export class LinearMatrixDuckerEffectImpl extends SideChainableEffect<LinearMatrixDuckerDeviceBox>
+    implements LinearMatrixDuckerEffect {
+    readonly key = "LinearMatrixDucker" as const
+    declare threshold: float
+    declare attack: float
+    declare hold: float
+    declare release: float
+    declare mode: int
+    declare range: float
+    declare stereo: unitValue
+    declare mix: unitValue
+
+    constructor(context: Context, box: LinearMatrixDuckerDeviceBox) {
+        super(context, box)
+        this.bind({
+            threshold: box.threshold, attack: box.attack, hold: box.hold, release: box.release,
+            mode: box.mode, range: box.range, stereo: box.stereo, mix: box.mix
         })
     }
 }
@@ -633,6 +656,7 @@ export namespace AudioEffectImpls {
         if (box instanceof DelayDeviceBox) {return new DelayEffectImpl(context, box)}
         if (box instanceof FoldDeviceBox) {return new FoldEffectImpl(context, box)}
         if (box instanceof GateDeviceBox) {return new GateEffectImpl(context, box)}
+        if (box instanceof LinearMatrixDuckerDeviceBox) {return new LinearMatrixDuckerEffectImpl(context, box)}
         if (box instanceof MaximizerDeviceBox) {return new MaximizerEffectImpl(context, box)}
         if (box instanceof NeuralAmpDeviceBox) {return new NeuralAmpEffectImpl(context, box)}
         if (box instanceof RevampDeviceBox) {return new RevampEffectImpl(context, box)}

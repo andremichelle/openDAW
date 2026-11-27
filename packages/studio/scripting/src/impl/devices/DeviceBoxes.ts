@@ -17,6 +17,7 @@ import {
     FrequencySplitBox,
     MidSideCompositeBox,
     GateDeviceBox,
+    LinearMatrixDuckerDeviceBox,
     MaximizerDeviceBox,
     NeuralAmpDeviceBox,
     NoteFilterDeviceBox,
@@ -46,7 +47,7 @@ export type MIDIEffectBox =
 
 export type AudioEffectBox =
     | AutotuneDeviceBox | CompressorDeviceBox | ConvolverDeviceBox | CorrodeDeviceBox | CrusherDeviceBox | DattorroReverbDeviceBox
-    | DelayDeviceBox | FoldDeviceBox | GateDeviceBox | MaximizerDeviceBox | NeuralAmpDeviceBox | RevampDeviceBox
+    | DelayDeviceBox | FoldDeviceBox | GateDeviceBox | LinearMatrixDuckerDeviceBox | MaximizerDeviceBox | NeuralAmpDeviceBox | RevampDeviceBox
     | ReverbDeviceBox | StereoToolDeviceBox | TidalDeviceBox | VocoderDeviceBox | WaveshaperDeviceBox
     | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox | MidSideCompositeBox | FrequencySplitBox | AudioSinkDeviceBox
 
@@ -69,7 +70,8 @@ export namespace DeviceBoxes {
 
     export const AudioEffectLabels: Record<keyof AudioEffects, string> = {
         Autotune: "Autotune", Compressor: "Compressor", Convolver: "Convolver", Corrode: "Corrode", Crusher: "Crusher",
-        DattorroReverb: "Dattorro Reverb", Delay: "Delay", Fold: "Fold", Gate: "Gate", Maximizer: "Maximizer",
+        DattorroReverb: "Dattorro Reverb", Delay: "Delay", Fold: "Fold", Gate: "Gate",
+        LinearMatrixDucker: "Linear Matrix Ducker", Maximizer: "Maximizer",
         NeuralAmp: "Tone3000", Revamp: "Revamp", Reverb: "Reverb", StereoTool: "Stereo Tool", Tidal: "Tidal",
         Vocoder: "Vocoder", Waveshaper: "Waveshaper", Werkstatt: "Werkstatt", Composite: "FX Composite",
         StereoSplit: "Stereo Split", MidSideSplit: "Mid/Side Split", FrequencySplit: "Frequency Split", Sink: "Sink"
@@ -101,6 +103,7 @@ export namespace DeviceBoxes {
             case "DelayDeviceBox": return "Delay"
             case "FoldDeviceBox": return "Fold"
             case "GateDeviceBox": return "Gate"
+            case "LinearMatrixDuckerDeviceBox": return "LinearMatrixDucker"
             case "MaximizerDeviceBox": return "Maximizer"
             case "NeuralAmpDeviceBox": return "NeuralAmp"
             case "RevampDeviceBox": return "Revamp"
@@ -156,8 +159,8 @@ export namespace DeviceBoxes {
 
     export const isAudioEffectBox = (boxName: string): boolean =>
         ["AutotuneDeviceBox", "CompressorDeviceBox", "ConvolverDeviceBox", "CorrodeDeviceBox", "CrusherDeviceBox",
-            "DattorroReverbDeviceBox", "DelayDeviceBox", "FoldDeviceBox", "GateDeviceBox", "MaximizerDeviceBox",
-            "NeuralAmpDeviceBox", "RevampDeviceBox", "ReverbDeviceBox", "StereoToolDeviceBox", "TidalDeviceBox",
+            "DattorroReverbDeviceBox", "DelayDeviceBox", "FoldDeviceBox", "GateDeviceBox", "LinearMatrixDuckerDeviceBox",
+            "MaximizerDeviceBox", "NeuralAmpDeviceBox", "RevampDeviceBox", "ReverbDeviceBox", "StereoToolDeviceBox", "TidalDeviceBox",
             "VocoderDeviceBox", "WaveshaperDeviceBox", "WerkstattDeviceBox", "AudioEffectCompositeBox",
             "StereoCompositeBox", "MidSideCompositeBox", "FrequencySplitBox", "AudioSinkDeviceBox"].includes(boxName)
 
@@ -305,6 +308,12 @@ export namespace DeviceBoxes {
                 })
             case "Gate":
                 return GateDeviceBox.create(boxGraph, UUID.generate(), box => {
+                    box.label.setValue(label)
+                    box.index.setValue(index)
+                    box.host.refer(host)
+                })
+            case "LinearMatrixDucker":
+                return LinearMatrixDuckerDeviceBox.create(boxGraph, UUID.generate(), box => {
                     box.label.setValue(label)
                     box.index.setValue(index)
                     box.host.refer(host)

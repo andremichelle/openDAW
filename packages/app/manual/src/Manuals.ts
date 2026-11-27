@@ -95,6 +95,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Frequency Split", path: "/manuals/devices/audio/frequency-split", icon: IconSymbol.Charts},
                     {type: "page", label: "FX Composite", path: "/manuals/devices/audio/effect-composite", icon: IconSymbol.Stack},
                     {type: "page", label: "Gate", path: "/manuals/devices/audio/gate", icon: IconSymbol.Gate},
+                    {type: "page", label: "Linear Matrix Ducker", path: "/manuals/devices/audio/linear-matrix-ducker", icon: IconSymbol.Compressor},
                     {type: "page", label: "Maximizer", path: "/manuals/devices/audio/maximizer", icon: IconSymbol.Volume},
                     {type: "page", label: "Mid/Side Split", path: "/manuals/devices/audio/mid-side-composite", icon: IconSymbol.MidSideSplit},
                     {type: "page", label: "Revamp", path: "/manuals/devices/audio/revamp", icon: IconSymbol.EQ},

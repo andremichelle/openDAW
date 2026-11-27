@@ -30,6 +30,7 @@ export namespace DeviceManualUrls {
     export const Fold = "manuals/devices/audio/fold"
     export const Tidal = "manuals/devices/audio/tidal"
     export const Tuner = "manuals/devices/audio/tuner"
+    export const LinearMatrixDucker = "manuals/devices/audio/linear-matrix-ducker"
     export const Revamp = "manuals/devices/audio/revamp"
     export const Modular = "manuals/devices/audio/modular"
     export const NeuralAmp = "manuals/devices/audio/neural-amp"
