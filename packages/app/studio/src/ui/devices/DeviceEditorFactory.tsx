@@ -12,6 +12,7 @@ import {
     BoxVisitor,
     CompressorDeviceBox,
     CrusherDeviceBox,
+    CorrodeDeviceBox,
     ConvolverDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
@@ -83,6 +84,7 @@ import {
     MidSideCompositeBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
+    CorrodeDeviceBoxAdapter,
     ConvolverDeviceBoxAdapter,
     DattorroReverbDeviceBoxAdapter,
     DelayDeviceBoxAdapter,
@@ -186,6 +188,7 @@ import {CompressorDeviceEditor} from "@/ui/devices/audio-effects/CompressorDevic
 import {GateDeviceEditor} from "@/ui/devices/audio-effects/GateDeviceEditor"
 import {AutotuneDeviceEditor} from "@/ui/devices/audio-effects/AutotuneDeviceEditor"
 import {CrusherDeviceEditor} from "@/ui/devices/audio-effects/CrusherDeviceEditor"
+import {CorrodeDeviceEditor} from "@/ui/devices/audio-effects/CorrodeDeviceEditor"
 import {FoldDeviceEditor} from "@/ui/devices/audio-effects/FoldDeviceEditor"
 import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceEditor"
 import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEditor"
@@ -543,6 +546,12 @@ export namespace DeviceEditorFactory {
                 <CrusherDeviceEditor lifecycle={lifecycle}
                                      service={service}
                                      adapter={service.project.boxAdapters.adapterFor(box, CrusherDeviceBoxAdapter)}
+                                     deviceHost={deviceHost}/>
+            ),
+            visitCorrodeDeviceBox: (box: CorrodeDeviceBox) => (
+                <CorrodeDeviceEditor lifecycle={lifecycle}
+                                     service={service}
+                                     adapter={service.project.boxAdapters.adapterFor(box, CorrodeDeviceBoxAdapter)}
                                      deviceHost={deviceHost}/>
             ),
             visitFoldDeviceBox: (box: FoldDeviceBox) => (

@@ -272,6 +272,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-corrode"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-crusher"
 version = "0.0.0"
 dependencies = [

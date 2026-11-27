@@ -86,6 +86,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Autotune", path: "/manuals/devices/audio/autotune", icon: IconSymbol.Note},
                     {type: "page", label: "Compressor", path: "/manuals/devices/audio/compressor", icon: IconSymbol.Compressor},
                     {type: "page", label: "Convolver", path: "/manuals/devices/audio/convolver", icon: IconSymbol.Convolver},
+                    {type: "page", label: "Corrode", path: "/manuals/devices/audio/corrode", icon: IconSymbol.Noise},
                     {type: "page", label: "Crusher", path: "/manuals/devices/audio/crusher", icon: IconSymbol.Bug},
                     {type: "page", label: "Dattorro Reverb", path: "/manuals/devices/audio/dattorro-reverb", icon: IconSymbol.Dattorro},
                     {type: "page", label: "Delay", path: "/manuals/devices/audio/delay", icon: IconSymbol.Time},

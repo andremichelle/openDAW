@@ -1,0 +1,43 @@
+@use "@/mixins"
+
+component
+  @include mixins.Control
+  display: grid
+  grid-template-columns: repeat(3, 64px)
+  grid-template-rows: 114px 18px 32px
+  column-gap: 8px
+  row-gap: 6px
+
+  > div.display
+    grid-column: 1 / -1
+
+  > div.modes
+    grid-column: 1 / -1
+    display: grid
+    grid-template-columns: subgrid
+    font-size: 9px
+
+    > label
+      height: 18px
+      justify-self: stretch
+
+    > input:not(:checked) + label
+      border-radius: 0.25em
+      border: 0.5px solid var(--color)
+      box-shadow: 0 0 3px -1px var(--color)
+
+  > div.control
+    display: grid
+    grid-template-rows: 12px 18px
+    row-gap: 2px
+    justify-content: center
+
+    &.disabled
+      opacity: 0.3
+      pointer-events: none
+
+    > h3
+      font-size: 9px
+      line-height: 12px
+      text-align: center
+      color: var(--color-shadow)

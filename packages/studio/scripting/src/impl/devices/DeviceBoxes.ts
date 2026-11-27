@@ -9,6 +9,7 @@ import {
     AutotuneDeviceBox,
     CompressorDeviceBox,
     ConvolverDeviceBox,
+    CorrodeDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
@@ -44,7 +45,7 @@ export type MIDIEffectBox =
     | SpielwerkDeviceBox
 
 export type AudioEffectBox =
-    | AutotuneDeviceBox | CompressorDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | DattorroReverbDeviceBox
+    | AutotuneDeviceBox | CompressorDeviceBox | ConvolverDeviceBox | CorrodeDeviceBox | CrusherDeviceBox | DattorroReverbDeviceBox
     | DelayDeviceBox | FoldDeviceBox | GateDeviceBox | MaximizerDeviceBox | NeuralAmpDeviceBox | RevampDeviceBox
     | ReverbDeviceBox | StereoToolDeviceBox | TidalDeviceBox | VocoderDeviceBox | WaveshaperDeviceBox
     | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox | MidSideCompositeBox | FrequencySplitBox | AudioSinkDeviceBox
@@ -67,7 +68,7 @@ export namespace DeviceBoxes {
     }
 
     export const AudioEffectLabels: Record<keyof AudioEffects, string> = {
-        Autotune: "Autotune", Compressor: "Compressor", Convolver: "Convolver", Crusher: "Crusher",
+        Autotune: "Autotune", Compressor: "Compressor", Convolver: "Convolver", Corrode: "Corrode", Crusher: "Crusher",
         DattorroReverb: "Dattorro Reverb", Delay: "Delay", Fold: "Fold", Gate: "Gate", Maximizer: "Maximizer",
         NeuralAmp: "Tone3000", Revamp: "Revamp", Reverb: "Reverb", StereoTool: "Stereo Tool", Tidal: "Tidal",
         Vocoder: "Vocoder", Waveshaper: "Waveshaper", Werkstatt: "Werkstatt", Composite: "FX Composite",
@@ -94,6 +95,7 @@ export namespace DeviceBoxes {
             case "AutotuneDeviceBox": return "Autotune"
             case "CompressorDeviceBox": return "Compressor"
             case "ConvolverDeviceBox": return "Convolver"
+            case "CorrodeDeviceBox": return "Corrode"
             case "CrusherDeviceBox": return "Crusher"
             case "DattorroReverbDeviceBox": return "DattorroReverb"
             case "DelayDeviceBox": return "Delay"
@@ -153,7 +155,7 @@ export namespace DeviceBoxes {
             .includes(boxName)
 
     export const isAudioEffectBox = (boxName: string): boolean =>
-        ["AutotuneDeviceBox", "CompressorDeviceBox", "ConvolverDeviceBox", "CrusherDeviceBox",
+        ["AutotuneDeviceBox", "CompressorDeviceBox", "ConvolverDeviceBox", "CorrodeDeviceBox", "CrusherDeviceBox",
             "DattorroReverbDeviceBox", "DelayDeviceBox", "FoldDeviceBox", "GateDeviceBox", "MaximizerDeviceBox",
             "NeuralAmpDeviceBox", "RevampDeviceBox", "ReverbDeviceBox", "StereoToolDeviceBox", "TidalDeviceBox",
             "VocoderDeviceBox", "WaveshaperDeviceBox", "WerkstattDeviceBox", "AudioEffectCompositeBox",
@@ -266,6 +268,12 @@ export namespace DeviceBoxes {
                 })
             case "Convolver":
                 return ConvolverDeviceBox.create(boxGraph, UUID.generate(), box => {
+                    box.label.setValue(label)
+                    box.index.setValue(index)
+                    box.host.refer(host)
+                })
+            case "Corrode":
+                return CorrodeDeviceBox.create(boxGraph, UUID.generate(), box => {
                     box.label.setValue(label)
                     box.index.setValue(index)
                     box.host.refer(host)

@@ -11,6 +11,7 @@ import {
     CompressorDeviceBox,
     ConvolverDeviceBox,
     CrusherDeviceBox,
+    CorrodeDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
@@ -443,6 +444,24 @@ export namespace EffectFactories {
             })
     }
 
+    export const Corrode: EffectFactory = {
+        defaultName: "Corrode",
+        defaultIcon: IconSymbol.Noise,
+        briefDescription: "Delay Modulation",
+        description: "Erodes the signal by modulating a short delay with filtered noise or a sine",
+        manualPage: DeviceManualUrls.Corrode,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        boxName: "CorrodeDeviceBox",
+        create: ({boxGraph}, hostField, index): CorrodeDeviceBox =>
+            CorrodeDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Corrode")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Fold: EffectFactory = {
         defaultName: "Fold",
         defaultIcon: IconSymbol.Fold,
@@ -794,6 +813,7 @@ export namespace EffectFactories {
         Autotune,
         Compressor,
         Convolver,
+        Corrode,
         Crusher,
         DattorroReverb,  // Dattorro Reverb
         Delay,
