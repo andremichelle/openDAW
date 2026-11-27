@@ -7,6 +7,7 @@ import {CommunityScript, CommunityScriptTarget} from "@/opendaw-api/CommunityInd
 import {WclapDescriber} from "@/service/WclapDescriber"
 import {SpotlightEntry} from "@/ui/spotlight/SpotlightEntry"
 import {SpotlightCreate} from "@/ui/spotlight/SpotlightCreate"
+import {DeviceTags} from "@/ui/browse/DeviceTags"
 
 const enum Group {Device, Plugin, UserPreset, StockPreset, Script}
 
@@ -94,11 +95,12 @@ export namespace SpotlightCreateEntries {
         const owned = [...presets, ...scriptEntries]
         const childrenOf = (factory: DeviceFactory): ReadonlyArray<SpotlightEntry> =>
             owned.filter(({owner}) => owner.contains(factory)).map(({entry}) => entry)
-        const instruments = InstrumentFactories.Sorted.map(([, factory]) => create(`Create ${factory.defaultName}`,
-            [factory.defaultName, factory.briefDescription], [], factory.defaultIcon, "Instrument", Group.Device,
-            Option.None, () => SpotlightCreate.instrument(service, factory), childrenOf(factory)))
-        const effects = [...EffectFactories.AudioList, ...EffectFactories.MidiList].map(factory => create(
-            `Create ${factory.defaultName}`, [factory.defaultName, factory.briefDescription], [], factory.defaultIcon,
+        const instruments = InstrumentFactories.Sorted.map(([key, factory]) => create(`Create ${factory.defaultName}`,
+            [factory.defaultName, factory.briefDescription, ...DeviceTags.of(key)], [], factory.defaultIcon, "Instrument",
+            Group.Device, Option.None, () => SpotlightCreate.instrument(service, factory), childrenOf(factory)))
+        const effectEntries = [...Object.entries(EffectFactories.AudioNamed), ...Object.entries(EffectFactories.MidiNamed)]
+        const effects = effectEntries.map(([key, factory]) => create(`Create ${factory.defaultName}`,
+            [factory.defaultName, factory.briefDescription, ...DeviceTags.of(key)], [], factory.defaultIcon,
             factory.type === "audio" ? "Audio Effect" : "MIDI Effect", Group.Device, blocked(factory.type),
             () => SpotlightCreate.effect(service, factory), childrenOf(factory)))
         return [...instruments, ...effects, ...wclapEntries, ...owned.map(({entry}) => entry)]
