@@ -41,7 +41,7 @@ export const CorrodeDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                                tracks={deviceHost.audioUnitBoxAdapter().tracks} parameter={parameter}>
                 <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={parameter}
                                            supressValueFlyout={true}>
-                    <ParameterLabel lifecycle={lifecycle} parameter={parameter} framed/>
+                    <ParameterLabel lifecycle={lifecycle} parameter={parameter} classList={["center"]} framed/>
                 </RelativeUnitValueDragging>
             </AutomationControl>
         </div>
