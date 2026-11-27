@@ -4,6 +4,10 @@ Degrades the signal by modulating a very short delay with band-passed noise or a
 
 ---
 
+![screenshot](corrode.webp)
+
+---
+
 ## 0. Overview
 
 _Corrode_ reads the input from a short delay line whose read position moves at audio rate. A moving read position shifts the phase of everything that passes through, so the modulator becomes part of the sound: a sine adds metallic sidebands, band-passed noise adds hiss and crackle that follow the input.

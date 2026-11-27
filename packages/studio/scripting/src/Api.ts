@@ -604,11 +604,11 @@ export interface CorrodeEffect extends AudioEffect {
     readonly key: "Corrode"
     /** 0 = Noise, 1 = Wide Noise (independent noise per channel), 2 = Sine (default 0) */
     mode: int
-    /** Sine frequency or noise band centre in Hz (50 to 18000, default 3000) */
+    /** Sine frequency or noise band centre in Hz (50 to 18000, default 948.7, the centre of the range) */
     frequency: float
     /** Noise bandwidth in octaves (0.08 to 10, default 1), no effect in Sine mode */
     width: float
-    /** Modulation depth (0 to 100, default 20) */
+    /** Modulation depth (0 to 100, default 50) */
     amount: float
 }
 

@@ -4,14 +4,15 @@ component
   @include mixins.Control
   display: grid
   grid-template-columns: repeat(3, 64px)
-  grid-template-rows: 114px 18px 32px
+  grid-template-rows: 105px 14px 18px 10px 31px
   column-gap: 8px
-  row-gap: 6px
 
   > div.display
+    grid-row: 1
     grid-column: 1 / -1
 
   > div.modes
+    grid-row: 3
     grid-column: 1 / -1
     display: grid
     grid-template-columns: subgrid
@@ -27,8 +28,9 @@ component
       box-shadow: 0 0 3px -1px var(--color)
 
   > div.control
+    grid-row: 5
     display: grid
-    grid-template-rows: 12px 18px
+    grid-template-rows: 11px 18px
     row-gap: 2px
     justify-content: center
 
@@ -38,6 +40,6 @@ component
 
     > h3
       font-size: 9px
-      line-height: 12px
+      line-height: 11px
       text-align: center
       color: var(--color-shadow)

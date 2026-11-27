@@ -10,7 +10,7 @@ export const CorrodeDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEf
     },
     11: {
         type: "float32", name: "frequency", pointerRules: ParameterPointerRules,
-        value: 3000.0, constraints: {min: 50.0, max: 18000.0, scaling: "exponential"}, unit: "Hz"
+        value: 948.683, constraints: {min: 50.0, max: 18000.0, scaling: "exponential"}, unit: "Hz" // centre of the exponential range
     },
     12: {
         type: "float32", name: "width", pointerRules: ParameterPointerRules,
@@ -18,6 +18,6 @@ export const CorrodeDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEf
     },
     13: {
         type: "float32", name: "amount", pointerRules: ParameterPointerRules,
-        value: 20.0, constraints: {min: 0.0, max: 100.0, scaling: "linear"}, unit: ""
+        value: 50.0, constraints: {min: 0.0, max: 100.0, scaling: "linear"}, unit: ""
     }
 })

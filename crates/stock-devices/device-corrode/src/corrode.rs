@@ -67,7 +67,7 @@ impl Corrode {
         self.base_delay = libm::ceil(self.max_deviation) + 2.0;
         self.smooth = 1.0 - libm::exp(-1.0 / (SMOOTH_SECONDS * self.sample_rate));
         self.coeff = BiquadCoeff::new();
-        self.frequency.target = 3000.0;
+        self.frequency.target = 948.683;
         self.width.target = 1.0;
         self.reset();
     }
