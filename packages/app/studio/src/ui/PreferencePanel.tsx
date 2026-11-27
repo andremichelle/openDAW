@@ -15,8 +15,9 @@ const className = Html.adoptStyleSheet(css, "PreferencePanel")
 
 type Primitive = boolean | number | string
 
+// Persisted settings without labels are not shown in the Preferences panel.
 export type NestedLabels<T> = {
-    [K in keyof T]: T[K] extends Primitive
+    [K in keyof T]?: T[K] extends Primitive
         ? string
         : T[K] extends object
             ? { label: string; fields: NestedLabels<T[K]> }

@@ -1,3 +1,4 @@
+import {TrackHeightDefaults} from "@opendaw/studio-core"
 import css from "./OutputSelector.sass?inline"
 import {assert, DefaultObservableValue, Lifecycle, Predicate, StringComparator, UUID} from "@opendaw/lib-std"
 import {PointerField} from "@opendaw/lib-box"
@@ -74,6 +75,7 @@ export const BusOutputSelector = ({lifecycle, project, output, pointer, selectab
                                             assert(project.primaryAudioBusBox.isAttached(), "primaryAudioBusBox not attached")
                                             const audioBusBox = AudioBusFactory.create(project.skeleton,
                                                 name, icon, AudioUnitType.Bus, Colors.orange)
+                                            TrackHeightDefaults.applyBus(audioBusBox)
                                             pointer.refer(audioBusBox.input)
                                         }), IconSymbol.AudioBus)),
                                 MenuItem.default({
