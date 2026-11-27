@@ -1,0 +1,8 @@
+Discord users of openDAW contributors
+=====================================
+Used to mention contributors in Discord posts. A webhook post mentions a user only with <@user id>,
+a typed @name is plain text. Get an id with Developer Mode on: right-click the user, Copy User ID.
+
+Name | GitHub | Discord name | Discord user id
+polinom (Igor Polynets) | https://github.com/polinom | polinom_p | 651496079321333800
+Peter Lindener | https://github.com/lindenerpeter-bot | none known | none

@@ -596,6 +596,23 @@ export interface ConvolverEffect extends AudioEffect {
 }
 
 /**
+ * Erodes the signal by modulating a short delay with band-passed noise or a sine
+ * @group Audio Effects
+ */
+export interface CorrodeEffect extends AudioEffect {
+    /** Always "Corrode" */
+    readonly key: "Corrode"
+    /** 0 = Noise, 1 = Wide Noise (independent noise per channel), 2 = Sine (default 0) */
+    mode: int
+    /** Sine frequency or noise band centre in Hz (50 to 18000, default 948.7, the centre of the range) */
+    frequency: float
+    /** Noise bandwidth in octaves (0.08 to 10, default 1), no effect in Sine mode */
+    width: float
+    /** Modulation depth (0 to 100, default 50) */
+    amount: float
+}
+
+/**
  * Bit crusher
  * @group Audio Effects
  */
@@ -1082,6 +1099,8 @@ export interface AudioEffects {
     "Compressor": CompressorEffect
     /** {@link ConvolverEffect} */
     "Convolver": ConvolverEffect
+    /** {@link CorrodeEffect} */
+    "Corrode": CorrodeEffect
     /** {@link CrusherEffect} */
     "Crusher": CrusherEffect
     /** {@link DattorroReverbEffect} */
@@ -3569,7 +3588,7 @@ export interface AudioContent {
     readonly sample: Sample
     /** Tempo following mode (fixed at creation) */
     readonly playback: AudioPlayback
-    /** Gain in dB (default 0) */
+    /** Gain in dB applied to the whole content including its fades, up to +24 (default 0) */
     gain: float
     /** Waveform display offset in seconds */
     waveformOffset: seconds

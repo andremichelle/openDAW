@@ -90,7 +90,7 @@ pub(crate) struct AudioRegionPlayer {
     granular_releases: Vec<GranularRelease>,
     // region_uuid -> file for every LIVE granular sequencer, so a transport stop can seed a release (resolve the
     // source) without the region, which is no longer iterated. Updated as each granular region renders.
-    granular_files: Vec<(Uuid, Uuid)>,
+    granular_files: Vec<(Uuid, (Uuid, f32))>,
     // Active Signalsmith releases + a per-region READY release template (its stream params from the last render),
     // so a transport stop can seed a release without the region (which is no longer iterated).
     signalsmith_releases: Vec<SignalsmithRelease>,
@@ -166,6 +166,7 @@ struct ReleaseTail {
 struct GranularRelease {
     region_uuid: Uuid,
     file: Uuid,
+    gain_db: f32,
     remaining: f64
 }
 
@@ -305,8 +306,8 @@ impl Processor for AudioRegionPlayer {
                 // not already releasing, resolving its source via the region->file map.
                 for (uuid, sequencer) in sequencers.iter() {
                     if !sequencer.has_voices() || granular_releases.iter().any(|release| release.region_uuid == *uuid) { continue; }
-                    if let Some((_, file)) = granular_files.iter().find(|(key, _)| key == uuid) {
-                        granular_releases.push(GranularRelease {region_uuid: *uuid, file: *file, remaining: window});
+                    if let Some((_, (file, gain_db))) = granular_files.iter().find(|(key, _)| key == uuid) {
+                        granular_releases.push(GranularRelease {region_uuid: *uuid, file: *file, gain_db: *gain_db, remaining: window});
                     }
                 }
                 // Signalsmith streams keep flowing out on stop too: seed a fresh release from each live player's
@@ -420,7 +421,7 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
                sequencers: &mut Vec<(Uuid, TimeStretchSequencer)>, sequencer_pool: &mut Vec<TimeStretchSequencer>,
                signalsmith_players: &mut Vec<(Uuid, SignalsmithStretch)>, signalsmith_pool: &mut Vec<SignalsmithStretch>,
                native_cursors: &mut Vec<(Uuid, NativeCursor)>, release_tails: &mut Vec<ReleaseTail>,
-               granular_releases: &mut Vec<GranularRelease>, granular_files: &mut Vec<(Uuid, Uuid)>,
+               granular_releases: &mut Vec<GranularRelease>, granular_files: &mut Vec<(Uuid, (Uuid, f32))>,
                signalsmith_releases: &mut Vec<SignalsmithRelease>, signalsmith_templates: &mut Vec<(Uuid, SignalsmithRelease)>,
                visited: &mut Vec<Uuid>, tempo_map: &TempoMap, sample_rate: f32) {
     if region.mute {
@@ -453,7 +454,7 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
                     }
                 };
                 visited.push(region.region_uuid);
-                upsert(granular_files, region.region_uuid, region.file);
+                upsert(granular_files, region.region_uuid, (region.file, region.gain_db));
                 // A re-entry (transport looped back in) plays fresh, so drop any release seeded at a previous end.
                 granular_releases.retain(|release| release.region_uuid != region.region_uuid);
                 let source = Source {left, right, num_frames: sample.frame_count as usize};
@@ -473,11 +474,11 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
                     let complete_sample = sample_of(block, complete, sample_rate);
                     let block_end = block.s1 as usize;
                     let window = (VOICE_FADE_DURATION * sample_rate as f64).max(1.0);
-                    let unity = [1.0f32; engine_env::RENDER_QUANTUM];
+                    let gain = [db_to_gain(region.gain_db); engine_env::RENDER_QUANTUM];
                     let count = block_end.saturating_sub(complete_sample);
-                    sequencers[index].1.render_release(&source, output, complete_sample, count, &unity[..count]);
+                    sequencers[index].1.render_release(&source, output, complete_sample, count, &gain[..count]);
                     granular_releases.retain(|release| release.region_uuid != region.region_uuid);
-                    granular_releases.push(GranularRelease {region_uuid: region.region_uuid, file: region.file, remaining: window - count as f64});
+                    granular_releases.push(GranularRelease {region_uuid: region.region_uuid, file: region.file, gain_db: region.gain_db, remaining: window - count as f64});
                 }
             }
             _ => {
@@ -637,11 +638,12 @@ fn fill_fading_gain(buffer: &mut [f32], region: &AudioRegion, result_start: f64,
     // region's mid-file start there (mirrors render_region / play_signalsmith).
     let declick_pulses = seconds_to_pulses(VOICE_FADE_DURATION, block.bpm) as f64;
     let declick_in = region.waveform_offset > 0.0 || region.loop_offset > 0.0;
+    let gain = db_to_gain(region.gain_db);
     for (index, slot) in buffer.iter_mut().enumerate().take(count) {
         let ppqn = start_ppqn + if count > 0 { index as f64 / count as f64 * span_ppqn } else { 0.0 };
         // declick_out = false: the granular path fades OUT by ringing its voices out PAST the region end (the
         // GranularRelease), not by carving its own last 20 ms — so a cut seam crossfades instead of dipping.
-        *slot = fade_gain(ppqn, region.duration, region, declick_pulses, declick_in, false);
+        *slot = gain * fade_gain(ppqn, region.duration, region, declick_pulses, declick_in, false);
     }
     count
 }
@@ -680,8 +682,8 @@ fn seed_jump_tails(cursors: &[(Uuid, NativeCursor)], release_tails: &[ReleaseTai
     }
 }
 
-/// Insert-or-update `key -> value` in a small assoc vec (region_uuid -> file for live granular sequencers).
-fn upsert(map: &mut Vec<(Uuid, Uuid)>, key: Uuid, value: Uuid) {
+/// Insert-or-update `key -> value` in a small assoc vec (region_uuid -> file and gain for live granular sequencers).
+fn upsert<T>(map: &mut Vec<(Uuid, T)>, key: Uuid, value: T) {
     match map.iter_mut().find(|(existing, _)| *existing == key) {
         Some(entry) => entry.1 = value,
         None => map.push((key, value))
@@ -705,19 +707,19 @@ fn render_granular_releases(
     releases: &mut Vec<GranularRelease>,
     sequencers: &mut Vec<(Uuid, TimeStretchSequencer)>,
     sequencer_pool: &mut Vec<TimeStretchSequencer>,
-    granular_files: &mut Vec<(Uuid, Uuid)>,
+    granular_files: &mut Vec<(Uuid, (Uuid, f32))>,
     output: &mut AudioBuffer,
     block: &Block
 ) {
     let buffer_start = block.s0 as usize;
     let count = (block.s1 - block.s0) as usize;
-    let unity = [1.0f32; engine_env::RENDER_QUANTUM];
     releases.retain_mut(|release| {
         let Some(seq_index) = sequencers.iter().position(|(uuid, _)| *uuid == release.region_uuid) else { return false };
+        let gain = [db_to_gain(release.gain_db); engine_env::RENDER_QUANTUM];
         let active = match crate::resolve_sample(release.file) {
             Some(sample) => abi::with_planes!(sample, |left, right| {
                 let source = Source {left, right, num_frames: sample.frame_count as usize};
-                sequencers[seq_index].1.render_release(&source, output, buffer_start, count, &unity[..count])
+                sequencers[seq_index].1.render_release(&source, output, buffer_start, count, &gain[..count])
             }),
             None => false
         };
@@ -783,21 +785,21 @@ fn render_signalsmith_release(release: &mut SignalsmithRelease, player: &mut Sig
 /// rides the release drivers.
 #[allow(clippy::too_many_arguments)]
 fn release_jumped_out(visited: &[Uuid], block: &Block, output: &mut AudioBuffer,
-                      sequencers: &mut [(Uuid, TimeStretchSequencer)], granular_releases: &mut Vec<GranularRelease>, granular_files: &[(Uuid, Uuid)],
+                      sequencers: &mut [(Uuid, TimeStretchSequencer)], granular_releases: &mut Vec<GranularRelease>, granular_files: &[(Uuid, (Uuid, f32))],
                       signalsmith_players: &mut [(Uuid, SignalsmithStretch)], signalsmith_releases: &mut Vec<SignalsmithRelease>,
                       signalsmith_templates: &[(Uuid, SignalsmithRelease)], window: f64, jump_window: f64) {
     let buffer_start = block.s0 as usize;
     let count = (block.s1 - block.s0) as usize;
-    let unity = [1.0f32; engine_env::RENDER_QUANTUM];
     for (uuid, sequencer) in sequencers.iter_mut() {
         if visited.contains(uuid) || !sequencer.has_voices() || granular_releases.iter().any(|release| release.region_uuid == *uuid) { continue; }
-        let Some((_, file)) = granular_files.iter().find(|(key, _)| key == uuid) else { continue };
+        let Some((_, (file, gain_db))) = granular_files.iter().find(|(key, _)| key == uuid) else { continue };
         let Some(sample) = crate::resolve_sample(*file) else { continue };
+        let gain = [db_to_gain(*gain_db); engine_env::RENDER_QUANTUM];
         abi::with_planes!(sample, |left, right| {
             let source = Source {left, right, num_frames: sample.frame_count as usize};
-            sequencer.render_release(&source, output, buffer_start, count, &unity[..count]);
+            sequencer.render_release(&source, output, buffer_start, count, &gain[..count]);
         });
-        granular_releases.push(GranularRelease {region_uuid: *uuid, file: *file, remaining: window - count as f64});
+        granular_releases.push(GranularRelease {region_uuid: *uuid, file: *file, gain_db: *gain_db, remaining: window - count as f64});
     }
     for (uuid, player) in signalsmith_players.iter_mut() {
         if visited.contains(uuid) || player.cycle_id().is_nan()
@@ -1226,6 +1228,23 @@ mod tests {
     }
 
     #[test]
+    fn boosted_gain_scales_the_whole_region_including_the_fade_in() {
+        let source = vec![0.25f32; 128];
+        let render = |gain_db: f32| {
+            let mut output = AudioBuffer::new();
+            render_region(&mut output, &region(gain_db, 240.0, 0.0), &source, &source, 48_000.0, block().p0, block().p1, &block(), 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+            output
+        };
+        let unity = render(0.0);
+        let boosted = render(12.0);
+        let factor = db_to_gain(12.0);
+        for i in 0..64 {
+            assert!((boosted.left[i] - unity.left[i] * factor).abs() < 1e-5, "sample {i}: {} != {} x {factor}", boosted.left[i], unity.left[i]);
+        }
+        assert!(boosted.left[63] > 0.9, "the boost reaches past unity: {}", boosted.left[63]);
+    }
+
+    #[test]
     fn pitch_stretch_reads_at_the_warp_rate() {
         // Warp markers map 24000 ppqn -> 1.0 s of source. With a block whose samples == pulses, that is a 2x read
         // rate (the source is consumed twice as fast as the timeline), so a ramp source is read at frames 0,2,4...
@@ -1340,6 +1359,23 @@ mod tests {
         let count_b = fill_fading_gain(&mut buf_b, &b, 240.0, 480.0, &block, 512.0);
         assert!(buf_b[0] < 0.2, "region B envelope fades in from ~0 at the seam start: {}", buf_b[0]);
         assert!(buf_b[count_b / 2] > 0.9, "region B envelope reaches full past its fade-in: {}", buf_b[count_b / 2]);
+    }
+
+    #[test]
+    fn time_stretch_envelope_carries_the_region_gain_through_its_fade() {
+        let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 480.0, anchor: 0.0, anchor_frame: 0, s0: 0, s1: 128, bpm: 120.0};
+        let envelope = |gain_db: f32| {
+            let mut buffer = [0.0f32; engine_env::RENDER_QUANTUM];
+            let count = fill_fading_gain(&mut buffer, &region(gain_db, 240.0, 0.0), 0.0, 480.0, &block, 512.0);
+            (buffer, count)
+        };
+        let (unity, count) = envelope(0.0);
+        let (boosted, _) = envelope(12.0);
+        let factor = db_to_gain(12.0);
+        for i in 0..count {
+            assert!((boosted[i] - unity[i] * factor).abs() < 1e-5, "sample {i}: {} != {} x {factor}", boosted[i], unity[i]);
+        }
+        assert!(boosted[count - 1] > 3.9, "the boost reaches past unity after the fade-in: {}", boosted[count - 1]);
     }
 
     #[test]

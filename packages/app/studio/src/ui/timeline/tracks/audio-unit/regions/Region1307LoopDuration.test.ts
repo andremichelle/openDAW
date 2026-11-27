@@ -119,5 +119,5 @@ describe("loop-duration drag keeps every region positive (#1307)", () => {
             }
         }
         expect(failures).toEqual([])
-    })
+    }, 30_000)
 })

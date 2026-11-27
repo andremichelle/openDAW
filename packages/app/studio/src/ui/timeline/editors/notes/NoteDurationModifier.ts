@@ -18,7 +18,8 @@ class SelectedModifyStrategy implements NoteModifyStrategy {
         const duration = this.#tool.aligned
             ? (this.#tool.reference.position + this.#tool.reference.duration + this.#tool.deltaDuration) - adapter.position
             : adapter.duration + this.#tool.deltaDuration
-        return adapter.position + Math.max(Math.min(this.#tool.snapping.value(adapter.position), adapter.duration), duration)
+        const minDuration = this.#tool.unsnapped ? 1 : Math.min(this.#tool.snapping.value(adapter.position), adapter.duration)
+        return adapter.position + Math.max(minDuration, duration)
     }
     readPitch(adapter: NoteEventBoxAdapter): number {return adapter.pitch}
     readVelocity(adapter: NoteEventBoxAdapter): unitValue {return adapter.velocity}
@@ -55,6 +56,7 @@ export class NoteDurationModifier implements NoteModifier {
     readonly #selectedModifyStrategy: NoteModifyStrategy
 
     #aligned: boolean
+    #unsnapped: boolean
     #deltaDuration: ppqn
 
     private constructor({editing, element, selection, snapping, pointerPulse, reference}: Construct) {
@@ -69,12 +71,14 @@ export class NoteDurationModifier implements NoteModifier {
         this.#selectedModifyStrategy = new SelectedModifyStrategy(this)
 
         this.#aligned = false
+        this.#unsnapped = false
         this.#deltaDuration = 0
     }
 
     subscribeUpdate(observer: Observer<void>): Terminable {return this.#notifier.subscribe(observer)}
 
     get aligned(): boolean {return this.#aligned}
+    get unsnapped(): boolean {return this.#unsnapped}
     get reference(): NoteEventBoxAdapter {return this.#reference}
     get snapping(): Snapping {return this.#snapping}
     get deltaDuration(): ppqn {return this.#deltaDuration}
@@ -86,13 +90,17 @@ export class NoteDurationModifier implements NoteModifier {
     selectedModifyStrategy(): NoteModifyStrategy {return this.#selectedModifyStrategy}
     unselectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}
 
-    update({clientX, ctrlKey: aligned}: Dragging.Event): void {
+    update({clientX, ctrlKey: aligned, shiftKey}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const deltaDuration: int = this.#snapping
-            .computeDelta(this.#pointerPulse, clientX - clientRect.left, this.#reference.duration)
+            .computeDelta(this.#pointerPulse, clientX - clientRect.left, this.#reference.duration, shiftKey)
         let change = false
         if (this.#aligned !== aligned) {
             this.#aligned = aligned
+            change = true
+        }
+        if (this.#unsnapped !== shiftKey) {
+            this.#unsnapped = shiftKey
             change = true
         }
         if (this.#deltaDuration !== deltaDuration) {

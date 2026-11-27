@@ -8,6 +8,7 @@ import {
     AutotuneDeviceBox,
     CompressorDeviceBox,
     ConvolverDeviceBox,
+    CorrodeDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
@@ -44,6 +45,7 @@ import {
     AuxAudioUnit,
     CompressorEffect,
     ConvolverEffect,
+    CorrodeEffect,
     CrusherEffect,
     DattorroReverbEffect,
     DeepPartial,
@@ -116,7 +118,7 @@ export abstract class SideChainableEffect<B extends SideChainBox> extends AudioE
 }
 
 export type AnyAudioEffectImpl =
-    | AutotuneEffectImpl | CompressorEffectImpl | ConvolverEffectImpl | CrusherEffectImpl | DattorroReverbEffectImpl
+    | AutotuneEffectImpl | CompressorEffectImpl | ConvolverEffectImpl | CorrodeEffectImpl | CrusherEffectImpl | DattorroReverbEffectImpl
     | DelayEffectImpl | FoldEffectImpl | GateEffectImpl | LinearMatrixDuckerEffectImpl | MaximizerEffectImpl | NeuralAmpEffectImpl | RevampEffectImpl
     | ReverbEffectImpl | StereoToolEffectImpl | SinkEffectImpl | TidalEffectImpl | VocoderEffectImpl | WaveshaperEffectImpl
     | WerkstattEffectImpl | AudioEffectCompositeImpl | StereoSplitEffectImpl | MidSideSplitEffectImpl | FrequencySplitEffectImpl
@@ -196,6 +198,19 @@ export class ConvolverEffectImpl extends AudioEffectFacade<ConvolverDeviceBox> i
     }
     set impulse(sample: Nullable<Sample>) {
         AudioFiles.assign(this.context, this.box.file, () => isNull(sample) ? null : AudioFiles.use(this.context, sample))
+    }
+}
+
+export class CorrodeEffectImpl extends AudioEffectFacade<CorrodeDeviceBox> implements CorrodeEffect {
+    readonly key = "Corrode" as const
+    declare mode: int
+    declare frequency: float
+    declare width: float
+    declare amount: float
+
+    constructor(context: Context, box: CorrodeDeviceBox) {
+        super(context, box)
+        this.bind({mode: box.mode, frequency: box.frequency, width: box.width, amount: box.amount})
     }
 }
 
@@ -635,6 +650,7 @@ export namespace AudioEffectImpls {
         if (box instanceof AutotuneDeviceBox) {return new AutotuneEffectImpl(context, box)}
         if (box instanceof CompressorDeviceBox) {return new CompressorEffectImpl(context, box)}
         if (box instanceof ConvolverDeviceBox) {return new ConvolverEffectImpl(context, box)}
+        if (box instanceof CorrodeDeviceBox) {return new CorrodeEffectImpl(context, box)}
         if (box instanceof CrusherDeviceBox) {return new CrusherEffectImpl(context, box)}
         if (box instanceof DattorroReverbDeviceBox) {return new DattorroReverbEffectImpl(context, box)}
         if (box instanceof DelayDeviceBox) {return new DelayEffectImpl(context, box)}

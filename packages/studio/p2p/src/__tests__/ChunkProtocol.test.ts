@@ -119,7 +119,8 @@ describe("ChunkProtocol", () => {
             for (const size of sizes) {
                 const original = makePayload(size)
                 const result = new Uint8Array(reassemble(split(original.buffer)))
-                expect(result).toEqual(original)
+                expect(result.length).toBe(original.length)
+                expect(result.every((byte, index) => byte === original[index])).toBe(true)
             }
         })
     })

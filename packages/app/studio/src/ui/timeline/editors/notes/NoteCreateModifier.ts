@@ -83,13 +83,13 @@ export class NoteCreateModifier implements NoteModifier {
     selectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}
     unselectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}
 
-    update({clientX, clientY}: Dragging.Event): void {
+    update({clientX, clientY, shiftKey}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
-        const minDuration = this.#snapping.value(this.#note.position)
-        const initialDuration = NoteDrawDefaults.durationOr(minDuration)
+        const snapDuration = this.#snapping.value(this.#note.position)
+        const initialDuration = NoteDrawDefaults.durationOr(snapDuration)
         const deltaDuration: int = this.#snapping
-            .computeDelta(this.#pointerPulse, clientX - clientRect.left, initialDuration)
-        const duration = Math.max(initialDuration + deltaDuration - this.#reference.offset, minDuration)
+            .computeDelta(this.#pointerPulse, clientX - clientRect.left, initialDuration, shiftKey)
+        const duration = Math.max(initialDuration + deltaDuration - this.#reference.offset, shiftKey ? 1 : snapDuration)
         const velocity = this.#readVelocity(clientY)
         if (this.#duration === duration && this.#velocity === velocity) {return}
         this.#duration = duration

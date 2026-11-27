@@ -44,6 +44,7 @@ export namespace DeviceTags {
         Autotune: ["pitch", "vocal"],
         Compressor: ["dynamics", "mixing"],
         Convolver: ["reverb", "space"],
+        Corrode: ["distortion", "lo-fi", "modulation"],
         Crusher: ["distortion", "lo-fi"],
         DattorroReverb: ["reverb", "space"],
         Delay: ["delay", "echo", "space"],

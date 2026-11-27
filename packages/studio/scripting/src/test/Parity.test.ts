@@ -94,14 +94,14 @@ describe("Schema parity", () => {
         const {project} = createFixture()
         const unit = project.addAuxUnit()
         const keys: ReadonlyArray<keyof AudioEffects> = [
-            "Autotune", "Compressor", "Convolver", "Crusher", "DattorroReverb", "Delay", "Fold", "Gate", "Maximizer",
+            "Autotune", "Compressor", "Convolver", "Corrode", "Crusher", "DattorroReverb", "Delay", "Fold", "Gate", "Maximizer",
             "NeuralAmp", "Revamp", "Reverb", "StereoTool", "Tidal", "Vocoder", "Waveshaper", "Werkstatt",
             "Composite", "StereoSplit", "MidSideSplit", "FrequencySplit", "Sink"
         ]
         const plain: Record<string, ReadonlyArray<string>> = {}
         keys.forEach(key => {plain[key] = assertMirrored(unit.addAudioEffect(key))})
         expect(plain).toEqual({
-            Autotune: [], Compressor: [], Convolver: [], Crusher: [], DattorroReverb: [], Delay: [], Fold: [],
+            Autotune: [], Compressor: [], Convolver: [], Corrode: [], Crusher: [], DattorroReverb: [], Delay: [], Fold: [],
             Gate: [], Maximizer: [], NeuralAmp: [], Revamp: [], Reverb: [], StereoTool: [], Tidal: [],
             Vocoder: ["modulatorSource"], Waveshaper: ["equation"], Werkstatt: [], Composite: [], StereoSplit: [], MidSideSplit: [], FrequencySplit: [],
             Sink: []

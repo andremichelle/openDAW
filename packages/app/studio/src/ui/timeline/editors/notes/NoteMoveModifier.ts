@@ -111,12 +111,12 @@ export class NoteMoveModifier implements NoteModifier {
     selectedModifyStrategy(): NoteModifyStrategy {return this.#selectedModifyStrategy}
     unselectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}
 
-    update({clientX, clientY, ctrlKey, shiftKey}: Dragging.Event): void {
+    update({clientX, clientY, ctrlKey, shiftKey, altKey}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const deltaPitch: int = this.#positioner
             .yToPitch(clientY - clientRect.top) - this.#pointerPitch
         const deltaPosition: int = this.#snapping
-            .computeDelta(this.#pointerPulse, clientX - clientRect.left, this.#reference.position)
+            .computeDelta(this.#pointerPulse, clientX - clientRect.left, this.#reference.position, shiftKey)
         let change = false
         if (this.#deltaPosition !== deltaPosition) {
             this.#deltaPosition = deltaPosition
@@ -132,7 +132,7 @@ export class NoteMoveModifier implements NoteModifier {
             change = true
         }
         if (change) {this.#dispatchChange()}
-        this.#repeat = shiftKey
+        this.#repeat = altKey
     }
 
     approve(): void {

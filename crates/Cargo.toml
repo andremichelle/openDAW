@@ -46,6 +46,8 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.device-crusher]
 opt-level = 3
+[profile.release.package.device-corrode]
+opt-level = 3
 [profile.release.package.device-dattorro-reverb]
 opt-level = 3
 [profile.release.package.device-delay]

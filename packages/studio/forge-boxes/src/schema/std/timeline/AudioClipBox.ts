@@ -21,7 +21,7 @@ export const AudioClipBox: BoxSchema<Pointers> = {
             11: {type: "boolean", name: "mute"},
             12: {type: "string", name: "label"},
             13: {type: "int32", name: "hue", ...HueConstraints},
-            14: {type: "float32", name: "gain", constraints: "decibel", unit: "db"},
+            14: {type: "float32", name: "gain", constraints: {min: Number.NEGATIVE_INFINITY, mid: 0.0, max: 24.0, scaling: "decibel"}, unit: "db"},
             20: {type: "string", name: "playback", deprecated},
             21: {type: "string", name: "time-base", value: TimeBase.Musical}
         }

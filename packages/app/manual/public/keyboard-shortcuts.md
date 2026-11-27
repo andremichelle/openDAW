@@ -25,6 +25,8 @@ Press Shift+Enter or ⌘+F to open the [Spotlight](/manuals/spotlight), the quic
 ### Notes
 
 * Hold ⌘ and drag to copy notes
+* Hold ⌘⌥ and drag to copy notes without selecting the copies
+* Hold Shift while dragging to disable snapping (move, resize, draw)
 
 ### Note Properties (Velocity/Expression)
 
@@ -36,7 +38,7 @@ Press Shift+Enter or ⌘+F to open the [Spotlight](/manuals/spotlight), the quic
 * Hold ⌘ and drag to copy points
 * Hold ⌥ while dragging to freeze value (move position only)
 * Hold Shift and click on curve to create a new point
-* Hold Shift while dragging to disable value snapping
+* Hold Shift while dragging to disable grid and value snapping
 
 ### Value Dragging (Knobs, Faders)
 

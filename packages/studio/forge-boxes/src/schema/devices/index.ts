@@ -41,6 +41,7 @@ import {MasteringDeviceBox} from "./audio-effects/MasteringDeviceBox"
 import {CompressorDeviceBox} from "./audio-effects/CompressorDeviceBox"
 import {AutotuneDeviceBox} from "./audio-effects/AutotuneDeviceBox"
 import {CrusherDeviceBox} from "./audio-effects/CrusherDeviceBox"
+import {CorrodeDeviceBox} from "./audio-effects/CorrodeDeviceBox"
 import {FoldDeviceBox} from "./audio-effects/FoldDeviceBox"
 import {MIDIOutputDeviceBox} from "./instruments/MIDIOutputDeviceBox"
 import {VelocityDeviceBox} from "./midi-effects/VelocityDeviceBox"
@@ -97,6 +98,7 @@ export const DeviceDefinitions = [
     TunerDeviceBox,
     LinearMatrixDuckerDeviceBox,
     CrusherDeviceBox,
+    CorrodeDeviceBox,
     DattorroReverbDeviceBox,
     ConvolverDeviceBox,
     VelocityDeviceBox,

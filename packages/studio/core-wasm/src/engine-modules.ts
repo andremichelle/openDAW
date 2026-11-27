@@ -108,6 +108,7 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
     {url: "/wasm/plugins/device_waveshaper.wasm", boxType: "WaveshaperDeviceBox"}, // audio effect
     {url: "/wasm/plugins/device_crusher.wasm", boxType: "CrusherDeviceBox"},   // audio effect
+    {url: "/wasm/plugins/device_corrode.wasm", boxType: "CorrodeDeviceBox"},   // audio effect
     {url: "/wasm/plugins/device_fold.wasm", boxType: "FoldDeviceBox"},         // audio effect (wavefolder)
     {url: "/wasm/plugins/device_stereo_tool.wasm", boxType: "StereoToolDeviceBox"}, // audio effect
     {url: "/wasm/plugins/device_velocity.wasm", boxType: "VelocityDeviceBox"}, // midi effect
