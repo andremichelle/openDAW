@@ -17,7 +17,9 @@ export const MIDIControllerBox: BoxSchema<Pointers> = {
             7: {type: "float32", name: "max", value: 1.0, ...UnipolarConstraints},
             8: {type: "int32", name: "takeover", value: 0, constraints: {min: 0, max: 2}, unit: ""},
             9: {type: "int32", name: "encoding", value: 0, constraints: {min: 0, max: 3}, unit: ""},
-            11: {type: "string", name: "filter-device-id"}
+            11: {type: "string", name: "filter-device-id"},
+            12: {type: "string", name: "key-code"},
+            13: {type: "int32", name: "key-mode", value: 0, constraints: {min: 0, max: 1}, unit: ""}
         }
     }
 }

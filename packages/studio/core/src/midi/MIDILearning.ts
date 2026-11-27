@@ -3,6 +3,7 @@ import {
     asInstanceOf,
     DefaultObservableValue,
     Errors,
+    Exec,
     int,
     MutableObservableOption,
     isDefined,
@@ -24,14 +25,18 @@ import {MidiData} from "@opendaw/lib-midi"
 import {Pointers} from "@opendaw/studio-enums"
 import {Project} from "../project"
 import {MidiDevices} from "./MidiDevices"
-import {AnimationFrame} from "@opendaw/lib-dom"
+import {AnimationFrame, Events, Key, Keyboard, Shortcut, ShortcutManager} from "@opendaw/lib-dom"
 import {MIDIControllerBox} from "@opendaw/studio-boxes"
 import {MIDIMappingTransform} from "./MIDIMappingTransform"
 import {MIDIMappingState} from "./MIDIMappingState"
+import {MIDIKeyMode} from "./MIDIKeyMode"
+import {MIDITakeover} from "./MIDITakeover"
+import {MIDIEncoding} from "./MIDIEncoding"
 
 interface MIDIConnection {
     box: MIDIControllerBox
     deliver: Procedure<int>
+    toggle: Exec
     subscription: Subscription
 }
 
@@ -39,7 +44,10 @@ const AnyChannel = -1
 
 export type MIDIMappableField = PrimitiveField<PrimitiveValues, Pointers.MIDIControl | Pointers>
 
+const isKeyBox = (box: MIDIControllerBox): boolean => box.keyCode.getValue() !== ""
+
 const accepts = (box: MIDIControllerBox, deviceId: string, channel: int, controlId: int): boolean => {
+    if (isKeyBox(box)) {return false}
     if (box.controlId.getValue() !== controlId) {return false}
     const boxChannel = box.deviceChannel.getValue()
     if (boxChannel !== AnyChannel && boxChannel !== channel) {return false}
@@ -83,8 +91,8 @@ export class MIDILearning implements Terminable {
         this.#optFieldSubscription = Option.wrap(field.pointerHub.catchupAndSubscribe({
             onAdded: ({box: anyBox}) => {
                 const box = asInstanceOf(anyBox, MIDIControllerBox)
-                const {subscription, deliver} = this.#registerMIDIControllerBox(box)
-                this.#connections.add({box, subscription, deliver})
+                const {subscription, deliver, toggle} = this.#registerMIDIControllerBox(box)
+                this.#connections.add({box, subscription, deliver, toggle})
                 this.#changes.notify()
             },
             onRemoved: ({box: {address}}) => {
@@ -94,9 +102,11 @@ export class MIDILearning implements Terminable {
         }))
     }
 
-    get numberOfConnections(): int {return this.#connections.size()}
+    get numberOfConnections(): int {return this.controllerBoxes().length}
 
-    controllerBoxes(): ReadonlyArray<MIDIControllerBox> {return this.#connections.values().map(({box}) => box)}
+    controllerBoxes(): ReadonlyArray<MIDIControllerBox> {
+        return this.#connections.values().map(({box}) => box).filter(box => !isKeyBox(box))
+    }
 
     subscribeChanges(observer: Observer<void>): Subscription {return this.#changes.subscribe(observer)}
 
@@ -118,13 +128,81 @@ export class MIDILearning implements Terminable {
             .forEach(({deliver}) => deliver(value))
     }
 
+    receiveKey(code: string, pressed: boolean): boolean {
+        const connections = this.#connections.values().filter(({box}) => box.keyCode.getValue() === code)
+        connections.forEach(({box, deliver, toggle}) => {
+            if (box.keyMode.getValue() === MIDIKeyMode.Momentary) {
+                deliver(pressed ? 127 : 0)
+            } else if (pressed) {
+                toggle()
+            }
+        })
+        return connections.length > 0
+    }
+
     hasMidiConnection(address: Address): boolean {
-        return this.#findConnectionByParameterAddress(address).nonEmpty()
+        return this.#findConnectionByParameterAddress(address).mapOr(({box}) => !isKeyBox(box), false)
+    }
+
+    hasKeyConnection(address: Address): boolean {
+        return this.#findConnectionByParameterAddress(address).mapOr(({box}) => isKeyBox(box), false)
     }
 
     forgetMidiConnection(address: Address) {
         const connection = this.#findConnectionByParameterAddress(address).unwrap("No connection to forget")
         this.#project.editing.modify(() => asDefined(connection).box.delete())
+    }
+
+    forgetKeyConnection(address: Address) {this.forgetMidiConnection(address)}
+
+    keyMode(address: Address): Option<MIDIKeyMode> {
+        return this.#findConnectionByParameterAddress(address)
+            .flatMap(({box}) => isKeyBox(box) ? Option.wrap(box.keyMode.getValue()) : Option.None)
+    }
+
+    setKeyMode(address: Address, mode: MIDIKeyMode): void {
+        const connection = this.#findConnectionByParameterAddress(address).unwrap("No connection to change")
+        this.#project.editing.modify(() => connection.box.keyMode.setValue(mode))
+    }
+
+    bindKey(field: MIDIMappableField, code: string): MIDIControllerBox {
+        return this.createMapping(field, box => {
+            box.keyCode.setValue(code)
+            box.takeover.setValue(MIDITakeover.Jump)
+            box.encoding.setValue(MIDIEncoding.Absolute)
+        })
+    }
+
+    async learnKey(field: MIDIMappableField) {
+        if (this.#optMIDIContollers.isEmpty()) {
+            return RuntimeNotifier.info({headline: "Learn Key...", message: "No user accepting key controls."})
+        }
+        const learnLifecycle = this.#terminator.spawn()
+        const abortController = new AbortController()
+        learnLifecycle.own(Events.subscribe(window, "keydown", (event: KeyboardEvent) => {
+            if (event.code === Key.Escape || event.repeat) {return}
+            const shortcut = Shortcut.fromEvent(event)
+            if (shortcut.isEmpty() || Keyboard.isControlKey(event) || event.shiftKey || event.altKey) {return}
+            event.preventDefault()
+            event.stopImmediatePropagation()
+            learnLifecycle.terminate()
+            abortController.abort(Errors.AbortError)
+            const key = shortcut.unwrap("shortcut")
+            if (ShortcutManager.get().hasConflict(key)) {
+                RuntimeNotifier.info({
+                    headline: "Learn Key...",
+                    message: `'${key.format().join("")}' is already used by a shortcut.`
+                }).finally()
+            } else {
+                this.bindKey(field, key.code)
+            }
+        }, {capture: true}))
+        return RuntimeNotifier.info({
+            headline: "Learn Key...",
+            message: "Press a key on your computer keyboard...",
+            okText: "Cancel",
+            abortSignal: abortController.signal
+        }).then(() => learnLifecycle.terminate(), Errors.CatchAbort)
     }
 
     async learnMIDIControls(field: MIDIMappableField) {
@@ -171,6 +249,7 @@ export class MIDILearning implements Terminable {
                 init(box)
             }),
             some: ({box}) => {
+                box.keyCode.setValue("")
                 init(box)
                 return box
             }
@@ -186,7 +265,7 @@ export class MIDILearning implements Terminable {
         })
     }
 
-    #registerMIDIControllerBox(box: MIDIControllerBox): {subscription: Subscription, deliver: Procedure<int>} {
+    #registerMIDIControllerBox(box: MIDIControllerBox): Omit<MIDIConnection, "box"> {
         const address = box.parameter.targetAddress.unwrap("No parameter address")
         const adapter = this.#project.parameterFieldAdapters.get(address)
         const {editing} = this.#project
@@ -219,13 +298,19 @@ export class MIDILearning implements Terminable {
                 })
             })
         }
+        const toggle = () => {
+            const current = pendingValue ?? adapter.getUnitValue()
+            const min = box.min.getValue()
+            const max = box.max.getValue()
+            deliver(Math.abs(current - max) < Math.abs(current - min) ? 0 : 127)
+        }
         return {
             subscription: {
                 terminate: () => {
                     pendingValue = null
                     registration.terminate()
                 }
-            }, deliver
+            }, deliver, toggle
         }
     }
 

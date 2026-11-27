@@ -95,6 +95,7 @@ import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
 import {CompositeOverviewState} from "@/ui/composite-overview/CompositeOverviewState"
 import {RoomAwareness} from "@/service/RoomAwareness"
 import {MidiAccessOnLoad} from "@/service/MidiAccessOnLoad"
+import {ComputerKeyControl} from "@/service/ComputerKeyControl"
 import {ArmedCaptures} from "@/service/ArmedCaptures"
 import {ChatService} from "@/chat/ChatService"
 import {CallService} from "@/call/CallService"
@@ -617,6 +618,7 @@ export class StudioService implements ProjectEnv {
                     project,
                     snapping.registerSignatureTrackAdapter(project.timelineBoxAdapter.signatureTrack),
                     TrackGrouping.deselectHiddenTracks(project),
+                    ComputerKeyControl.install(project.midiLearning),
                     userEditingManager.timeline.catchupAndSubscribe(option => option
                         .ifSome(() => AnimationFrame.once(() => this.panelLayout.showIfAvailable(PanelType.ContentEditor)))),
                     timelineBox.durationInPulses.catchupAndSubscribe(owner => range.maxUnits = owner.getValue() + PPQN.Bar)
