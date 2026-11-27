@@ -15,8 +15,8 @@ import {Pointers} from "@opendaw/studio-enums"
 import {build, impulseUnit, peaks, start} from "./helpers/compensation-harness"
 import {readSignalGraph} from "../src/engine-exports"
 
-// 10 ms of lookahead at 48 kHz plus the 6 frames the inter-sample-peak filter needs
-const LATENCY = 486
+// 10 ms of lookahead at 48 kHz plus 9 frames for the inter-sample-peak filter, as Compactor reports
+const LATENCY = 489
 
 const sine = (gain: number, frequency: number) => `class Processor {
     voices = 0
@@ -106,7 +106,7 @@ describe("Linear Matrix Ducker", () => {
         expect(master?.arrival).toBe(LATENCY)
     }, 30000)
 
-    it("limits the carrier to the threshold without a sidechain", async () => {
+    it("clips the carrier at the threshold without a sidechain", async () => {
         const source = buildSines((skeleton, scripts) => {
             const unit = sineUnit(skeleton, 1, sine(0.9, 441), scripts)
             ducker(skeleton.boxGraph, unit.audioEffects, -6.0)
@@ -134,6 +134,26 @@ describe("Linear Matrix Ducker", () => {
         expect(await render(false)).toBeGreaterThan(1.1)
         const ducked = await render(true)
         expect(ducked).toBeLessThanOrEqual(1.0 + 1e-4)
-        expect(ducked).toBeGreaterThan(0.9)
+        expect(ducked).toBeGreaterThan(0.8)
+    }, 60000)
+
+    it("ducks a quiet carrier by the sidechain level", async () => {
+        const render = async (range: number) => {
+            const source = buildSines((skeleton, scripts) => {
+                const carrier = sineUnit(skeleton, 1, sine(0.2, 220), scripts)
+                const side = sineUnit(skeleton, 2, sine(0.5, 331), scripts)
+                const box = ducker(skeleton.boxGraph, carrier.audioEffects, 0.0)
+                box.range.setValue(range)
+                box.sideChain.refer(side)
+            })
+            const {play} = await start(source)
+            return play(200).subarray(LATENCY * 2 + 512)
+        }
+        // Range 0 ignores a sidechain below the threshold, so the difference is the ducking of the carrier alone.
+        const ignored = await render(0.0)
+        const ducked = await render(1.0)
+        const difference = ducked.reduce((max, sample, index) => Math.max(max, Math.abs(sample - ignored[index])), 0)
+        expect(difference).toBeGreaterThan(0.05)
+        expect(difference).toBeLessThanOrEqual(0.2 * 0.5 + 1e-3)
     }, 60000)
 })

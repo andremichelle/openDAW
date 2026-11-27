@@ -375,7 +375,7 @@ export namespace EffectFactories {
         defaultName: "Linear Matrix Ducker",
         defaultIcon: IconSymbol.Compressor,
         briefDescription: "Sidechain Limiter",
-        description: "Limits a signal so that it and its sidechain never exceed the threshold together",
+        description: "Ducks a signal by its sidechain so both fit under the threshold, a soft clipper without one",
         manualPage: DeviceManualUrls.LinearMatrixDucker,
         separatorBefore: false,
         external: false,

@@ -1,7 +1,7 @@
 import {clamp, int, unitValue} from "@opendaw/lib-std"
 
 export namespace DuckerScale {
-    export const DbMin = -54.0
+    export const DbMin = -60.0
     export const DbMax = 6.0
 
     export const dbToUnit = (db: number): unitValue => clamp((db - DbMin) / (DbMax - DbMin), 0.0, 1.0)

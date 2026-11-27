@@ -3,7 +3,7 @@ pub mod ducker;
 
 use abi::{float_value, int_value, AudioEffect, Block, ParamValue, Ports, MAIN_INPUT};
 use ducker::{Ducker, DISPLAY_ENTRIES, DISPLAY_VALUES};
-use math::value_mapping::{Exponential, Linear, LinearInteger};
+use math::value_mapping::{Linear, LinearInteger, Power};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
@@ -23,13 +23,14 @@ const SIDE_CHAIN_FIELD: [u16; 1] = [30];
 const DISPLAY_FIELD: [u16; 1] = [0];
 const DISPLAY_LENGTH: usize = 1 + DISPLAY_ENTRIES * DISPLAY_VALUES;
 
-pub const THRESHOLD_MAPPING: Linear = Linear {min: -48.0, max: 0.0};
+pub const THRESHOLD_MAPPING: Linear = Linear {min: -60.0, max: 6.0};
 pub const ATTACK_MAPPING: Linear = Linear {min: 0.0, max: 10.0};
-pub const HOLD_MAPPING: Linear = Linear {min: 0.0, max: 500.0};
-pub const RELEASE_MAPPING: Exponential = Exponential {min: 1.0, max: 2000.0};
+pub const HOLD_MAPPING: Linear = Linear {min: 0.0, max: 10.0};
 pub const MODE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 2};
 pub const RANGE_MAPPING: Linear = Linear {min: 0.0, max: 2.0};
 pub const UNIPOLAR_MAPPING: Linear = Linear::unipolar();
+
+pub fn release_mapping() -> Power {Power::by_center(90.5, 0.0, 1000.0)}
 
 pub struct DuckerState {
     ducker: Ducker,
@@ -74,7 +75,7 @@ impl AudioEffect for LinearMatrixDucker {
         } else if id == state.hold_id {
             ducker.set_hold_ms(float_value(value, &HOLD_MAPPING));
         } else if id == state.release_id {
-            ducker.set_release_ms(float_value(value, &RELEASE_MAPPING));
+            ducker.set_release_ms(float_value(value, &release_mapping()));
         } else if id == state.mode_id {
             ducker.set_mode(int_value(value, &MODE_MAPPING));
         } else if id == state.range_id {
@@ -144,7 +145,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         0 => float_value(value, &THRESHOLD_MAPPING),
         1 => float_value(value, &ATTACK_MAPPING),
         2 => float_value(value, &HOLD_MAPPING),
-        3 => float_value(value, &RELEASE_MAPPING),
+        3 => float_value(value, &release_mapping()),
         4 => int_value(value, &MODE_MAPPING) as f32,
         5 => float_value(value, &RANGE_MAPPING),
         6 => float_value(value, &UNIPOLAR_MAPPING),

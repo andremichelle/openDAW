@@ -55,15 +55,15 @@ export class LinearMatrixDuckerDeviceBoxAdapter implements AudioEffectDeviceAdap
     #wrapParameters(box: LinearMatrixDuckerDeviceBox) {
         return {
             threshold: this.#parametric.createParameter(
-                box.threshold, ValueMapping.linear(-48.0, 0.0), StringMapping.decible, "Threshold"),
+                box.threshold, ValueMapping.linear(-60.0, 6.0), StringMapping.decible, "Threshold"),
             attack: this.#parametric.createParameter(
                 box.attack, ValueMapping.linear(0.0, 10.0),
                 StringMapping.numeric({unit: "ms", fractionDigits: 2}), "Attack"),
             hold: this.#parametric.createParameter(
-                box.hold, ValueMapping.linear(0.0, 500.0),
+                box.hold, ValueMapping.linear(0.0, 10.0),
                 StringMapping.numeric({unit: "ms", fractionDigits: 2}), "Hold"),
             release: this.#parametric.createParameter(
-                box.release, ValueMapping.exponential(1.0, 2000.0),
+                box.release, ValueMapping.powerByCenter(90.5, 0.0, 1000.0),
                 StringMapping.numeric({unit: "ms", fractionDigits: 2}), "Release"),
             mode: this.#parametric.createParameter(
                 box.mode, ValueMapping.linearInteger(0, 2),

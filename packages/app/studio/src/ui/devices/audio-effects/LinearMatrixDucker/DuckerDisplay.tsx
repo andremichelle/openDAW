@@ -104,7 +104,7 @@ export const DuckerDisplay = ({lifecycle, editing, adapter, history, onPainter}:
                 update: (position: Dragging.Event) => {
                     const y = startY + position.clientY - event.clientY
                     const db = DuckerScale.unitToDb(1.0 - y / rect.height)
-                    editing.modify(() => threshold.setValue(clamp(db, -48.0, 0.0)), false)
+                    editing.modify(() => threshold.setValue(clamp(db, -60.0, 6.0)), false)
                 },
                 cancel: () => editing.modify(() => threshold.setValue(startValue), false),
                 approve: () => editing.mark()

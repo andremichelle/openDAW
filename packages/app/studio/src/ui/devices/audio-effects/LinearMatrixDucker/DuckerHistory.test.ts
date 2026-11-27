@@ -39,6 +39,6 @@ describe("DuckerScale", () => {
         expect(DuckerScale.unitToDb(DuckerScale.dbToUnit(-12))).toBeCloseTo(-12)
         expect(DuckerScale.gainToUnit(0)).toBe(0.0)
         expect(DuckerScale.reductionToUnit(1.0)).toBe(1.0)
-        expect(DuckerScale.reductionToUnit(0.5)).toBeCloseTo(1.0 - 6.0206 / 60)
+        expect(DuckerScale.reductionToUnit(0.5)).toBeCloseTo(1.0 - 6.0206 / 66)
     })
 })
