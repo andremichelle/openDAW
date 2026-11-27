@@ -74,8 +74,7 @@ export namespace MidiImport {
                     const map = new Map<byte, { position: ppqn, note: byte, velocity: unitValue }>
                     const notes: Array<{ position: ppqn, duration: ppqn, pitch: byte, velocity: unitValue }> = []
                     let duration = 0 | 0
-                    for (const midiEvent of midiEvents) {
-                        const index = midiEvents.indexOf(midiEvent)
+                    for (const [index, midiEvent] of midiEvents.entries()) {
                         const position = PPQN.fromSignature(midiEvent.ticks / format.timeDivision, 4) | 0
                         midiEvent.accept({
                             noteOn: (note: byte, velocity: number) => map.set(note, {position, note, velocity}),
