@@ -50,6 +50,7 @@ export namespace DeviceTags {
         Fold: ["distortion", "wavefolder"],
         Reverb: ["reverb", "space"],
         Gate: ["dynamics", "gate"],
+        LinearMatrixDucker: ["dynamics", "limiter", "sidechain", "mixing"],
         Maximizer: ["dynamics", "limiter", "mastering"],
         Revamp: ["eq", "filter", "mixing"],
         StereoTool: ["stereo", "panning", "mixing"],

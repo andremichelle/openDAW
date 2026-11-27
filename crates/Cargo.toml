@@ -36,6 +36,8 @@ opt-level = 3
 # engine/dsp/math are already pinned to 3.
 [profile.release.package.device-tuner]
 opt-level = 3
+[profile.release.package.device-linear-matrix-ducker]
+opt-level = 3
 [profile.release.package.device-autotune]
 opt-level = 3
 [profile.release.package.device-compressor]

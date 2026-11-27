@@ -48,6 +48,7 @@ import {MIDIOutputBox} from "./instruments/MIDIOutputBox"
 import {MIDIOutputParameterBox} from "./instruments/MIDIOutputParameterBox"
 import {TidalDeviceBox} from "./audio-effects/TidalDeviceBox"
 import {TunerDeviceBox} from "./audio-effects/TunerDeviceBox"
+import {LinearMatrixDuckerDeviceBox} from "./audio-effects/LinearMatrixDuckerDeviceBox"
 import {DattorroReverbDeviceBox} from "./audio-effects/DattorroReverbDeviceBox"
 import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
 import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
@@ -94,6 +95,7 @@ export const DeviceDefinitions = [
     DelayDeviceBox,
     AutotuneDeviceBox,
     TunerDeviceBox,
+    LinearMatrixDuckerDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
     ConvolverDeviceBox,

@@ -38,6 +38,7 @@ import {
     TidalDeviceBox,
     SpielwerkDeviceBox,
     TunerDeviceBox,
+    LinearMatrixDuckerDeviceBox,
     VelocityDeviceBox,
     VocoderDeviceBox,
     WaveshaperDeviceBox,
@@ -365,6 +366,24 @@ export namespace EffectFactories {
         create: ({boxGraph}, hostField, index): GateDeviceBox =>
             GateDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Gate")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const LinearMatrixDucker: EffectFactory = {
+        defaultName: "Linear Matrix Ducker",
+        defaultIcon: IconSymbol.Compressor,
+        briefDescription: "Sidechain Limiter",
+        description: "Limits a signal so that it and its sidechain never exceed the threshold together",
+        manualPage: DeviceManualUrls.LinearMatrixDucker,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        boxName: "LinearMatrixDuckerDeviceBox",
+        create: ({boxGraph}, hostField, index): LinearMatrixDuckerDeviceBox =>
+            LinearMatrixDuckerDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Linear Matrix Ducker")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -800,6 +819,7 @@ export namespace EffectFactories {
         Fold,
         Reverb,          // Free Reverb
         Gate,
+        LinearMatrixDucker, // Linear Matrix Ducker
         Maximizer,
         Revamp,
         StereoTool,      // Stereo Tool
