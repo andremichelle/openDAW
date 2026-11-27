@@ -23,7 +23,7 @@ export const AudioRegionBox: BoxSchema<Pointers> = {
             14: {type: "boolean", name: "mute"},
             15: {type: "string", name: "label"},
             16: {type: "int32", name: "hue", ...HueConstraints},
-            17: {type: "float32", name: "gain", constraints: "decibel", unit: "db"},
+            17: {type: "float32", name: "gain", constraints: {min: Number.NEGATIVE_INFINITY, mid: 0.0, max: 24.0, scaling: "decibel"}, unit: "db"},
             18: {
                 type: "object", name: "fading", class: {
                     name: "Fading",

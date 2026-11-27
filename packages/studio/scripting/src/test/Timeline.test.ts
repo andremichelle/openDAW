@@ -199,6 +199,14 @@ describe("Timeline", () => {
         expect(spectral.playback).toBe("signalsmith")
         expect(spectral.transpose).toBe(5)
         expect(spectral.gain).toBe(-3)
+        spectral.gain = 12
+        expect(spectral.gain).toBe(12)
+        spectral.gain = 40
+        expect(spectral.gain).toBe(24)
+        spectral.gain = Number.NEGATIVE_INFINITY
+        expect(spectral.gain).toBe(Number.NEGATIVE_INFINITY)
+        expect(() => spectral.gain = Number.POSITIVE_INFINITY).toThrow(RangeError)
+        spectral.gain = -3
         expect(spectral.fading.in).toBe(100)
         expect(spectral.fading.out).toBe(200)
         expect(spectral.fading.inSlope).toBeCloseTo(0.75)

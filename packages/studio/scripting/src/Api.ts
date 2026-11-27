@@ -3561,7 +3561,7 @@ export interface AudioContent {
     readonly sample: Sample
     /** Tempo following mode (fixed at creation) */
     readonly playback: AudioPlayback
-    /** Gain in dB (default 0) */
+    /** Gain in dB applied to the whole content including its fades, up to +24 (default 0) */
     gain: float
     /** Waveform display offset in seconds */
     waveformOffset: seconds

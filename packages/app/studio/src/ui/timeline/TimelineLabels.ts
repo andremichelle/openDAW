@@ -19,9 +19,16 @@ const Unresolved = "N/A"
 const orPlaceholder = (label: string): string => label.length === 0 ? Placeholder : label
 
 export namespace TimelineLabels {
+    export const withGain = (label: string, gain: number): string => {
+        if (Math.round(gain * 10.0) === 0) {return label}
+        const text = Number.isFinite(gain) ? `${gain > 0.0 ? "+" : ""}${gain.toFixed(1)}` : "-∞"
+        return `${label} ${text} dB`
+    }
+
     export const forRegion = (adapter: AnyRegionBoxAdapter): string => adapter.accept({
         visitNoteRegionBoxAdapter: ({label}: NoteRegionBoxAdapter): string => label,
-        visitAudioRegionBoxAdapter: ({label}: AudioRegionBoxAdapter): string => orPlaceholder(label),
+        visitAudioRegionBoxAdapter: ({label, gain}: AudioRegionBoxAdapter): string =>
+            withGain(orPlaceholder(label), gain.getValue()),
         visitValueRegionBoxAdapter: ({label, trackBoxAdapter}: ValueRegionBoxAdapter): string => {
             const parameter = trackBoxAdapter.flatMap(track => track.targetControlName).unwrapOrElse(Unresolved)
             // Recorded automation used to store the parameter name as its label, which would read "Crush · Crush".
@@ -39,7 +46,8 @@ export namespace TimelineLabels {
 
     export const forClip =(adapter: AnyClipBoxAdapter): string => adapter.accept({
         visitNoteClipBoxAdapter: ({label}: NoteClipBoxAdapter): string => label,
-        visitAudioClipBoxAdapter: ({label}: AudioClipBoxAdapter): string => orPlaceholder(label),
+        visitAudioClipBoxAdapter: ({label, gain}: AudioClipBoxAdapter): string =>
+            withGain(orPlaceholder(label), gain.getValue()),
         visitValueClipBoxAdapter: ({label}: ValueClipBoxAdapter): string => label
     }) ?? adapter.label
 }

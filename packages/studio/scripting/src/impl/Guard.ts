@@ -68,6 +68,11 @@ export namespace Guard {
             if (result <= 0.0) {return panic(new RangeError(`${name}: ${result} must be positive`))}
             return result
         }
+        if (constraints.scaling === "decibel" && constraints.min === Number.NEGATIVE_INFINITY) {
+            const result = number(value, name)
+            if (result === Number.POSITIVE_INFINITY) {return panic(new RangeError(`${name}: +Infinity is not a valid gain`))}
+            return clamp(result, constraints.min, constraints.max)
+        }
         return clamp(finite(value, name), constraints.min, constraints.max)
     }
 

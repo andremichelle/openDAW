@@ -98,3 +98,17 @@ describe("TimelineLabels.forRegion", () => {
         expect(TimelineLabels.forRegion(noteRegion("Verse"))).toBe("Verse")
     })
 })
+
+describe("TimelineLabels.withGain", () => {
+    it("leaves the name alone at 0 dB and anything that rounds to 0.0", () => {
+        expect(TimelineLabels.withGain("Loop", 0.0)).toBe("Loop")
+        expect(TimelineLabels.withGain("Loop", 0.04)).toBe("Loop")
+        expect(TimelineLabels.withGain("Loop", -0.04)).toBe("Loop")
+    })
+    it("adds the gain with one fraction digit and the dB unit", () => {
+        expect(TimelineLabels.withGain("Loop", 3.0)).toBe("Loop +3.0 dB")
+        expect(TimelineLabels.withGain("Loop", -12.25)).toBe("Loop -12.3 dB")
+        expect(TimelineLabels.withGain("Loop", 24.0)).toBe("Loop +24.0 dB")
+        expect(TimelineLabels.withGain("Loop", Number.NEGATIVE_INFINITY)).toBe("Loop -∞ dB")
+    })
+})

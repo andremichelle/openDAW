@@ -8,6 +8,7 @@ import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Icon} from "@/ui/components/Icon"
 import {NumberInput} from "@/ui/components/NumberInput"
+import {DigitDragging} from "@/ui/components/DigitDragging"
 
 const className = Html.adoptStyleSheet(css, "TimeStretchEditor")
 
@@ -23,6 +24,17 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
     const transientPlayModeEnumValue = new DefaultObservableValue<Nullable<TransientPlayMode>>(null)
     const activeLifecycle = lifecycle.own(new Terminator())
     const observableCents = new DefaultObservableValue(0.0)
+    const dragging = {active: false}
+    const drag: DigitDragging.Hooks = {
+        begin: () => {
+            editing.mark()
+            dragging.active = true
+        },
+        end: () => {
+            dragging.active = false
+            editing.mark()
+        }
+    }
     return (
         <div className={className} onInit={element => {
             lifecycle.ownAll(
@@ -39,10 +51,10 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                     // catchup runs before the write-back subscribe, so switching modes never emits a spurious edit.
                     audioContent.asPlayModeTimeStretch.ifSome(adapter => activeLifecycle.ownAll(
                         adapter.box.playbackRate.catchupAndSubscribe(() => observableCents.setValue(adapter.cents)),
-                        observableCents.subscribe(owner => editing.modify(() => adapter.cents = owner.getValue()))))
+                        observableCents.subscribe(owner => editing.modify(() => adapter.cents = owner.getValue(), !dragging.active))))
                     audioContent.asPlayModeSignalsmith.ifSome(adapter => activeLifecycle.ownAll(
                         adapter.box.transpose.catchupAndSubscribe(() => observableCents.setValue(adapter.cents)),
-                        observableCents.subscribe(owner => editing.modify(() => adapter.cents = owner.getValue()))))
+                        observableCents.subscribe(owner => editing.modify(() => adapter.cents = owner.getValue(), !dragging.active))))
                     // The row (cents) is live for the stretch modes that carry pitch; inert for No-Warp / Pitch.
                     const hasCents = audioContent.asPlayModeTimeStretch.nonEmpty()
                         || audioContent.asPlayModeSignalsmith.nonEmpty()
@@ -65,7 +77,8 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                          mapper={StringMapping.numeric({unit: "cents"})}
                          className="input"
                          maxChars={4}
-                         step={1}
+                         step={5}
+                         drag={drag}
                          model={observableCents}/>
             <span>cents</span>
             {/* The grain transient play-modes are deactivated for now (kept visible for layout). */}

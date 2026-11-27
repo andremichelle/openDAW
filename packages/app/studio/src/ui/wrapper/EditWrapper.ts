@@ -1,14 +1,23 @@
 import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 import {PrimitiveValues} from "@opendaw/lib-box"
-import {Editing, MutableObservableValue, ObservableValue, Observer, Subscription} from "@opendaw/lib-std"
+import {
+    Editing,
+    getOrProvide,
+    MutableObservableValue,
+    ObservableValue,
+    Observer,
+    Subscription,
+    ValueOrProvider
+} from "@opendaw/lib-std"
 
 export namespace EditWrapper {
     export const forValue = <T extends PrimitiveValues>(
-        editing: Editing, owner: MutableObservableValue<T>): MutableObservableValue<T> =>
+        editing: Editing, owner: MutableObservableValue<T>,
+        mark: ValueOrProvider<boolean> = false): MutableObservableValue<T> =>
         new class implements MutableObservableValue<T> {
             getValue(): T {return owner.getValue()}
             setValue(value: T) {
-                editing.modify(() => owner.setValue(value), false)
+                editing.modify(() => owner.setValue(value), getOrProvide(mark))
             }
             subscribe(observer: Observer<ObservableValue<T>>): Subscription {
                 return owner.subscribe(() => observer(this))
