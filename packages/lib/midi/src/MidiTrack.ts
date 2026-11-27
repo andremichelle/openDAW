@@ -46,10 +46,13 @@ export class MidiTrack {
         return new MidiTrack(controlEvents, metaEvents)
     }
 
-    static createEmpty(): MidiTrack {return new MidiTrack(new ArrayMultimap<Channel, ControlEvent>(), [])}
+    static createEmpty(umpGroup?: int): MidiTrack {
+        return new MidiTrack(new ArrayMultimap<Channel, ControlEvent>(), [], umpGroup)
+    }
 
     constructor(readonly controlEvents: ArrayMultimap<Channel, ControlEvent>,
-                readonly metaEvents: Array<MetaEvent>) {}
+                readonly metaEvents: Array<MetaEvent>,
+                readonly umpGroup?: int) {}
 
     encode(): ArrayBufferLike {
         const output = ByteArrayOutput.create()

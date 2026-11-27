@@ -133,7 +133,9 @@ export namespace MidiImport {
                         box.loopDuration.setValue(duration)
                         box.events.refer(collection.owners)
                         box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
-                        box.label.setValue(`Ch#${channel}`)
+                        box.label.setValue(isDefined(midiTrack.umpGroup)
+                            ? `Grp#${midiTrack.umpGroup} Ch#${channel}`
+                            : `Ch#${channel}`)
                         box.regions.refer(trackBox.regions)
                     })
                 }
