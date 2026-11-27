@@ -1,9 +1,9 @@
-import {EmptyExec} from "@opendaw/lib-std"
+import {EmptyExec, StringComparator} from "@opendaw/lib-std"
 import {Browser, Files} from "@opendaw/lib-dom"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {CloudBackup, FilePickerAcceptTypes, MenuItem} from "@opendaw/studio-core"
+import {CloudBackup, FilePickerAcceptTypes, MenuItem, ProjectStorage} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {VideoRenderer} from "@/video/VideoRenderer"
@@ -17,8 +17,15 @@ import {ScreenRecorder} from "@/service/ScreenRecorder"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
+    const recentProjects: Array<ProjectStorage.ListEntry> = []
+    const refreshRecentProjects = () => ProjectStorage.listProjects().then(projects => recentProjects.splice(0,
+        recentProjects.length, ...projects
+            .toSorted((a, b) => -StringComparator(a.meta.modified, b.meta.modified))
+            .slice(0, 10)), reason => console.warn("Could not list recent projects", reason))
+    refreshRecentProjects()
     return MenuItem.root()
         .setRuntimeChildrenProcedure(parent => {
+                refreshRecentProjects()
                 parent.addMenuItem(
                     MenuItem.header({label: "openDAW", icon: IconSymbol.OpenDAW, color: Colors.green}),
                     MenuItem.default({
@@ -33,6 +40,12 @@ export const populateStudioMenu = (service: StudioService) => {
                         label: "Open...",
                         shortcut: Global["project-open"].shortcut.format()
                     }).setTriggerProcedure(() => service.browseLocalProjects()),
+                    MenuItem.default({label: "Recent"})
+                        .setRuntimeChildrenProcedure(parent => recentProjects.length === 0
+                            ? parent.addMenuItem(MenuItem.default({label: "No Projects", selectable: false}))
+                            : parent.addMenuItem(...recentProjects.map(({uuid, meta}) =>
+                                MenuItem.default({label: meta.name})
+                                    .setTriggerProcedure(() => service.projectProfileService.load(uuid, meta))))),
                     MenuItem.default({
                         label: "Save",
                         shortcut: Global["project-save"].shortcut.format(),
