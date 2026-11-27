@@ -26,6 +26,7 @@ export namespace DeviceManualUrls {
     export const Gate = "manuals/devices/audio/gate"
     export const Reverb = "manuals/devices/audio/reverb"
     export const Crusher = "manuals/devices/audio/crusher"
+    export const Corrode = "manuals/devices/audio/corrode"
     export const Fold = "manuals/devices/audio/fold"
     export const Tidal = "manuals/devices/audio/tidal"
     export const Tuner = "manuals/devices/audio/tuner"

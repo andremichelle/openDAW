@@ -8,6 +8,7 @@ import {
     CompressorDeviceBox,
     ConvolverDeviceBox,
     CrusherDeviceBox,
+    CorrodeDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
@@ -63,6 +64,13 @@ const audioEffects: ReadonlyArray<DeviceSpec> = [
             })
         }
     })),
+    {
+        name: "Corrode",
+        addToUnit: (boxGraph, unit) => CorrodeDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(unit.audioEffects)
+            box.index.setValue(0)
+        })
+    },
     {
         name: "Crusher",
         addToUnit: (boxGraph, unit) => CrusherDeviceBox.create(boxGraph, UUID.generate(), box => {

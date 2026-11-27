@@ -51,7 +51,7 @@ describe("Devices", () => {
         const {project} = createFixture()
         const unit = project.addAuxUnit()
         const keys: ReadonlyArray<keyof AudioEffects> = [
-            "Autotune", "Compressor", "Convolver", "Crusher", "DattorroReverb", "Delay", "Fold", "Gate", "Maximizer",
+            "Autotune", "Compressor", "Convolver", "Corrode", "Crusher", "DattorroReverb", "Delay", "Fold", "Gate", "Maximizer",
             "NeuralAmp", "Revamp", "Reverb", "StereoTool", "Tidal", "Vocoder", "Waveshaper", "Werkstatt",
             "Composite", "StereoSplit", "MidSideSplit", "FrequencySplit", "Sink"
         ]

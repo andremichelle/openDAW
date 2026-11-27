@@ -11,7 +11,7 @@ import {readFileSync} from "node:fs"
 import {Arrays, isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, BoxGraph, Constraints, Float32Field, Int32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
-    ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, ConvolverDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
+    ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, ConvolverDeviceBox, CorrodeDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
     DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, TubularDeviceBox, SurgeonDeviceBox, OpenDrumKickDeviceBox,
     OpenDrumSnareDeviceBox, OpenDrumClapDeviceBox, OpenDrumTomDeviceBox, OpenDrumRimDeviceBox, OpenDrumHatDeviceBox, OpenDrumShakerDeviceBox, OpenDrumCymbalDeviceBox, OpenDrumBellDeviceBox, OpenDrumPercDeviceBox, MaximizerDeviceBox, NanoDeviceBox, SamplerDeviceBox, NeuralAmpDeviceBox,
     NoteFilterDeviceBox, ScaleMatrixDeviceBox, ChordKeysDeviceBox, EuclidDeviceBox, PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
@@ -21,7 +21,7 @@ import {
 } from "@opendaw/studio-boxes"
 import {
     ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
-    ConvolverDeviceBoxAdapter, CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
+    ConvolverDeviceBoxAdapter, CorrodeDeviceBoxAdapter, CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
     GateDeviceBoxAdapter, NeonDeviceBoxAdapter, TubularDeviceBoxAdapter, SurgeonDeviceBoxAdapter, OpenDrumKickDeviceBoxAdapter,
     OpenDrumSnareDeviceBoxAdapter, OpenDrumClapDeviceBoxAdapter, OpenDrumTomDeviceBoxAdapter, OpenDrumRimDeviceBoxAdapter, OpenDrumHatDeviceBoxAdapter, OpenDrumShakerDeviceBoxAdapter, OpenDrumCymbalDeviceBoxAdapter, OpenDrumBellDeviceBoxAdapter, OpenDrumPercDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, SamplerDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
     NoteFilterDeviceBoxAdapter, ScaleMatrixDeviceBoxAdapter, ChordKeysDeviceBoxAdapter, EuclidDeviceBoxAdapter, ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
@@ -108,6 +108,7 @@ const buildBoxes = () => {
     })
     const effectUnit = createUnit(1)
     const compressor = CompressorDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(0)})
+    const corrode = CorrodeDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(17)})
     const crusher = CrusherDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(1)})
     const dattorro = DattorroReverbDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(2)})
     const convolver = ConvolverDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(16)})
@@ -193,7 +194,7 @@ const buildBoxes = () => {
     const macroModulator = MacroModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(2)})
     const randomModulator = RandomModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(3)})
     boxGraph.endTransaction()
-    return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, korpus, guitar, soundfont, compressor, convolver, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
+    return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, korpus, guitar, soundfont, compressor, convolver, corrode, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
         stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, noteFilter, scaleMatrix, chordKeys, euclid, velocity, vaporisateur, neon, tubular, surgeon, openDrumKick, openDrumSnare, openDrumClap, openDrumTom, openDrumRim, openDrumHat, openDrumShaker, openDrumCymbal, openDrumBell, openDrumPerc, nano, sampler, playfieldSample,
         lfoModulator, stepsModulator, macroModulator, randomModulator}
 }
@@ -274,6 +275,8 @@ const CASES: ReadonlyArray<DeviceCase> = [
         createAdapter: context => new CompressorDeviceBoxAdapter(context, boxes.compressor), tsOnly: []},
     {name: "convolver", file: "device_convolver.wasm",
         createAdapter: context => new ConvolverDeviceBoxAdapter(context, boxes.convolver), tsOnly: []},
+    {name: "corrode", file: "device_corrode.wasm",
+        createAdapter: context => new CorrodeDeviceBoxAdapter(context, boxes.corrode), tsOnly: []},
     {name: "crusher", file: "device_crusher.wasm",
         createAdapter: context => new CrusherDeviceBoxAdapter(context, boxes.crusher), tsOnly: []},
     {name: "dattorro-reverb", file: "device_dattorro_reverb.wasm",
