@@ -14,6 +14,7 @@ export class MidiFileDecoder {
 
     decode(): MidiFileFormat {
         this.input.littleEndian = false
+        if (!this.input.available(4)) {throw new Error("Unsupported midi format")}
         const header = this.input.readInt()
         if (header === 0x534d4632 && this.input.available(4) && this.input.readInt() === 0x434c4950) {
             return new MidiClipFileDecoder(this.input).decode()

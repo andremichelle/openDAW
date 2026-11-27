@@ -68,6 +68,7 @@ export class ControlEvent implements Event<ControlType> {
     }
 
     toString(): string {
-        return `ControlEvent{ticks: ${this.ticks}, type: ${this.type}, param0: ${this.param0}, param1: ${this.param1}}`
+        const velocity = isDefined(this.noteOnVelocity) ? `, noteOnVelocity: ${this.noteOnVelocity}` : ""
+        return `ControlEvent{ticks: ${this.ticks}, type: ${this.type}, param0: ${this.param0}, param1: ${this.param1}${velocity}}`
     }
 }

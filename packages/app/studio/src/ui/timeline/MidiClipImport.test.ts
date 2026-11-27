@@ -51,6 +51,22 @@ describe("MIDI Clip File import", () => {
         expect(() => MidiFile.decoder(clip(...header)).decode()).toThrow("Missing")
     })
 
+    it("rejects an empty file as an unsupported format", () => {
+        expect(() => MidiFile.decoder(new ArrayBuffer(0)).decode()).toThrow("Unsupported midi format")
+        expect(() => MidiFile.decoder(new ArrayBuffer(3)).decode()).toThrow("Unsupported midi format")
+    })
+
+    it("orders the tracks by UMP group", () => {
+        const file = MidiFile.decoder(clip(
+            ...header,
+            0x42903c00, 0x80000000,              // group 2 comes first in the file
+            0x40903e00, 0x80000000,              // group 0
+            0x41904000, 0x80000000,              // group 1
+            ...end
+        )).decode()
+        expect(file.tracks.map(track => track.umpGroup)).toEqual([0, 1, 2])
+    })
+
     it("keeps the existing Standard MIDI File decoder", () => {
         const midi = Uint8Array.from([
             0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0, 96,

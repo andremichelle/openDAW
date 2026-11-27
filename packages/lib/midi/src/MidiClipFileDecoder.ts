@@ -47,7 +47,10 @@ export class MidiClipFileDecoder {
                     if (!clock.started || this.input.remaining() !== remainingBytes) {
                         throw new Error("Invalid MIDI Clip File End of Clip")
                     }
-                    return new MidiFileFormat(Array.from(tracks.values()), 0, clock.ticksPerQuarter)
+                    const sorted = Array.from(tracks.entries())
+                        .sort(([groupA], [groupB]) => groupA - groupB)
+                        .map(([, track]) => track)
+                    return new MidiFileFormat(sorted, 0, clock.ticksPerQuarter)
                 }
             } else if (clock.started && (type === 0x2 || type === 0x4)) {
                 const status = (word >>> 16) & 0xf0
