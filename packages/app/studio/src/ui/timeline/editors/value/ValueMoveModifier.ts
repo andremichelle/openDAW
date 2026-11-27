@@ -158,7 +158,8 @@ export class ValueMoveModifier implements ValueModifier {
             },
             some: value => this.#eventMapping.x(value) - this.#eventMapping.x(this.#reference.value)
         }) : 0.0
-        const deltaPosition: int = this.#snapping.computeDelta(this.#pointerPulse, localX, this.#reference.position)
+        const deltaPosition: int = this.#snapping
+            .computeDelta(this.#pointerPulse, localX, this.#reference.position, shiftKey)
         let change = false
         if (this.#deltaPosition !== deltaPosition) {
             this.#deltaPosition = deltaPosition

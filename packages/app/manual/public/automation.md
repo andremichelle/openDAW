@@ -50,9 +50,9 @@ parameter over time.
 
 - **Click + drag** a selected event to move all selected events
 - Events snap to grid positions and to other event values
-- Hold **⇧** to disable value snapping
-- Hold **⌥** to copy events instead of moving them
-- Hold **⌥⇧** to create mirrored copies
+- Hold **⇧** to disable grid and value snapping
+- Hold **⌘** to copy events instead of moving them
+- Hold **⌥** to freeze the value and move the position only
 
 ### 2.4 Deleting Events
 
@@ -141,9 +141,9 @@ Automation clips and regions can loop. You can adjust the content duration:
 
 | Modifier             | Effect                                                               |
 |----------------------|----------------------------------------------------------------------|
-| **⌥** (Option/Alt)   | Copy events when dragging, fine control for slopes, cut on curve     |
-| **⇧** (Shift)        | Create new event (click+drag), disable value/linear snapping         |
-| **⌘** (Command/Ctrl) | Paint mode                                                           |
+| **⌥** (Option/Alt)   | Freeze value when dragging, fine control for slopes, cut on curve    |
+| **⇧** (Shift)        | Create new event (click+drag), disable grid/value/linear snapping    |
+| **⌘** (Command/Ctrl) | Copy events when dragging, paint mode                                |
 
 ---
 

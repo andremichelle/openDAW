@@ -107,7 +107,8 @@ export class Snapping implements Observable<Snapping> {
         return quantizeCeil(position, this.value(position))
     }
 
-    computeDelta(beingPointerPulse: ppqn, newPointerX: number, beginValuePulse: ppqn): ppqn {
+    computeDelta(beingPointerPulse: ppqn, newPointerX: number, beginValuePulse: ppqn, unsnapped: boolean = false): ppqn {
+        if (unsnapped) {return Math.round(this.#range.xToUnit(newPointerX) - beingPointerPulse)}
         const pointerTicks = this.#range.xToUnit(newPointerX) - (beingPointerPulse - beginValuePulse)
         const localDelta = this.round(pointerTicks - beginValuePulse)
         const globalDelta = this.round(pointerTicks) - beginValuePulse
