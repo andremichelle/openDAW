@@ -1,3 +1,4 @@
+import {installTimelineClickSeeking} from "@/ui/timeline/TimelineClickSeeking"
 import css from "./RegionsArea.sass?inline"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {firstTrackRect} from "@/ui/timeline/tracks/audio-unit/FirstTrackRect"
@@ -61,6 +62,9 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     const toolLifecycle = lifecycle.own(new Terminator())
     lifecycle.own({terminate: () => timeSelection.clear()})
     lifecycle.ownAll(
+        installTimelineClickSeeking(element, x =>
+            engine.setPosition(snapping.round(Math.max(0, range.xToUnit(x)))),
+            () => !engine.isPlaying.getValue()),
         regionSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyRegionBoxAdapter) => selectable.onSelected(),
             onDeselected: (selectable: AnyRegionBoxAdapter) => selectable.onDeselected()

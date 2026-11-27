@@ -1,3 +1,4 @@
+import {installTimelineClickSeeking} from "@/ui/timeline/TimelineClickSeeking"
 import css from "./MarkerTrackBody.sass?inline"
 import {int, isDefined, Lifecycle, Nullable, Option, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
@@ -48,6 +49,8 @@ export const MarkerTrackBody = ({lifecycle, service}: Construct) => {
     })
     let lastTimeDown = 0
     lifecycle.ownAll(
+        installTimelineClickSeeking(canvas, x => engine.setPosition(snapping.round(Math.max(0, range.xToUnit(x)))),
+            () => !engine.isPlaying.getValue()),
         position.subscribe(requestUpdate),
         range.subscribe(requestUpdate),
         markerTrackAdapter.subscribe(requestUpdate),
